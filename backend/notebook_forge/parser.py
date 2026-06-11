@@ -254,10 +254,12 @@ def _parse_meta(soup: BeautifulSoup) -> dict[str, Any]:
     meta["og_image"] = og_image.get("content", "") if og_image else ""
 
     meta["date_published"] = ""
+    meta["jsonld"] = {}
     jsonld = soup.find("script", type="application/ld+json")
     if jsonld and jsonld.string:
         try:
             data = json.loads(jsonld.string)
+            meta["jsonld"] = data
             meta["date_published"] = data.get("datePublished", "")
         except (ValueError, AttributeError):
             pass

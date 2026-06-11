@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+{# Discoverability layer — generated, never hand-maintained. #}
+{% if og_description %}<meta name="description" content="{{ og_description }}">{% endif %}
+{% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ title }}">
+{% if og_description %}<meta property="og:description" content="{{ og_description }}">{% endif %}
+{% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ title }}">
+{% if og_description %}<meta name="twitter:description" content="{{ og_description }}">{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#faf8f3; --paper-edge:#f3efe6; --ink:#2a2520; --ink-soft:#5b5248;
+    --ink-faint:#8a8073; --accent:#9c5a3c; --accent-deep:#7d4226; --rule:#e4ddd0;
+    --measure:680px;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Newsreader",Georgia,"Times New Roman",serif; font-optical-sizing:auto;
+    font-size:20px; line-height:1.72; -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;}
+  .wrap{max-width:var(--measure); margin:0 auto; padding:4.5rem 24px 5rem;}
+
+  /* masthead */
+  .overline{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 1.2rem;}
+  h1.title{font-family:"Fraunces",serif; font-optical-sizing:auto; font-weight:600;
+    font-size:clamp(2.4rem,6vw,3.3rem); line-height:1.06; letter-spacing:-.012em;
+    margin:0 0 1.6rem; color:var(--ink);}
+  .intro{font-size:1.12rem; line-height:1.66; color:var(--ink-soft); margin:0 0 1.2rem;}
+  .intro.lead{font-size:1.22rem; color:var(--ink);}
+  .dedication{font-family:"Fraunces",serif; font-style:italic; font-size:1.1rem;
+    color:var(--accent-deep); text-align:center; margin:2.4rem 0 0;}
+  .div{height:1px; border:0; background:var(--rule); margin:2.8rem 0 2.4rem;}
+  .seclabel{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin:0 0 1.4rem;}
+
+  /* document cards */
+  .doc{display:block; text-decoration:none; color:inherit;
+    background:#fffdf9; border:1px solid var(--rule); border-radius:12px;
+    padding:1.5rem 1.6rem 1.25rem; margin:0 0 1.1rem;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;}
+  .doc:hover, .doc:focus-visible{transform:translateY(-2px); border-color:#d9cdb8;
+    box-shadow:0 10px 30px -16px rgba(42,37,32,.4); outline:none;}
+  .doc .era{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--accent); font-weight:600;
+    font-variant-numeric:lining-nums; margin:0 0 .5rem;}
+  .doc h2{font-family:"Fraunces",serif; font-weight:600; font-size:1.45rem;
+    line-height:1.15; margin:0 0 .15rem; color:var(--ink);}
+  .doc .sub{font-style:italic; color:var(--ink-soft); font-size:1.02rem; margin:0 0 .7rem;}
+  .doc .desc{font-size:.98rem; line-height:1.55; color:var(--ink-soft); margin:0 0 1.1rem;}
+  /* the demoted metadata line */
+  .doc .meta{display:flex; align-items:center; gap:.6rem; padding-top:.85rem;
+    border-top:1px solid var(--rule); font-size:.82rem; color:var(--ink-faint);
+    font-variant-numeric:lining-nums;}
+  .doc .meta .dot{color:var(--rule);}
+  .doc .arrow{margin-left:auto; color:var(--accent); font-family:"Fraunces",serif;
+    font-weight:600; transition:transform .18s;}
+  .doc:hover .arrow{transform:translateX(3px);}
+
+  footer{margin-top:3.5rem; padding-top:1.8rem; border-top:1px solid var(--rule);
+    font-size:.84rem; color:var(--ink-faint); line-height:1.6;}
+  footer p{margin:0 0 .5rem;}
+  footer a{color:var(--accent-deep); text-decoration:none;}
+  footer a:hover{text-decoration:underline;}
+  footer .mark{font-family:"Fraunces",serif; color:var(--accent); font-weight:600;}
+
+  @media (max-width:520px){
+    body{font-size:18px;}
+    .wrap{padding-top:3rem;}
+    .doc{padding:1.25rem 1.2rem 1rem;}
+    .doc .meta{flex-wrap:wrap;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+{{ jsonld_script|safe }}
+</head>
+<body>
+<div class="wrap">
+
+  <p class="overline">The Family Archive · Collected Memoirs</p>
+  <h1 class="title">{{ title }}</h1>
+
+  {% if welcome %}
+  {% for para in welcome.split('\n\n') if para.strip() %}
+  <p class="intro{% if loop.first %} lead{% endif %}">{{ para.strip() }}</p>
+  {% endfor %}
+  {% endif %}
+
+  {% if dedication %}<p class="dedication">{{ dedication }}</p>{% endif %}
+
+  <hr class="div">
+  <p class="seclabel">The Memoirs</p>
+
+  {% for e in entries %}
+  <a class="doc" href="{{ e.url }}">
+    {% if e.years %}<p class="era">{{ e.years }}</p>{% endif %}
+    <h2>{{ e.title }}</h2>
+    {% if e.subtitle %}<p class="sub">{{ e.subtitle }}</p>{% endif %}
+    {% if e.description %}<p class="desc">{{ e.description }}</p>{% endif %}
+    {% if e.word_count or e.reading_time %}
+    <div class="meta">
+      {%- if e.word_count %}<span>{{ "{:,}".format(e.word_count) }} words</span>{% endif -%}
+      {%- if e.word_count and e.reading_time %}<span class="dot">·</span>{% endif -%}
+      {%- if e.reading_time %}<span class="read">{{ e.reading_time }}</span>{% endif -%}
+      <span class="arrow">Read →</span>
+    </div>
+    {% endif %}
+  </a>
+  {% endfor %}
+
+  {% if footer_text %}
+  <footer>
+    <p>{{ footer_text|safe }}</p>
+  </footer>
+  {% endif %}
+
+</div>
+</body>
+</html>

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ year_display }}{% if year_display and header.title %} · {% endif %}{{ header.title }}</title>
+{# Discoverability layer (Collection Index spec §10b). All three blocks
+   are generated from manifest fields + the configured pages_base_url —
+   they're correct-by-construction. #}
+{% if meta_description %}<meta name="description" content="{{ meta_description }}">{% endif %}
+{% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{ header.title }}">
+{% if meta_description %}<meta property="og:description" content="{{ meta_description }}">{% endif %}
+{% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+<meta name="twitter:card" content="{% if og_image %}summary_large_image{% else %}summary{% endif %}">
+<meta name="twitter:title" content="{{ header.title }}">
+{% if meta_description %}<meta name="twitter:description" content="{{ meta_description }}">{% endif %}
+{% if og_image %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
+{% if jsonld_script %}{{ jsonld_script|safe }}{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#faf8f3;
+    --paper-edge:#f3efe6;
+    --ink:#2a2520;
+    --ink-soft:#5b5248;
+    --ink-faint:#8a8073;
+    --accent:#9c5a3c;       /* sepia terracotta */
+    --accent-deep:#7d4226;
+    --rule:#e4ddd0;
+    --measure:640px;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Newsreader",Georgia,"Times New Roman",serif;
+    font-optical-sizing:auto;
+    font-size:20px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .wrap{
+    max-width:var(--measure);
+    margin:0 auto;
+    padding:0 24px 6rem;
+  }
+
+  /* ---- Masthead ---- */
+  header.masthead{
+    padding:5.5rem 0 0;
+    animation:rise .8s cubic-bezier(.2,.7,.2,1) both;
+  }
+  .overline{
+    font-family:"Fraunces",serif;
+    font-size:.72rem;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:600;
+    margin:0 0 1.4rem;
+  }
+  /* Masthead-as-home-link (Collection Index spec §6).
+     The overline IS the home link — it's already the persistent
+     identity line. Subtle hover, no underline by default. */
+  a.overline-home{
+    color:inherit;
+    text-decoration:none;
+    border-bottom:1px dotted transparent;
+    transition:border-color .12s ease, color .12s ease;
+  }
+  a.overline-home:hover,
+  a.overline-home:focus-visible{
+    color:var(--accent-deep);
+    border-bottom-color:var(--accent);
+    outline:none;
+  }
+  h1.title{
+    font-family:"Fraunces",serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size:clamp(2.3rem,6vw,3.15rem);
+    line-height:1.08;
+    letter-spacing:-.012em;
+    margin:0 0 1.3rem;
+    color:var(--ink);
+  }
+  .byline{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:.6rem;
+    font-size:.95rem;
+    color:var(--ink-soft);
+    margin:0 0 1.8rem;
+    font-variant-numeric:lining-nums;
+  }
+  .byline .author{color:var(--ink);font-weight:500;}
+  .byline .dot{color:var(--ink-faint);}
+  .standfirst{
+    font-size:1.18rem;
+    line-height:1.62;
+    color:var(--ink-soft);
+    font-style:italic;
+    margin:0 0 2.4rem;
+  }
+  .rule{
+    height:1px;border:0;background:var(--rule);
+    margin:0 0 2.6rem;
+  }
+
+  /* ---- List of Figures ---- */
+  nav.figures{
+    background:var(--paper-edge);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:1.4rem 1.6rem 1.5rem;
+    margin:0 0 3rem;
+    animation:rise .8s .1s cubic-bezier(.2,.7,.2,1) both;
+  }
+  nav.figures h2{
+    font-family:"Fraunces",serif;
+    font-size:.78rem;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--accent-deep);
+    margin:0 0 .9rem;
+    font-weight:700;
+  }
+  nav.figures ol{list-style:none;margin:0;padding:0;}
+  nav.figures li{margin:0;}
+  nav.figures a{
+    display:flex;
+    align-items:baseline;
+    gap:.6rem;
+    text-decoration:none;
+    color:var(--ink-soft);
+    font-size:1rem;
+    line-height:1.45;
+    padding:.34rem 0;
+    border-bottom:1px dotted transparent;
+    transition:color .18s;
+  }
+  nav.figures a:hover{color:var(--accent-deep);}
+  nav.figures .fignum{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    color:var(--accent);
+    white-space:nowrap;
+    font-size:.95rem;
+  }
+  nav.toc{
+    background:var(--paper-edge);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:1.4rem 1.6rem 1.5rem;
+    margin:0 0 2rem;
+    animation:rise .8s .05s cubic-bezier(.2,.7,.2,1) both;
+  }
+  nav.toc h2{
+    font-family:"Fraunces",serif;
+    font-size:.78rem;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--accent-deep);
+    margin:0 0 .9rem;
+    font-weight:700;
+  }
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:toc-l2;}
+  nav.toc li{margin:0;}
+  nav.toc li.toc-l3{padding-left:1.6rem;}
+  nav.toc a{
+    display:block;
+    text-decoration:none;
+    color:var(--ink-soft);
+    font-size:1rem;
+    line-height:1.5;
+    padding:.34rem 0;
+    transition:color .18s;
+  }
+  nav.toc a:hover{color:var(--accent-deep);}
+  nav.toc li.toc-l2 > a{color:var(--ink);font-weight:500;}
+  nav.figures .leader{
+    flex:1;
+    border-bottom:1px dotted var(--rule);
+    transform:translateY(-.18em);
+    min-width:1rem;
+  }
+
+  /* ---- Body ---- */
+  article p{margin:0 0 1.5rem;}
+  article p.lead:first-of-type::first-letter{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    float:left;
+    font-size:3.6rem;
+    line-height:.82;
+    padding:.12em .12em 0 0;
+    color:var(--accent-deep);
+  }
+  article h2{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.6rem;
+    line-height:1.2;
+    margin:2.8rem 0 1rem;
+    color:var(--ink);
+  }
+  article h3{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.25rem;
+    line-height:1.25;
+    margin:2.2rem 0 .8rem;
+    color:var(--ink);
+  }
+
+  /* ---- Figures ---- */
+  figure{
+    margin:2.8rem 0;
+    animation:none;
+  }
+  figure img{
+    width:100%;
+    height:auto;
+    display:block;
+    border-radius:6px;
+    box-shadow:0 1px 2px rgba(42,37,32,.06),0 14px 38px -16px rgba(42,37,32,.34);
+  }
+  figure.portrait img{
+    max-width:430px;
+    margin:0 auto;
+  }
+  figcaption{
+    margin:.95rem auto 0;
+    max-width:90%;
+    text-align:center;
+    font-size:.94rem;
+    line-height:1.5;
+    color:var(--ink-faint);
+    font-style:italic;
+  }
+  figcaption .fignum{
+    font-family:"Fraunces",serif;
+    font-style:normal;
+    font-weight:600;
+    letter-spacing:.02em;
+    color:var(--accent);
+    margin-right:.45rem;
+  }
+
+  /* ---- Footer ---- */
+  footer{
+    margin-top:4rem;
+    padding-top:1.8rem;
+    border-top:1px solid var(--rule);
+    font-size:.86rem;
+    color:var(--ink-faint);
+    line-height:1.6;
+  }
+  footer .mark{font-family:"Fraunces",serif;color:var(--accent);font-weight:600;}
+
+  /* ---- Reading nav: bottom prev/next (sits ABOVE the document footer) ---- */
+  nav.docnav{
+    margin-top:3.5rem;
+    padding-top:1.8rem;
+    border-top:1px solid var(--rule);
+    display:flex;
+    align-items:stretch;
+    gap:.8rem;
+    flex-wrap:wrap;
+  }
+  nav.docnav a{
+    flex:1;
+    min-width:150px;
+    text-decoration:none;
+    color:inherit;
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:.8rem 1rem;
+    background:#fffdf9;
+    transition:transform .15s, border-color .15s;
+  }
+  nav.docnav a:hover{transform:translateY(-2px); border-color:#d9cdb8;}
+  nav.docnav .dir{
+    font-family:"Fraunces",serif;
+    font-size:.68rem;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:600;
+    margin:0 0 .25rem;
+  }
+  nav.docnav .nm{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    color:var(--ink);
+    font-size:.98rem;
+  }
+  nav.docnav a.home{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    color:var(--accent-deep);
+  }
+  nav.docnav a.next{text-align:right;}
+
+  /* ---- Reading nav: floating back-to-top ---- */
+  .totop{
+    position:fixed;
+    right:18px;
+    bottom:18px;
+    z-index:50;
+    width:44px;
+    height:44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    cursor:pointer;
+    font-size:1.1rem;
+    box-shadow:0 8px 22px -8px rgba(124,66,38,.6);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s, transform .25s;
+    transform:translateY(8px);
+  }
+  .totop.show{opacity:1; pointer-events:auto; transform:none;}
+  .totop:hover{background:var(--accent-deep);}
+  @media (prefers-reduced-motion:reduce){
+    .totop{transition:none!important;}
+  }
+
+  a.figback{color:inherit;text-decoration:none;}
+
+  /* ---- Footnotes (inline, co-located) ---- */
+  /* Marker left in the prose. Smaller, sepia, superscript — reads as a
+     reference, no link (the note sits immediately below). */
+  sup.fn-ref{
+    font-family:"Fraunces",serif;
+    font-size:.62em;
+    font-weight:700;
+    color:var(--accent);
+    vertical-align:super;
+    line-height:0;
+    padding-left:.06em;
+  }
+  /* The note itself: indented, smaller, thin sepia left border so it
+     reads as an aside, not body text. Sits right after its paragraph. */
+  aside.footnote{
+    margin:.35rem 0 1.15rem 0;
+    padding:.15rem 0 .15rem 1rem;
+    border-left:2px solid var(--accent);
+    font-size:.86rem;
+    line-height:1.55;
+    color:var(--ink-soft);
+  }
+  aside.footnote .fn-num{
+    font-family:"Fraunces",serif;
+    font-weight:700;
+    color:var(--accent);
+    margin-right:.5rem;
+  }
+  aside.footnote p{margin:0;}
+
+  @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;}}
+
+  @media (max-width:520px){
+    body{font-size:18px;}
+    header.masthead{padding-top:3.5rem;}
+    nav.figures{padding:1.2rem 1.2rem 1.3rem;}
+  }
+{% if show_toc and toc_tree %}
+  /* ---- ToC nav system (sidebar + drawer + filter + scrollspy) ---- */
+  /* When the ToC is active the page swaps to a sidebar layout — the
+     reading column stays at --measure but is offset by the sidebar on
+     wide screens. Mobile collapses to a floating action button + drawer. */
+  :root{ --sidebar:300px; }
+  body.has-toc .wrap{ max-width:none; padding:0; margin:0; }
+  body.has-toc .layout{
+    display:grid;
+    grid-template-columns:var(--sidebar) minmax(0,1fr);
+    max-width:1080px;
+    margin:0 auto;
+  }
+  body.has-toc .article{
+    padding:3.5rem 24px 6rem;
+    max-width:calc(var(--measure) + 48px);
+    margin:0 auto;
+  }
+  body.has-toc aside.toc-rail{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    border-right:1px solid var(--rule); padding:1.6rem 1rem 2rem;
+    background:var(--paper-edge);
+  }
+  body.has-toc aside.toc-rail .railhead{
+    font-family:"Fraunces",serif; font-weight:700; font-size:.72rem;
+    letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent-deep); margin:0 0 .8rem;
+  }
+  /* Contents-panel action row (Top + Archive) — above the filter box,
+     in both the sticky rail and the mobile drawer. */
+  .navacts{display:flex; gap:.5rem; margin:0 0 .9rem;}
+  .navacts a{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:.35rem;
+    text-decoration:none; font-family:"Fraunces",serif; font-weight:600;
+    font-size:.82rem; color:var(--accent-deep); background:var(--paper);
+    border:1px solid var(--rule); border-radius:8px; padding:.45rem .5rem;
+    cursor:pointer; transition:background .15s, border-color .15s;
+  }
+  .navacts a:hover{background:#fffdf9; border-color:#d9cdb8;}
+  /* Shared ToC list styling (used by both the rail and the drawer) */
+  .toc-list{font-size:.92rem;}
+  .toc-grp{border-bottom:1px solid var(--rule);}
+  .toc-ghead{
+    display:flex; align-items:center; gap:.5rem; width:100%; text-align:left;
+    background:none; border:none; cursor:pointer; padding:.5rem .4rem;
+    font-family:"Fraunces",serif; font-weight:600; font-size:.92rem;
+    color:var(--ink); line-height:1.25;
+  }
+  .toc-ghead .car{color:var(--accent); transition:transform .2s;
+    font-size:.7rem; flex:none;}
+  .toc-grp.open .car{transform:rotate(90deg);}
+  .toc-ghead .gc{margin-left:auto; font-size:.62rem; color:var(--ink-faint);
+    font-family:"Newsreader",serif; flex:none;}
+  .toc-kids{display:none; padding:0 0 .4rem .95rem;}
+  .toc-grp.open .toc-kids{display:block;}
+  .toc-kids a{
+    display:block; text-decoration:none; color:var(--ink-soft);
+    font-size:.86rem; padding:.3rem .5rem;
+    border-left:2px solid transparent; cursor:pointer; line-height:1.4;
+  }
+  .toc-kids a:hover{color:var(--accent-deep);}
+  .toc-kids a.active{
+    color:var(--accent-deep); border-left-color:var(--accent);
+    background:var(--paper); font-weight:600;
+  }
+  /* Leaf entries — chapters with no H3 subheadings. Same visual
+     weight as a group header, but no chevron, no count, and clicking
+     navigates instead of toggling. */
+  .toc-leaf-link{
+    display:flex; align-items:center; gap:.5rem; width:100%;
+    padding:.5rem .4rem; text-align:left; text-decoration:none;
+    font-family:"Fraunces",serif; font-weight:600; font-size:.92rem;
+    color:var(--ink); line-height:1.25; cursor:pointer;
+    border-bottom:1px solid var(--rule);
+  }
+  .toc-leaf-link:hover{color:var(--accent-deep);}
+  .toc-leaf-link.active{color:var(--accent-deep); background:var(--paper);}
+  .toc-leaf{border-bottom:none;}  /* the inner link already has a border */
+  .toc-filter{
+    width:100%; margin:0 0 .7rem; padding:.5rem .65rem;
+    border:1px solid var(--rule); border-radius:8px;
+    font-family:"Newsreader",serif; font-size:.9rem;
+    background:var(--paper); color:var(--ink);
+  }
+  .toc-filter::placeholder{color:var(--ink-faint);}
+  .toc-empty{padding:1rem .6rem; color:var(--ink-faint);
+    font-style:italic; font-size:.88rem;}
+
+  /* Mobile FAB + drawer */
+  .toc-fab{
+    position:fixed; right:18px; bottom:18px; z-index:60;
+    display:none; align-items:center; gap:.4rem;
+    background:var(--accent); color:#fff; border:none; cursor:pointer;
+    font-family:"Fraunces",serif; font-weight:600; font-size:.9rem;
+    padding:.7rem 1.05rem; border-radius:999px;
+    box-shadow:0 8px 22px -8px rgba(124,66,38,.65);
+  }
+  .toc-fab:hover{background:var(--accent-deep);}
+  .toc-overlay{
+    position:fixed; inset:0; z-index:70; background:rgba(42,37,32,.3);
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  .toc-overlay.open{opacity:1; pointer-events:auto;}
+  .toc-drawer{
+    position:fixed; z-index:80; background:var(--paper);
+    display:flex; flex-direction:column;
+    transition:transform .28s cubic-bezier(.2,.7,.2,1);
+    top:0; right:0; bottom:0; width:340px; max-width:88%;
+    border-left:1px solid var(--rule);
+    transform:translateX(102%);
+    box-shadow:-14px 0 34px -20px rgba(42,37,32,.5);
+  }
+  .toc-drawer.open{transform:none;}
+  .toc-dhead{padding:.9rem 1rem .6rem; border-bottom:1px solid var(--rule);}
+  .toc-dhead .t{
+    font-family:"Fraunces",serif; font-weight:700; font-size:.74rem;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--accent-deep);
+  }
+  .toc-dhead .x{
+    float:right; cursor:pointer; color:var(--ink-faint);
+    border:none; background:none; font-size:1.15rem; line-height:1;
+  }
+  .toc-dlist{overflow-y:auto; padding:.7rem .8rem 2rem; flex:1;}
+  /* Current-section pill, mobile only */
+  .toc-nowbar{
+    position:fixed; top:0; left:0; right:0; z-index:55; display:none;
+    background:var(--paper-edge); border-bottom:1px solid var(--rule);
+    padding:.5rem 1rem;
+    font-family:"Fraunces",serif; font-size:.8rem;
+    color:var(--accent-deep); font-weight:600;
+  }
+  @media (max-width:860px){
+    body.has-toc .layout{grid-template-columns:1fr;}
+    body.has-toc aside.toc-rail{display:none;}
+    body.has-toc .toc-fab{display:flex;}
+    body.has-toc .toc-nowbar{display:block;}
+    body.has-toc .article{padding-top:3.2rem;}
+    /* On mobile the floating Contents button is the return affordance, so
+       the back-to-top arrow is redundant here — hide it. (It stays on
+       desktop, and on docs that have no Contents button at all.) */
+    body.has-toc .totop{display:none;}
+    .toc-drawer{
+      top:auto; left:0; right:0; bottom:0; width:100%; max-width:100%;
+      height:80%; border-left:none; border-top:1px solid var(--rule);
+      border-radius:16px 16px 0 0; transform:translateY(103%);
+      box-shadow:0 -14px 34px -20px rgba(42,37,32,.5);
+    }
+    .toc-drawer.open{transform:none;}
+  }
+  /* h2/h3 scroll-margin so the in-page anchor doesn't land flush under the nowbar */
+  body.has-toc article h2, body.has-toc article h3{scroll-margin-top:1rem;}
+{% endif %}
+</style>
+</head>
+<body{% if show_toc and toc_tree %} class="has-toc"{% endif %}>
+{% if show_toc and toc_tree %}
+<div class="toc-nowbar" id="tocNowbar"></div>
+<div class="layout">
+  <aside class="toc-rail" aria-label="Contents">
+    <p class="railhead">Contents</p>
+    <div class="navacts">
+      <a href="#top" data-top>↑ Top</a>
+      <a href="{{ homepage_url or 'index.html' }}">⌂ The Archive</a>
+    </div>
+    <input class="toc-filter" id="tocFilterRail" placeholder="Filter sections…">
+    <div class="toc-list" id="tocRailList">
+      {% for grp in toc_tree %}
+      {% if grp.kids %}
+      <div class="toc-grp">
+        <button class="toc-ghead" type="button">
+          <span class="car">▸</span>
+          <span class="gt">{{ grp.text }}</span>
+          <span class="gc">{{ grp.kids|length }}</span>
+        </button>
+        <div class="toc-kids">
+          <a href="#{{ grp.anchor }}" data-target="{{ grp.anchor }}">{{ grp.text }}</a>
+          {% for kid in grp.kids %}
+          <a href="#{{ kid.anchor }}" data-target="{{ kid.anchor }}">{{ kid.text }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="toc-grp toc-leaf">
+        <a class="toc-leaf-link" href="#{{ grp.anchor }}" data-target="{{ grp.anchor }}">
+          <span class="gt">{{ grp.text }}</span>
+        </a>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </aside>
+  <main class="article" id="top">
+{% else %}
+<div class="wrap" id="top">
+{% endif %}
+
+  <header class="masthead">
+    {% if header.overline %}
+      {# Masthead-as-home-link (spec §6) — wrap the overline in an <a> to
+         the index when we know where the homepage lives. The
+         `overline-home` class inherits the overline look with a subtle
+         hover, no underline. When no pages_base_url is set (e.g. a
+         purely local preview), drop the link and render the bare <p>. #}
+      {% if homepage_url %}
+      <p class="overline"><a class="overline-home" href="{{ homepage_url }}">{{ header.overline }}</a></p>
+      {% else %}
+      <p class="overline">{{ header.overline }}</p>
+      {% endif %}
+    {% endif %}
+    <h1 class="title">{{ header.title }}</h1>
+    <p class="byline">
+      {% if header.author %}<span class="author">{{ header.author }}</span>{% endif %}
+      {% if header.author and year_display %}<span class="dot">·</span><span>{{ year_display }}</span>{% elif year_display %}<span>{{ year_display }}</span>{% endif %}
+      {% if header.place %}<span class="dot">·</span><span>{{ header.place }}</span>{% endif %}
+    </p>
+    {% if header.standfirst %}<p class="standfirst">{{ header.standfirst }}</p>{% endif %}
+    <hr class="rule">
+  </header>
+
+  {# Inline flat ToC removed — the nav system (sidebar + drawer) is the
+     replacement when show_toc and toc_tree are set. See the .toc-rail
+     above and the .toc-drawer / .toc-fab below. #}
+
+  {% if show_lof and figures %}
+  <nav class="figures" aria-label="List of figures">
+    <h2>Figures</h2>
+    <ol>
+      {% for f in figures %}
+      <li><a href="#{{ f.anchor }}"><span class="fignum">Figure {{ f.n }}</span><span class="leader"></span><span>{{ f.short_caption }}</span></a></li>
+      {% endfor %}
+    </ol>
+  </nav>
+  {% endif %}
+
+  <article>
+    {% for block in body %}
+      {% if block.kind == 'h2' %}
+        <h2{% if block.anchor %} id="{{ block.anchor }}"{% endif %}>{{ block.text_html|safe if block.text_html else block.text }}</h2>
+      {% elif block.kind == 'h3' %}
+        <h3{% if block.anchor %} id="{{ block.anchor }}"{% endif %}>{{ block.text_html|safe if block.text_html else block.text }}</h3>
+      {% elif block.kind == 'p' %}
+        <p{% if block.lead %} class="lead"{% endif %}>{{ block.text_html|safe if block.text_html else block.text }}</p>
+      {% elif block.kind == 'figure' %}
+        <figure id="{{ block.anchor }}"{% if block.portrait %} class="portrait"{% endif %}>
+          <img src="{{ block.src }}" alt="{{ block.alt }}">
+          <figcaption><span class="fignum">Figure {{ block.n }}.</span>{{ block.caption }}</figcaption>
+        </figure>
+      {% elif block.kind == 'footnote' %}
+        <aside class="footnote" role="note">
+          <span class="fn-num">{{ block.n }}</span>{{ block.text_html|safe if block.text_html else block.text }}
+        </aside>
+      {% elif block.kind == 'blockquote' %}
+        <blockquote><p>{{ block.text_html|safe if block.text_html else block.text }}</p></blockquote>
+      {% elif block.kind == 'hr' %}
+        <hr>
+      {% elif block.kind == 'list' %}
+        {{ block.html|safe }}
+      {% elif block.kind == 'table' %}
+        {{ block.html|safe }}
+      {% endif %}
+    {% endfor %}
+  </article>
+
+  {# Reading nav: prior/next memoir from the catalogue's chronological
+     order. Sits ABOVE the settings-driven document footer. Omits the
+     side that doesn't exist (earliest has no prev; latest no next). #}
+  {% if homepage_url or nav_prev or nav_next %}
+  <nav class="docnav" aria-label="Document navigation">
+    {% if nav_prev %}<a class="prev" href="{{ nav_prev.url }}"><div class="dir">← Previous</div><div class="nm">{{ nav_prev.title }}</div></a>{% endif %}
+    <a class="home" href="{{ homepage_url or 'index.html' }}">⌂ The Archive</a>
+    {% if nav_next %}<a class="next" href="{{ nav_next.url }}"><div class="dir">Next →</div><div class="nm">{{ nav_next.title }}</div></a>{% endif %}
+  </nav>
+  {% endif %}
+
+  {% if footer_text %}
+  <footer>
+    <p>{{ footer_text|safe }}</p>
+  </footer>
+  {% endif %}
+
+{% if show_toc and toc_tree %}
+  </main>
+</div>
+<button class="toc-fab" id="tocFab" type="button" aria-label="Open contents">☰ Contents</button>
+<div class="toc-overlay" id="tocOverlay"></div>
+<aside class="toc-drawer" id="tocDrawer" aria-label="Contents">
+  <div class="toc-dhead">
+    <span class="t">Contents</span>
+    <button class="x" id="tocClose" type="button" aria-label="Close contents">×</button>
+  </div>
+  <div class="toc-dlist">
+    <div class="navacts">
+      <a href="#top" data-top>↑ Top</a>
+      <a href="{{ homepage_url or 'index.html' }}">⌂ The Archive</a>
+    </div>
+    <input class="toc-filter" id="tocFilterDrawer" placeholder="Filter sections…">
+    <div class="toc-list" id="tocDrawerList">
+      {% for grp in toc_tree %}
+      {% if grp.kids %}
+      <div class="toc-grp">
+        <button class="toc-ghead" type="button">
+          <span class="car">▸</span>
+          <span class="gt">{{ grp.text }}</span>
+          <span class="gc">{{ grp.kids|length }}</span>
+        </button>
+        <div class="toc-kids">
+          <a href="#{{ grp.anchor }}" data-target="{{ grp.anchor }}">{{ grp.text }}</a>
+          {% for kid in grp.kids %}
+          <a href="#{{ kid.anchor }}" data-target="{{ kid.anchor }}">{{ kid.text }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="toc-grp toc-leaf">
+        <a class="toc-leaf-link" href="#{{ grp.anchor }}" data-target="{{ grp.anchor }}">
+          <span class="gt">{{ grp.text }}</span>
+        </a>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</aside>
+<script>
+(function(){
+  // Expand the first BRANCH group on load (a leaf-only ToC needs no
+  // expansion at all). Branches without :not(.toc-leaf) here would
+  // expand a leaf which has nothing inside to show.
+  var firstBranch = document.querySelector('.toc-grp:not(.toc-leaf)');
+  if(firstBranch) firstBranch.classList.add('open');
+  // Reduced-motion-aware smooth scroll for the in-panel nav.
+  function tocReduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  // Header-click toggles a BRANCH group; leaf links navigate directly.
+  document.addEventListener('click', function(e){
+    // "↑ Top" action-row link — scroll to the top of the document.
+    var topLink = e.target.closest('a[data-top]');
+    if(topLink){
+      e.preventDefault();
+      window.scrollTo({top:0, behavior: tocReduced() ? 'auto' : 'smooth'});
+      closeDrawer();
+      return;
+    }
+    var head = e.target.closest('.toc-ghead');
+    if(head){ head.parentNode.classList.toggle('open'); return; }
+    // Both child links in expanded branches AND leaf links navigate.
+    var a = e.target.closest('.toc-kids a[data-target], .toc-leaf-link[data-target]');
+    if(!a) return;
+    var el = document.getElementById(a.dataset.target);
+    if(el){ e.preventDefault(); el.scrollIntoView({behavior:'smooth', block:'start'}); closeDrawer(); history.pushState(null, '', '#' + a.dataset.target); }
+  });
+  // Drawer open/close.
+  var drawer = document.getElementById('tocDrawer'),
+      overlay = document.getElementById('tocOverlay');
+  function openDrawer(){ drawer.classList.add('open'); overlay.classList.add('open'); }
+  function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); }
+  document.getElementById('tocFab').addEventListener('click', openDrawer);
+  document.getElementById('tocClose').addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  // Filter wiring (both copies).
+  function wireFilter(input, listEl){
+    if(!input || !listEl) return;
+    input.addEventListener('input', function(){
+      var q = input.value.trim().toLowerCase();
+      var any = false;
+      listEl.querySelectorAll('.toc-grp').forEach(function(grp){
+        // Leaves have no .gt inside a ghead button — pull the text
+        // from the leaf-link's .gt span instead so the filter works
+        // uniformly across leaf and branch entries.
+        var gtEl = grp.querySelector('.toc-ghead .gt, .toc-leaf-link .gt');
+        var headTxt = gtEl ? gtEl.textContent.toLowerCase() : '';
+        var gMatch = headTxt.indexOf(q) >= 0;
+        var kidShown = false;
+        grp.querySelectorAll('.toc-kids a').forEach(function(a){
+          var m = q === '' || gMatch || a.textContent.toLowerCase().indexOf(q) >= 0;
+          a.style.display = m ? 'block' : 'none';
+          if(m) kidShown = true;
+        });
+        var show = q === '' ? true : (gMatch || kidShown);
+        grp.style.display = show ? 'block' : 'none';
+        if(show) any = true;
+        // Only branches can "open"; the class is a no-op on leaves.
+        if(q !== '' && (gMatch || kidShown)) grp.classList.add('open');
+      });
+      var empty = listEl.querySelector('.toc-empty');
+      if(!any && !empty){
+        empty = document.createElement('div');
+        empty.className = 'toc-empty';
+        empty.textContent = 'No sections match.';
+        listEl.appendChild(empty);
+      }
+      if(any && empty) empty.remove();
+    });
+  }
+  wireFilter(document.getElementById('tocFilterRail'),   document.getElementById('tocRailList'));
+  wireFilter(document.getElementById('tocFilterDrawer'), document.getElementById('tocDrawerList'));
+  // Scrollspy: highlight the rail entry whose heading is currently topmost.
+  var heads = Array.prototype.slice.call(document.querySelectorAll('article h2, article h3'));
+  var nowbar = document.getElementById('tocNowbar');
+  function spy(){
+    var y = window.scrollY + 90, cur = heads[0];
+    heads.forEach(function(h){ if(h.offsetTop <= y) cur = h; });
+    if(!cur) return;
+    if(nowbar) nowbar.textContent = cur.textContent;
+    // Highlight whichever target matches the current heading — child
+    // links inside branches AND standalone leaf links share the same
+    // `.active` styling treatment so the user sees one consistent
+    // "you are here" indicator.
+    document.querySelectorAll('.toc-kids a, .toc-leaf-link').forEach(function(a){
+      a.classList.toggle('active', a.dataset.target === cur.id);
+    });
+  }
+  window.addEventListener('scroll', spy, {passive:true});
+  spy();
+})();
+</script>
+{% else %}
+</div>
+{% endif %}
+
+{# Floating back-to-top — always present (ToC or not). Fades in after
+   ~600px of scroll; scrolls to top on click. On mobile-with-ToC the CSS
+   lifts it clear of the floating Contents button so they never overlap. #}
+<button class="totop" id="totop" type="button" aria-label="Back to top">↑</button>
+<script>
+(function(){
+  var totop = document.getElementById('totop');
+  if(!totop) return;
+  function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function toTop(){ window.scrollTo({top:0, behavior: reduced() ? 'auto' : 'smooth'}); }
+  function onScroll(){ totop.classList.toggle('show', window.scrollY > 600); }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  totop.addEventListener('click', toTop);
+})();
+</script>
+</body>
+</html>
