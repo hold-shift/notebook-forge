@@ -12,9 +12,9 @@
 | M2 HTML → blocks parser | **done** | fixtures cut from the real published memoirs |
 | M3 blocks → HTML renderer | **done** | render(parse(x)) DOM-equal on fixtures; template ported verbatim from MemoirForge |
 | M4 importer & round-trip | **done** | all 7 docs ≥99% (4 at 100%); see reports/roundtrip.md |
-| M5 API & frontend core | pending | |
-| M6 publish targets | pending | |
-| M7 wrap-up | pending | |
+| M5 API & frontend core | **done** | editor verified live in the browser; smoke.sh green |
+| M6 publish targets | **done** | local-folder + git fixture real; Drive mocked; live pushes refused by construction |
+| M7 wrap-up | **done** | tagged v0.1.0-sprint1 |
 
 ## Decisions log
 
@@ -63,6 +63,30 @@
   heading anchors, H2/H3 ToC tree, first-paragraph `lead`, portrait detection,
   co-located footnotes) so round-trip rendering targets the exact markup.
 
+- **2026-06-11 · Footnote markers are a custom BlockNote style** (`fnRef`,
+  boolean) on text runs, rendered as `<sup class="fn-ref">`; the note body
+  is the adjacent forgeFootnote block. Custom styles are core BlockNote —
+  no schema deviation beyond the two locked custom blocks.
+- **2026-06-11 · Live Pages pushes are refused by construction.** The
+  imported `github-pages` target has no `push_url`; `make_adapter` raises
+  and the API returns 409. The GitPagesTarget adapter itself is fully
+  exercised against a local bare-repo fixture (commit + push + rollback).
+- **2026-06-11 · `local-folder` target added** pointing at
+  `~/NotebookForge-workspace/exports/site`; all seven memoirs pre-published
+  through the real API path. Exported Singapore is **100.000%**
+  DOM-identical to the live page.
+- **2026-06-11 · Frontend verified live**, not just by unit tests: Library
+  badges, Junior in the BlockNote editor (94 blocks, side-by-side
+  original/sketch figures), caption edit → autosave → change log → dirty
+  badge → rollback, with zero browser console errors.
+- **2026-06-11 · smoke.sh restores state.** The API smoke test edits Junior
+  and rolls back to the import snapshot, so it leaves the library clean.
+- **2026-06-11 · Sketch interface ships with the production prompt** (the
+  fidelity-hardened hybrid silhouette prompt from the MemoirForge
+  manifests, model `gemini-3-pro-image`); the generator is a stub that
+  refuses loudly until a key is configured (keyring; settings store
+  presence/verified only).
+
 ## Round-trip summary
 
 All seven published memoirs imported, re-rendered and DOM-compared against
@@ -78,10 +102,28 @@ from MemoirForge work sessions with SHA-256 verification
 (reports/import-coverage.md). sync_state seeded PUBLISHED + CLEAN against
 the `github-pages` target — day one shows nothing pending.
 
+## What works right now (5-minute tour)
+
+`make dev` → http://localhost:5173. The Library lists the seven memoirs
+with live sync badges. Open any document: full BlockNote editing with
+figures shown original-beside-sketch, footnotes as co-located asides,
+autosave into the change log, dirty flags per target, Push to the
+local-folder target, rollback via API. `make check` = 42 backend + 8
+frontend tests green. `scripts/smoke.sh` = API happy path.
+
 ## Next-sprint backlog
 
-- Live Google Drive OAuth + upload (DriveTarget is mocked this sprint)
-- Live GitHub Pages publishing (exercised against a local bare-repo fixture only)
-- Sketch generation via Gemini (interface + silhouette prompt loaded; no API key tonight)
-- Themes beyond the ported Archive serif
-- First-run wizard; index-page editing UI
+- Live Google Drive OAuth + upload; NotebookLM-safe edition rendering
+  (Markdown/Doc with sketches inlined) — DriveTarget request shapes + mock
+  are in place
+- Live GitHub Pages publishing: set `push_url` on the github-pages target
+  (adapter already proven against the bare-repo fixture)
+- Sketch generation via Gemini (interface + production silhouette prompt
+  shipped; generator stubbed — no API key tonight)
+- Collection index publishing (renderer exists; sitemap/robots/llms.txt
+  regeneration on publish, per the Collection Index spec)
+- Index-page editing UI; first-run wizard; themes beyond the ported
+  Archive serif
+- New-document ingest (PDF/DOCX) — extraction stays in MemoirForge for now
+- Editor niceties: snapshot browser UI, search UI over FTS, peopleCount
+  surfaced on forgeImage, og:image support
