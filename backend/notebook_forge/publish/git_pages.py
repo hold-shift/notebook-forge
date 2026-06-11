@@ -33,6 +33,11 @@ class GitPagesTarget(PublishTarget):
         self.author_name = author_name
         self.author_email = author_email
 
+    def _redact(self, text: str) -> str:
+        """Strip the authenticated push URL (which may embed a PAT) from
+        anything that could surface in logs or exceptions."""
+        return text.replace(self.push_url, "<push-url>") if self.push_url else text
+
     def _git(self, *args: str, cwd: Path | None = None) -> str:
         result = subprocess.run(
             ["git", *args],
@@ -40,8 +45,13 @@ class GitPagesTarget(PublishTarget):
             capture_output=True,
             text=True,
             env={"GIT_TERMINAL_PROMPT": "0", "PATH": "/usr/bin:/bin:/usr/local/bin"},
-            check=True,
+            check=False,
         )
+        if result.returncode != 0:
+            cmd = self._redact(" ".join(["git", *args]))
+            raise RuntimeError(
+                f"git failed ({result.returncode}): {cmd}\n{self._redact(result.stderr.strip())}"
+            )
         return result.stdout.strip()
 
     def _working_clone(self) -> Path:

@@ -12,7 +12,6 @@ only WHICH keys exist and their last-verified status, never the value.
 from __future__ import annotations
 
 import datetime as dt
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -84,15 +83,9 @@ class StubSketchGenerator(SketchGenerator):
 
 def get_gemini_key() -> str | None:
     """Keychain first; env var accepted as a fallback (never persisted)."""
-    try:
-        import keyring
+    from .secrets_store import get_secret
 
-        value = keyring.get_password(KEYRING_SERVICE, GEMINI_KEY_NAME)
-        if value:
-            return value
-    except Exception:
-        pass
-    return os.environ.get("GEMINI_API_KEY") or None
+    return get_secret(GEMINI_KEY_NAME, env="GEMINI_API_KEY")
 
 
 def record_key_status(session: Session, key_name: str, present: bool, verified: bool) -> None:

@@ -159,18 +159,42 @@ def test_drive_target_mocked(tmp_path: Path, workspace: Path, session: Session) 
     assert not services.is_dirty(session, doc, target)
 
 
-def test_live_pages_target_refuses_without_push_url(
-    tmp_path: Path, workspace: Path, session: Session
+def test_live_pages_target_refuses_without_credentials(
+    tmp_path: Path, workspace: Path, session: Session, monkeypatch
 ) -> None:
-    """Hard guardrail: the imported github-pages target (the live site) has
-    no push_url, so building its adapter must refuse."""
+    """The imported github-pages target has no push_url; without a PAT in
+    keychain/env, building its adapter must refuse."""
     import_doc(tmp_path, workspace, session)
+    monkeypatch.delenv("GITHUB_PAT", raising=False)
+    monkeypatch.setattr("notebook_forge.secrets_store.get_secret", lambda *a, **k: None)
     live = session.query(Target).filter_by(name="github-pages").one()
     try:
         make_adapter(live, workspace)
         raise AssertionError("expected PermissionError")
     except PermissionError as exc:
-        assert "disabled this sprint" in str(exc)
+        assert "needs credentials" in str(exc)
+
+
+def test_live_pages_adapter_builds_authenticated_url(
+    tmp_path: Path, workspace: Path, session: Session, monkeypatch
+) -> None:
+    """With a PAT available, the adapter gets the x-access-token URL, the
+    noreply committer identity, and redacts the URL from git errors."""
+    import_doc(tmp_path, workspace, session)
+    monkeypatch.setattr(
+        "notebook_forge.secrets_store.get_secret", lambda *a, **k: "ghp_test123"
+    )
+    live = session.query(Target).filter_by(name="github-pages").one()
+    adapter = make_adapter(live, workspace)
+    assert (
+        adapter.push_url
+        == "https://x-access-token:ghp_test123@github.com/chris-skitch/family-history.git"
+    )
+    assert adapter.author_email == "291326845+chris-skitch@users.noreply.github.com"
+    assert adapter.branch == "main"
+    assert adapter.subdir == "rfs"
+    # the PAT never appears in surfaced errors
+    assert "ghp_test123" not in adapter._redact(f"fatal: could not read {adapter.push_url}")
 
 
 def test_adapters_are_pure_io(tmp_path: Path) -> None:

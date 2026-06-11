@@ -80,17 +80,35 @@ def make_adapter(target: Target, workspace: Path) -> PublishTarget:
         folder = config.get("folder") or str(workspace / "exports" / "site")
         return LocalFolderTarget(Path(folder))
     if target.kind == "github-pages":
+        # Explicit push_url wins (test fixtures use a local bare repo).
+        # Otherwise build the authenticated URL from config.repo + a PAT
+        # from the OS keychain (env GITHUB_PAT as fallback). The PAT is
+        # injected at adapter-construction time only — never persisted in
+        # target config, and GitPagesTarget redacts it from git errors.
         push_url = config.get("push_url", "")
         if not push_url:
+            from ..secrets_store import get_secret
+
+            repo = config.get("repo", "")
+            pat = get_secret("github-pat", env="GITHUB_PAT")
+            if repo and pat:
+                push_url = f"https://x-access-token:{pat}@github.com/{repo}.git"
+        if not push_url:
             raise PermissionError(
-                "live publishing is disabled this sprint: target "
-                f"'{target.name}' has no push_url (fixture-only)"
+                f"live publishing needs credentials: target '{target.name}' has no "
+                "push_url and no GitHub PAT was found (keychain: service "
+                "'notebook-forge', name 'github-pat'; or env GITHUB_PAT)"
             )
         return GitPagesTarget(
             push_url=push_url,
             clones_dir=workspace / "git-clones" / target.name,
             branch=config.get("branch", "main"),
             subdir=config.get("subdir", ""),
+            author_name=config.get("commit_author_name", "Chris Skitch"),
+            author_email=config.get(
+                "commit_author_email",
+                "291326845+chris-skitch@users.noreply.github.com",
+            ),
         )
     if target.kind == "drive":
         # Real OAuth lands next sprint; the mocked client keeps the flow
