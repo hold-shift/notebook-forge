@@ -40,6 +40,7 @@ def generate_sketch_for_block(
     doc: Document,
     block_id: str,
     prompt: str | None = None,
+    force: bool = False,
     generator: SketchGenerator | None = None,
 ) -> dict[str, Any]:
     blocks = [dict(b) for b in doc.blocks]
@@ -61,6 +62,7 @@ def generate_sketch_for_block(
     result = generator.generate(
         original_path.read_bytes(), original.mime or "image/jpeg",
         prompt or cfg["default_prompt"],
+        force=force,
     )
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:

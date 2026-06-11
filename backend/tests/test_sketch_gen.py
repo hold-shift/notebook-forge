@@ -157,3 +157,17 @@ def test_sketch_settings_defaults_and_override(session: Session) -> None:
     assert cfg["model"] == "gemini-2.5-flash-image"
     assert cfg["face_gate"] == "warn"
     assert cfg["default_prompt"] == SILHOUETTE_PROMPT  # unset fields keep defaults
+
+
+def test_force_bypasses_cache_read(tmp_path: Path) -> None:
+    sketch = png_bytes()
+    calls: list = []
+    gen = GeminiSketchGenerator(
+        "test-key", tmp_path / "cache", transport=gemini_transport(sketch, calls)
+    )
+    original = png_bytes((40, 40, 40))
+    gen.generate(original, "image/png")
+    gen.generate(original, "image/png", force=True)  # regenerate: fresh roll
+    assert len(calls) == 2
+    gen.generate(original, "image/png")  # plain generate still cache-hits
+    assert len(calls) == 2

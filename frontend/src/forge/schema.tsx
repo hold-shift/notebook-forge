@@ -41,7 +41,10 @@ export const forgeImageSpec = createReactBlockSpec(
         onGenerateSketch={async (prompt?: string) => {
           const slug = currentDocSlug()
           if (!slug) throw new Error('no document open')
-          const resp = await api.generateSketch(slug, block.id, prompt)
+          // A REgenerate (sketch already exists) must roll fresh — bypass
+          // the cache; a first Generate takes the free cache hit if any.
+          const force = Boolean(block.props.sketchAssetId)
+          const resp = await api.generateSketch(slug, block.id, prompt, force)
           editor.updateBlock(block, {
             props: {
               ...block.props,

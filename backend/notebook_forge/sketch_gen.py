@@ -109,11 +109,20 @@ class GeminiSketchGenerator(SketchGenerator):
                     return base64.b64decode(inline["data"])
         raise RuntimeError("Gemini response contained no image part")
 
-    def generate(self, original_bytes: bytes, mime: str, prompt: str | None = None) -> SketchResult:
+    def generate(
+        self,
+        original_bytes: bytes,
+        mime: str,
+        prompt: str | None = None,
+        force: bool = False,
+    ) -> SketchResult:
+        """`force=True` skips the cache READ (a regenerate must produce a
+        fresh variation — image models are non-deterministic); the new
+        result still overwrites the cache slot."""
         prompt = prompt or SILHOUETTE_PROMPT
         key = cache_key(original_bytes, prompt, self.model)
         cached = self.cache_dir / f"{key}.png"
-        if cached.exists():
+        if cached.exists() and not force:
             self.last_gate = GateReport(status="pass", faces=0, attempts=0)
             return SketchResult(cached.read_bytes(), self.model, prompt)
 

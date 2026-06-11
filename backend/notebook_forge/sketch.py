@@ -65,8 +65,15 @@ class SketchResult:
 
 class SketchGenerator(ABC):
     @abstractmethod
-    def generate(self, original_bytes: bytes, mime: str, prompt: str | None = None) -> SketchResult:
-        """Original photo in → faceless sketch out."""
+    def generate(
+        self,
+        original_bytes: bytes,
+        mime: str,
+        prompt: str | None = None,
+        force: bool = False,
+    ) -> SketchResult:
+        """Original photo in → faceless sketch out. `force` bypasses any
+        cache so a regenerate produces a fresh variation."""
 
 
 class StubSketchGenerator(SketchGenerator):
@@ -74,7 +81,13 @@ class StubSketchGenerator(SketchGenerator):
     rather than producing a fake sketch — imported sketches are the only
     sketch source this sprint."""
 
-    def generate(self, original_bytes: bytes, mime: str, prompt: str | None = None) -> SketchResult:
+    def generate(
+        self,
+        original_bytes: bytes,
+        mime: str,
+        prompt: str | None = None,
+        force: bool = False,
+    ) -> SketchResult:
         raise RuntimeError(
             "sketch generation is not configured: no Gemini API key in the "
             "OS keychain (Sprint 2 connects the real generator)"

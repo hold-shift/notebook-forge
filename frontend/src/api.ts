@@ -56,11 +56,11 @@ export const api = {
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'POST' }).then((r) =>
       json<{ ok: boolean; targets: TargetState[] }>(r),
     ),
-  generateSketch: (slug: string, blockId: string, prompt?: string) =>
+  generateSketch: (slug: string, blockId: string, prompt?: string, force = false) =>
     fetch(`/api/documents/${slug}/figures/${blockId}/generate-sketch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt ?? null }),
+      body: JSON.stringify({ prompt: prompt ?? null, force }),
     }).then((r) =>
       json<{ ok: boolean; detail: { sketchAssetId: string; face_gate: string } }>(r),
     ),

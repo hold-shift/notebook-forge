@@ -236,6 +236,7 @@ def ingest(
 
 class GenerateSketchBody(BaseModel):
     prompt: str | None = None
+    force: bool = False  # regenerate: bypass the cache for a fresh variation
 
 
 @app.post("/api/documents/{slug}/figures/{block_id}/generate-sketch")
@@ -252,6 +253,7 @@ def generate_sketch(
         detail = generate_sketch_for_block(
             session, _state()["workspace"], doc, block_id,
             prompt=body.prompt if body else None,
+            force=body.force if body else False,
         )
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
