@@ -88,18 +88,26 @@ class DriveTarget(PublishTarget):
         self.folder_id = folder_id
 
     def publish(self, bundle: PublishBundle) -> PublishResult:
-        # Next sprint the media will be the NotebookLM-safe edition (sketches
-        # inlined). Tonight the shape is exercised with the rendered HTML.
-        media = bundle.html.encode("utf-8")
+        # The Drive deliverable is the NotebookLM-safe Markdown (sketches
+        # inlined, captions linking to the live anchors); Drive converts
+        # text/markdown to a Google Doc on import. HTML is the fallback if
+        # the caller didn't build a safe edition.
+        if bundle.safe_md:
+            media, mime = bundle.safe_md.encode("utf-8"), "text/markdown"
+        else:
+            media, mime = bundle.html.encode("utf-8"), "text/html"
         existing = self.client.find_file(bundle.slug, self.folder_id)
         if existing:
             file_id = self.client.update_file(
-                existing, update_request_body(bundle.slug), media, "text/html"
+                existing, update_request_body(bundle.slug), media, mime
             )
             action = "updated"
         else:
             file_id = self.client.create_file(
-                create_request_body(bundle.slug, self.folder_id), media, "text/html"
+                create_request_body(bundle.slug, self.folder_id), media, mime
             )
             action = "created"
-        return PublishResult(ok=True, detail={"file_id": file_id, "action": action})
+        return PublishResult(
+            ok=True,
+            detail={"file_id": file_id, "action": action, "media_mime": mime},
+        )

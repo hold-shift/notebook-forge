@@ -29,6 +29,9 @@ class PublishBundle:
     # catalogue.json, sitemap.xml, robots.txt, llms.txt). Written at the
     # TARGET ROOT, not inside the documents subdir.
     root_files: dict[str, str] = field(default_factory=dict)
+    # NotebookLM-safe edition (sketches inlined, captions linking to the
+    # live anchors). Only populated for targets that consume it (Drive).
+    safe_md: str = ""
 
     @property
     def assets_dirname(self) -> str:

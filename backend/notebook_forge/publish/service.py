@@ -136,6 +136,10 @@ def publish_document(
 ) -> dict[str, Any]:
     adapter = adapter or make_adapter(target, workspace)
     bundle = build_bundle(session, workspace, doc)
+    if adapter.kind == "drive":
+        from ..safe_edition import build_safe_markdown
+
+        bundle.safe_md = build_safe_markdown(session, workspace, doc)
     # regenerate the site-root artefacts with every publish (spec §8) so
     # the index, catalogue, sitemap and llms.txt never drift from the docs
     from ..collection import root_files
