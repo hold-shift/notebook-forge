@@ -16,6 +16,8 @@
 | M6 publish targets | pending | |
 | M7 wrap-up | pending | |
 
+## Decisions log
+
 - **2026-06-10 · GitHub noreply committer email.** The push was rejected by
   GitHub's email-privacy enforcement; repo-local git config now uses the
   account's noreply address (matching family-history's history).
@@ -39,8 +41,6 @@
 - **2026-06-11 · datePublished provenance.** Each page's JSON-LD object is
   stored verbatim in document meta and re-emitted with headline/description
   refreshed from current fields, so provenance survives edits.
-
-## Decisions log
 
 - **2026-06-10 · Python via uv.** System Python is 3.9; `uv` provisions
   CPython 3.12 for `backend/` (`uv run` everywhere, no global installs).
