@@ -182,3 +182,35 @@ sup.fn-ref { color: var(--accent); font-weight: 700; font-size: 0.72em; }
 }
 .forge-generate:disabled { opacity: 0.6; cursor: wait; }
 .forge-gen-error { color: #a33; font-size: 0.8rem; margin: 0.3rem 0 0; }
+
+/* ---- Library head / add document ---- */
+.library-head { display: flex; align-items: baseline; gap: 1rem; margin: 0.2rem 0 1.6rem; }
+.library-head h1 { margin: 0; }
+.add-doc {
+  margin-left: auto; border: 1px solid var(--rule); border-radius: 999px;
+  background: #fff; cursor: pointer; font: inherit; font-size: 0.85rem;
+  padding: 0.35rem 0.9rem; color: var(--accent-deep);
+}
+.add-doc:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---- Editor meta bar ---- */
+.meta-bar {
+  display: flex; align-items: flex-end; gap: 0.8rem; flex-wrap: wrap;
+  border: 1px solid var(--rule); border-radius: 10px; background: var(--paper-edge);
+  padding: 0.7rem 0.9rem; margin-bottom: 1rem; font-size: 0.85rem;
+}
+.meta-bar.needs-confirm { border-color: #d99a2b; }
+.meta-bar label { display: flex; flex-direction: column; gap: 0.2rem; color: var(--ink-faint); }
+.meta-bar input {
+  font: inherit; border: 1px solid var(--rule); border-radius: 6px;
+  background: #fff; padding: 0.3rem 0.5rem; min-width: 14rem; color: var(--ink);
+}
+.meta-bar .meta-years input, .meta-bar input.meta-years { min-width: 7rem; }
+.meta-bar .meta-standfirst { flex: 1; }
+.meta-bar .meta-standfirst input { width: 100%; }
+.meta-bar button {
+  font: inherit; font-size: 0.85rem; border: 1px solid var(--rule); border-radius: 999px;
+  background: #fff; padding: 0.35rem 0.9rem; cursor: pointer; color: var(--accent-deep);
+}
+.meta-bar button:disabled { opacity: 0.5; cursor: default; }
+.confirm-hint { color: #9a6418; font-size: 0.8rem; flex-basis: 100%; }

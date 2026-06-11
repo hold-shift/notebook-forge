@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type DocSummary, type TargetState } from '../api'
 
 function Badge({ t }: { t: TargetState }) {
@@ -14,10 +14,27 @@ function Badge({ t }: { t: TargetState }) {
 export function Library({ onOpen }: { onOpen: (slug: string) => void }) {
   const [docs, setDocs] = useState<DocSummary[] | null>(null)
   const [error, setError] = useState('')
+  const [ingesting, setIngesting] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.listDocuments().then(setDocs, (e) => setError(String(e)))
   }, [])
+
+  const onFile = (file: File | undefined) => {
+    if (!file) return
+    setIngesting(true)
+    api.ingest(file).then(
+      (resp) => {
+        setIngesting(false)
+        onOpen(resp.slug)
+      },
+      (e) => {
+        setIngesting(false)
+        alert(`Ingest failed: ${e}`)
+      },
+    )
+  }
 
   if (error) return <p className="error">Backend unreachable: {error}</p>
   if (!docs) return <p className="muted">Loading library…</p>
@@ -25,7 +42,24 @@ export function Library({ onOpen }: { onOpen: (slug: string) => void }) {
   return (
     <div className="library">
       <p className="overline">The Skitch Family Archive · Notebook Forge</p>
-      <h1>Library</h1>
+      <div className="library-head">
+        <h1>Library</h1>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".pdf,.docx"
+          style={{ display: 'none' }}
+          onChange={(e) => onFile(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          className="add-doc"
+          disabled={ingesting}
+          onClick={() => fileInput.current?.click()}
+        >
+          {ingesting ? 'Ingesting…' : '+ Add document'}
+        </button>
+      </div>
       {docs.map((d) => (
         <button key={d.slug} className="doc-card" onClick={() => onOpen(d.slug)}>
           <span className="era">{d.year_display}</span>

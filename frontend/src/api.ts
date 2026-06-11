@@ -62,4 +62,17 @@ export const api = {
       json<{ ok: boolean; detail: { sketchAssetId: string; face_gate: string } }>(r),
     ),
   assetUrl: (sha: string) => (sha ? `/api/assets/${sha}` : ''),
+  saveMeta: (slug: string, blocks: unknown[], meta: Record<string, unknown>, summary: string) =>
+    fetch(`/api/documents/${slug}/blocks`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blocks, meta, summary }),
+    }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  ingest: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch('/api/ingest', { method: 'POST', body: form }).then((r) =>
+      json<{ ok: boolean; slug: string; title: string; detected_date: string; figures: number }>(r),
+    )
+  },
 }

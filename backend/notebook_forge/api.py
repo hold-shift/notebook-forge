@@ -4,9 +4,10 @@ importable and UI-free."""
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -161,6 +162,42 @@ def rollback(
         raise HTTPException(404, "snapshot not found for this document")
     services.rollback_to_snapshot(session, doc, snap)
     return {"ok": True, "targets": _target_states(session, doc)}
+
+
+@app.delete("/api/documents/{slug}")
+def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Remove a document and its snapshots/sync/changes (cascade). Assets
+    stay — the store is content-addressed and may be shared."""
+    from sqlalchemy import text as sql_text
+
+    doc = _get_doc(session, slug)
+    session.execute(sql_text("DELETE FROM doc_fts WHERE rowid = :rid").bindparams(rid=doc.id))
+    session.delete(doc)
+    return {"ok": True, "deleted": slug}
+
+
+@app.post("/api/ingest")
+def ingest(
+    file: UploadFile, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    import shutil
+    import tempfile
+
+    from .ingestion import ingest_document
+
+    suffix = Path(file.filename or "upload").suffix or ".bin"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        detail = ingest_document(
+            session, _state()["workspace"], tmp_path, original_filename=file.filename
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"ok": True, **detail}
 
 
 class GenerateSketchBody(BaseModel):

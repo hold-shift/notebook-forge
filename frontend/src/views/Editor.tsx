@@ -42,6 +42,74 @@ function PendingPanel({
   )
 }
 
+function MetaBar({
+  doc,
+  onSaved,
+  editorDoc,
+}: {
+  doc: DocDetail
+  onSaved: (targets: TargetState[]) => void
+  editorDoc: () => unknown[]
+}) {
+  const meta = doc.meta as Record<string, string | boolean>
+  const [title, setTitle] = useState(String(meta.title ?? ''))
+  const [years, setYears] = useState(String(meta.year_display ?? ''))
+  const [standfirst, setStandfirst] = useState(String(meta.standfirst ?? ''))
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const needsConfirm = meta.date_confirmed === false
+
+  const dirty =
+    title !== String(meta.title ?? '') ||
+    years !== String(meta.year_display ?? '') ||
+    standfirst !== String(meta.standfirst ?? '')
+
+  const save = () => {
+    setState('saving')
+    const updated = {
+      ...doc.meta,
+      title,
+      year_display: years,
+      standfirst,
+      meta_description: standfirst,
+      date_confirmed: true,
+    }
+    api.saveMeta(doc.slug, editorDoc(), updated, 'edited document metadata').then(
+      (resp) => {
+        doc.meta = updated
+        setState('saved')
+        onSaved(resp.targets)
+      },
+      () => setState('error'),
+    )
+  }
+
+  return (
+    <div className={`meta-bar ${needsConfirm ? 'needs-confirm' : ''}`}>
+      <label>
+        Title
+        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label>
+        Years
+        <input value={years} onChange={(e) => setYears(e.target.value)} className="meta-years" />
+      </label>
+      <label className="meta-standfirst">
+        Standfirst
+        <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
+      </label>
+      <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
+        {state === 'saving' ? 'Saving…' : needsConfirm ? 'Confirm details' : 'Save details'}
+      </button>
+      {needsConfirm && (
+        <span className="confirm-hint">
+          Detected from the source — please confirm title and years before publishing.
+        </span>
+      )}
+      {state === 'error' && <span className="error">save failed</span>}
+    </div>
+  )
+}
+
 function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -110,6 +178,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 : ''}
         </span>
       </header>
+      <MetaBar doc={doc} onSaved={setTargets} editorDoc={() => editor.document} />
       <div className="editor-body">
         <div className="editor-canvas">
           <BlockNoteView editor={editor} onChange={onChange} theme="light" />

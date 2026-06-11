@@ -18,6 +18,8 @@ dependencies = [
     "google-auth-oauthlib>=1.4.0",
     "httpx>=0.28.1",
     "opencv-python-headless>=4.13.0.92",
+    "pymupdf>=1.27.2.3",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
@@ -37,6 +39,9 @@ select = ["E", "F", "I", "W", "UP", "B"]
 [tool.ruff.lint.per-file-ignores]
 # B008: `Depends(...)` in defaults is the canonical FastAPI idiom
 "notebook_forge/api.py" = ["B008"]
+# Vendored MemoirForge extraction code — kept byte-faithful to upstream,
+# so upstream style passes through unfixed
+"notebook_forge/ingest_vendor/*" = ["E501", "F841", "B023", "B034"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
