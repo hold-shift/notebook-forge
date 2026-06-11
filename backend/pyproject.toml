@@ -16,6 +16,8 @@ dependencies = [
     "pillow>=10.4",
     "google-api-python-client>=2.197.0",
     "google-auth-oauthlib>=1.4.0",
+    "httpx>=0.28.1",
+    "opencv-python-headless>=4.13.0.92",
 ]
 
 [dependency-groups]

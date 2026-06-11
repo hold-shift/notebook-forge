@@ -2,6 +2,8 @@
  * NotebookLM-safe sketch side by side, caption + approval state below.
  * Kept editor-free so it can be unit-tested directly. */
 
+import { useState } from 'react'
+
 export interface ForgeImageProps {
   assetId: string
   sketchAssetId: string
@@ -17,6 +19,8 @@ export interface ForgeImageViewProps {
   assetUrl: (sha: string) => string
   onCaptionChange?: (caption: string) => void
   onApprovalToggle?: () => void
+  /** Generate (or regenerate) the sketch via Gemini. Resolves when done. */
+  onGenerateSketch?: () => Promise<void>
 }
 
 export function ForgeImageView({
@@ -24,8 +28,22 @@ export function ForgeImageView({
   assetUrl,
   onCaptionChange,
   onApprovalToggle,
+  onGenerateSketch,
 }: ForgeImageViewProps) {
   const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState('')
+
+  const generate = onGenerateSketch
+    ? () => {
+        setGenerating(true)
+        setGenError('')
+        onGenerateSketch()
+          .catch((e: unknown) => setGenError(String(e)))
+          .finally(() => setGenerating(false))
+      }
+    : undefined
+
   return (
     <figure
       className={`forge-image ${displayWidth === 'portrait' ? 'portrait' : 'full'}`}
@@ -55,6 +73,17 @@ export function ForgeImageView({
           onChange={(e) => onCaptionChange?.(e.target.value)}
           readOnly={!onCaptionChange}
         />
+        {generate && (
+          <button
+            type="button"
+            className="forge-generate"
+            onClick={generate}
+            disabled={generating}
+            title="Generate a NotebookLM-safe sketch via Gemini"
+          >
+            {generating ? 'Generating…' : sketchAssetId ? '↻ Regenerate' : '✏ Generate sketch'}
+          </button>
+        )}
         <button
           type="button"
           className={`forge-approval ${approval}`}
@@ -64,6 +93,7 @@ export function ForgeImageView({
           {approval === 'approved' ? '✓ approved' : '○ pending'}
         </button>
       </figcaption>
+      {genError && <p className="forge-gen-error">{genError}</p>}
     </figure>
   )
 }

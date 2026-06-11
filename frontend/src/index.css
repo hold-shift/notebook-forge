@@ -169,3 +169,16 @@ body {
 .forge-footnote-text:focus, .forge-footnote-marker:focus { outline: 1px solid var(--rule); border-radius: 4px; }
 
 sup.fn-ref { color: var(--accent); font-weight: 700; font-size: 0.72em; }
+
+.forge-generate {
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.6rem;
+  color: var(--accent-deep);
+  white-space: nowrap;
+}
+.forge-generate:disabled { opacity: 0.6; cursor: wait; }
+.forge-gen-error { color: #a33; font-size: 0.8rem; margin: 0.3rem 0 0; }

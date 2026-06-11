@@ -38,10 +38,29 @@ export const forgeImageSpec = createReactBlockSpec(
             },
           })
         }
+        onGenerateSketch={async () => {
+          const slug = currentDocSlug()
+          if (!slug) throw new Error('no document open')
+          const resp = await api.generateSketch(slug, block.id)
+          editor.updateBlock(block, {
+            props: {
+              ...block.props,
+              sketchAssetId: resp.detail.sketchAssetId,
+              approval: 'pending',
+            },
+          })
+        }}
       />
     ),
   },
 )
+
+/** The editor is only mounted at #/doc/{slug}; block renders read the slug
+ * from the hash rather than threading it through the BlockNote schema. */
+function currentDocSlug(): string | null {
+  const m = window.location.hash.match(/^#\/doc\/(.+)$/)
+  return m ? decodeURIComponent(m[1]) : null
+}
 
 export const forgeFootnoteSpec = createReactBlockSpec(
   {

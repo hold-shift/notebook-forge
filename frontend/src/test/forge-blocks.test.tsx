@@ -96,3 +96,28 @@ describe('forge schema', () => {
     )
   })
 })
+
+describe('forgeImage sketch generation', () => {
+  it('shows Generate when no sketch, Regenerate when present, and calls back', async () => {
+    const onGenerate = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <ForgeImageView
+        props={{ ...imageProps, sketchAssetId: '' }}
+        assetUrl={assetUrl}
+        onGenerateSketch={onGenerate}
+      />,
+    )
+    const btn = screen.getByText('✏ Generate sketch')
+    fireEvent.click(btn)
+    expect(onGenerate).toHaveBeenCalledOnce()
+    rerender(
+      <ForgeImageView props={imageProps} assetUrl={assetUrl} onGenerateSketch={onGenerate} />,
+    )
+    expect(await screen.findByText('↻ Regenerate')).toBeInTheDocument()
+  })
+
+  it('hides the button without a callback (read-only render)', () => {
+    render(<ForgeImageView props={imageProps} assetUrl={assetUrl} />)
+    expect(screen.queryByText(/Generate|Regenerate/)).not.toBeInTheDocument()
+  })
+})

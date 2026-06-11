@@ -53,5 +53,13 @@ export const api = {
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'POST' }).then((r) =>
       json<{ ok: boolean; targets: TargetState[] }>(r),
     ),
+  generateSketch: (slug: string, blockId: string, prompt?: string) =>
+    fetch(`/api/documents/${slug}/figures/${blockId}/generate-sketch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt ?? null }),
+    }).then((r) =>
+      json<{ ok: boolean; detail: { sketchAssetId: string; face_gate: string } }>(r),
+    ),
   assetUrl: (sha: string) => (sha ? `/api/assets/${sha}` : ''),
 }

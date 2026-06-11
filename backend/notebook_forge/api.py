@@ -163,6 +163,32 @@ def rollback(
     return {"ok": True, "targets": _target_states(session, doc)}
 
 
+class GenerateSketchBody(BaseModel):
+    prompt: str | None = None
+
+
+@app.post("/api/documents/{slug}/figures/{block_id}/generate-sketch")
+def generate_sketch(
+    slug: str,
+    block_id: str,
+    body: GenerateSketchBody | None = None,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    from .sketch_service import generate_sketch_for_block
+
+    doc = _get_doc(session, slug)
+    try:
+        detail = generate_sketch_for_block(
+            session, _state()["workspace"], doc, block_id,
+            prompt=body.prompt if body else None,
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:  # no key configured / face gate blocked
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)
