@@ -131,21 +131,33 @@ def build_body(
     body: list[dict[str, Any]] = []
     fig_n = 0
     first_para_done = False
+    # Figure numbering is per unique image, first-occurrence order: the
+    # published corpus re-renders a repeated image as a verbatim copy of
+    # its first figure (same n, anchor and src), so a duplicate assetId
+    # reuses the original number instead of advancing the counter.
+    seen_assets: dict[str, tuple[int, str]] = {}
 
     for block in blocks:
         btype = block.get("type")
         props = block.get("props", {})
         if btype == FORGE_IMAGE:
-            fig_n += 1
-            caption = props.get("caption", "")
+            asset_key = props.get("assetId") or ""
+            if asset_key and asset_key in seen_assets:
+                n, src = seen_assets[asset_key]
+            else:
+                fig_n += 1
+                n = fig_n
+                src = image_src(block, n)
+                if asset_key:
+                    seen_assets[asset_key] = (n, src)
             body.append(
                 {
                     "kind": "figure",
-                    "n": fig_n,
-                    "anchor": f"figure-{fig_n}",
-                    "src": image_src(block, fig_n),
+                    "n": n,
+                    "anchor": f"figure-{n}",
+                    "src": src,
                     "alt": props.get("altText", ""),
-                    "caption": Markup(caption),
+                    "caption": Markup(props.get("caption", "")),
                     "portrait": props.get("displayWidth") == "portrait",
                 }
             )

@@ -27,12 +27,25 @@ def _collapse(text: str) -> str:
     return _WS.sub(" ", text).strip()
 
 
+# Classes the page's own JS toggles at runtime (ToC expand state, scrollspy
+# highlight, drawer state). Two published pages were saved with this state
+# baked in; it is browser-session noise, not generated content, so it is
+# stripped before comparison.
+_RUNTIME_CLASSES = {"open", "active", "show"}
+
+
 def _attrs_signature(tag: Tag) -> str:
     parts = []
     for key in sorted(tag.attrs):
         value = tag.attrs[key]
         if isinstance(value, list):
-            value = " ".join(value)
+            value = " ".join(v for v in value if v not in _RUNTIME_CLASSES)
+        elif key == "class":
+            value = " ".join(
+                v for v in str(value).split() if v not in _RUNTIME_CLASSES
+            )
+        if key == "class" and not value:
+            continue
         parts.append(f'{key}="{_collapse(str(value))}"')
     return " ".join(parts)
 

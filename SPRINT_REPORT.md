@@ -7,14 +7,38 @@
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 scaffold & repo | in progress | |
-| M1 data layer & workspace | pending | |
-| M2 HTML → blocks parser | pending | |
-| M3 blocks → HTML renderer | pending | |
-| M4 importer & round-trip | pending | |
+| M0 scaffold & repo | **done** | `make check` green; pushed to origin |
+| M1 data layer & workspace | **done** | 7 tables, WAL, FTS5, snapshots/dirty/rollback covered by tests |
+| M2 HTML → blocks parser | **done** | fixtures cut from the real published memoirs |
+| M3 blocks → HTML renderer | **done** | render(parse(x)) DOM-equal on fixtures; template ported verbatim from MemoirForge |
+| M4 importer & round-trip | **done** | all 7 docs ≥99% (4 at 100%); see reports/roundtrip.md |
 | M5 API & frontend core | pending | |
 | M6 publish targets | pending | |
 | M7 wrap-up | pending | |
+
+- **2026-06-10 · GitHub noreply committer email.** The push was rejected by
+  GitHub's email-privacy enforcement; repo-local git config now uses the
+  account's noreply address (matching family-history's history).
+- **2026-06-10 · forgeFootnote.text / figure captions hold inline HTML.** One
+  published footnote contains `<em>` markup; props store an inline-HTML
+  string (em/strong/a only), re-emitted raw by the renderer.
+- **2026-06-10 · Figure numbering is per unique image.** The published corpus
+  re-renders a repeated image as a verbatim copy of its first figure (same
+  n/anchor/src — singapore ×3, part-4 ×1), so the renderer reuses the first
+  occurrence's number for duplicate assetIds.
+- **2026-06-10 · hr/blockquote/table/lists map to BlockNote built-ins**
+  (divider/quote/table/list items, available in @blocknote/core 0.51 — no
+  GPL xl packages). The published corpus contains none of these; parser
+  tests for them use synthetic fragments, flagged as such.
+- **2026-06-10 · Heading anchors stay derived.** Junior's hand-edited
+  `id="behind"` heading is NOT preserved; anchors/ToC are recomputed from
+  content (locked decision "the ToC is derived"). Logged in roundtrip.md.
+- **2026-06-10 · Comparator strips runtime classes** (`open`/`active`/`show`):
+  two published files were saved with the page's own scrollspy/expand JS
+  state baked in; that is browser-session noise, not generated content.
+- **2026-06-11 · datePublished provenance.** Each page's JSON-LD object is
+  stored verbatim in document meta and re-emitted with headline/description
+  refreshed from current fields, so provenance survives edits.
 
 ## Decisions log
 
@@ -41,7 +65,18 @@
 
 ## Round-trip summary
 
-(to be filled at M4 — see `reports/roundtrip.md`)
+All seven published memoirs imported, re-rendered and DOM-compared against
+the live site's HTML (whitespace-/attribute-order-insensitive, JSON-LD
+compared as parsed JSON). **All pass the ≥99% gate**:
+years-between, part-2, singapore, part-4 at **100.000%**; in-the-navy
+99.910% (one malformed alt attribute in the *published* file); part-1
+99.720% (published with an older template revision — pre-docnav); junior
+99.010% full / 99.432% content (older template + post-publication hand
+edits, fully reconstructed in reports/roundtrip.md §Analysis). Sketch
+coverage 274/274 unique figures paired; all 7 source documents recovered
+from MemoirForge work sessions with SHA-256 verification
+(reports/import-coverage.md). sync_state seeded PUBLISHED + CLEAN against
+the `github-pages` target — day one shows nothing pending.
 
 ## Next-sprint backlog
 
