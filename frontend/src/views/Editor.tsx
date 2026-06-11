@@ -25,6 +25,17 @@ function PendingPanel({
         <div key={t.target} className="pending-row">
           <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
           <span className="pending-name">{t.target}</span>
+          {t.url && (
+            <a
+              className="target-link"
+              href={t.url}
+              target="_blank"
+              rel="noreferrer"
+              title={`Open the published ${t.kind} output`}
+            >
+              ↗
+            </a>
+          )}
           <span className="pending-state">
             {t.dirty ? 'pending changes' : t.status === 'PUBLISHED' ? 'clean' : t.status}
             {t.published_at ? ` · published ${t.published_at.slice(0, 10)}` : ''}

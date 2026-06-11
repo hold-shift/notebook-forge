@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +28,31 @@ def _state() -> dict[str, Any]:
     return {"workspace": ws, "engine": engine, "factory": make_session_factory(engine)}
 
 
+def _drive_doc_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
+    """The stable Google Doc URL from the most recent drive publish."""
+    rows = session.scalars(
+        select(Change)
+        .where(Change.document_id == doc.id, Change.kind == "publish")
+        .order_by(Change.id.desc())
+        .limit(20)
+    )
+    for change in rows:
+        detail = change.detail or {}
+        if detail.get("target") == target.name and detail.get("file_id"):
+            return f"https://docs.google.com/document/d/{detail['file_id']}/edit"
+    return None
+
+
+def _target_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
+    if target.kind == "github-pages":
+        return doc.meta.get("canonical_url") or None
+    if target.kind == "local-folder":
+        return f"/site/{doc.slug}.html"  # served by the /site mount below
+    if target.kind == "drive":
+        return _drive_doc_url(session, doc, target)
+    return None
+
+
 def get_session():
     factory = _state()["factory"]
     with factory() as session:
@@ -35,6 +61,12 @@ def get_session():
 
 
 app = FastAPI(title="Notebook Forge", version="0.1.0")
+
+# Serve the local-folder export so its pages are one click away in the UI
+# (browsers refuse file:// links from http pages).
+_site_dir = _state()["workspace"] / "exports" / "site"
+_site_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/site", StaticFiles(directory=_site_dir, html=True), name="site")
 
 
 class SaveBlocksBody(BaseModel):
@@ -56,6 +88,7 @@ def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN0
             )
         )
         dirty = services.is_dirty(session, doc, target)
+        published = bool(state and state.status == "PUBLISHED")
         out.append(
             {
                 "target": target.name,
@@ -66,6 +99,7 @@ def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN0
                 if state and state.published_at
                 else None,
                 "snapshot_id": state.snapshot_id if state else None,
+                "url": _target_url(session, doc, target) if published else None,
             }
         )
     return out

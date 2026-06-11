@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://127.0.0.1:8400',
+      '/site': 'http://127.0.0.1:8400',
     },
   },
   test: {

@@ -5,6 +5,9 @@ export interface TargetState {
   dirty: boolean
   published_at: string | null
   snapshot_id: number | null
+  /** Where this target's published output lives (live page / exported file
+   * served at /site/ / Google Doc). Absent until first published. */
+  url: string | null
 }
 
 export interface DocSummary {
