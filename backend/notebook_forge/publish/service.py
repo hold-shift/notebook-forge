@@ -174,6 +174,29 @@ def publish_document(
     return {"snapshot_id": snap.id, **result.detail}
 
 
+def rebuild_index(
+    session: Session,
+    workspace: Path,
+    target: Target,
+    adapter: PublishTarget | None = None,
+) -> dict[str, Any]:
+    """Regenerate and publish ONLY the site-root artefacts to a target —
+    the `Rebuild index` action (Collection Index spec §8): editing the
+    homepage text takes effect without republishing any document."""
+    from ..collection import root_files
+
+    adapter = adapter or make_adapter(target, workspace)
+    base_url = (target.config or {}).get(
+        "base_url", "https://chris-skitch.github.io/family-history"
+    )
+    files = root_files(session, target=target, base_url=base_url)
+    publish_fn = getattr(adapter, "publish_root_files", None)
+    if publish_fn is None:
+        raise ValueError(f"target kind '{target.kind}' has no index to rebuild")
+    result = publish_fn(files)
+    return {"files": sorted(files), "commit": result if isinstance(result, str) else None}
+
+
 def rollback_and_republish(
     session: Session,
     workspace: Path,

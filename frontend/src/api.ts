@@ -68,6 +68,38 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blocks, meta, summary }),
     }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  search: (q: string) =>
+    fetch(`/api/search?q=${encodeURIComponent(q)}`).then((r) =>
+      json<{ slug: string; title: string; snip: string }[]>(r),
+    ),
+  snapshots: (slug: string) =>
+    fetch(`/api/documents/${slug}/snapshots`).then((r) =>
+      json<{ id: number; note: string; created_at: string | null }[]>(r),
+    ),
+  rollback: (slug: string, snapshotId: number) =>
+    fetch(`/api/documents/${slug}/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_id: snapshotId }),
+    }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  settings: () =>
+    fetch('/api/settings').then((r) =>
+      json<{
+        homepage: { title?: string; welcome?: string; dedication?: string }
+        secrets: Record<string, boolean>
+        targets: { name: string; kind: string }[]
+      }>(r),
+    ),
+  saveHomepage: (homepage: { title: string; welcome: string; dedication: string }) =>
+    fetch('/api/settings/homepage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(homepage),
+    }).then((r) => json<{ ok: boolean }>(r)),
+  rebuildIndex: (target: string) =>
+    fetch(`/api/rebuild-index/${target}`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean; detail: { commit: string | null } }>(r),
+    ),
   ingest: (file: File) => {
     const form = new FormData()
     form.append('file', file)

@@ -13,6 +13,12 @@ class LocalFolderTarget(PublishTarget):
     def __init__(self, folder: Path) -> None:
         self.folder = Path(folder)
 
+    def publish_root_files(self, root_files: dict[str, str]) -> None:
+        """Write only the site-root artefacts (Rebuild index action)."""
+        self.folder.mkdir(parents=True, exist_ok=True)
+        for name, content in root_files.items():
+            (self.folder / name).write_text(content)
+
     def publish(self, bundle: PublishBundle) -> PublishResult:
         self.folder.mkdir(parents=True, exist_ok=True)
         (self.folder / f"{bundle.slug}.html").write_text(bundle.html)

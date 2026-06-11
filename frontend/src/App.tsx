@@ -1,35 +1,40 @@
 import { useEffect, useState } from 'react'
 import { Library } from './views/Library'
 import { Editor } from './views/Editor'
+import { Settings } from './views/Settings'
 
-function slugFromHash(): string | null {
-  const m = window.location.hash.match(/^#\/doc\/(.+)$/)
-  return m ? decodeURIComponent(m[1]) : null
+type Route = { view: 'library' } | { view: 'settings' } | { view: 'doc'; slug: string }
+
+function routeFromHash(): Route {
+  const hash = window.location.hash
+  if (hash === '#/settings') return { view: 'settings' }
+  const m = hash.match(/^#\/doc\/(.+)$/)
+  if (m) return { view: 'doc', slug: decodeURIComponent(m[1]) }
+  return { view: 'library' }
 }
 
 export default function App() {
-  const [slug, setSlug] = useState<string | null>(slugFromHash())
+  const [route, setRoute] = useState<Route>(routeFromHash())
 
   useEffect(() => {
-    const onHash = () => setSlug(slugFromHash())
+    const onHash = () => setRoute(routeFromHash())
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  if (slug) {
-    return (
-      <Editor
-        slug={slug}
-        onBack={() => {
-          window.location.hash = ''
-        }}
-      />
-    )
+  const toLibrary = () => {
+    window.location.hash = ''
   }
+
+  if (route.view === 'doc') return <Editor slug={route.slug} onBack={toLibrary} />
+  if (route.view === 'settings') return <Settings onBack={toLibrary} />
   return (
     <Library
       onOpen={(s) => {
         window.location.hash = `#/doc/${encodeURIComponent(s)}`
+      }}
+      onSettings={() => {
+        window.location.hash = '#/settings'
       }}
     />
   )

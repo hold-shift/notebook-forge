@@ -11,15 +11,34 @@ function Badge({ t }: { t: TargetState }) {
   return <span className={cls}>{label}</span>
 }
 
-export function Library({ onOpen }: { onOpen: (slug: string) => void }) {
+export function Library({
+  onOpen,
+  onSettings,
+}: {
+  onOpen: (slug: string) => void
+  onSettings?: () => void
+}) {
   const [docs, setDocs] = useState<DocSummary[] | null>(null)
   const [error, setError] = useState('')
   const [ingesting, setIngesting] = useState(false)
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<{ slug: string; title: string; snip: string }[] | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.listDocuments().then(setDocs, (e) => setError(String(e)))
   }, [])
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setHits(null)
+      return
+    }
+    const t = setTimeout(() => {
+      api.search(query).then(setHits, () => setHits([]))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query])
 
   const onFile = (file: File | undefined) => {
     if (!file) return
@@ -59,7 +78,32 @@ export function Library({ onOpen }: { onOpen: (slug: string) => void }) {
         >
           {ingesting ? 'Ingesting…' : '+ Add document'}
         </button>
+        {onSettings && (
+          <button type="button" className="add-doc" onClick={onSettings}>
+            ⚙ Settings
+          </button>
+        )}
       </div>
+      <input
+        className="library-search"
+        placeholder="Search the memoirs…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {hits !== null && (
+        <div className="search-hits">
+          {hits.length === 0 && <p className="muted">No matches.</p>}
+          {hits.map((h) => (
+            <button key={h.slug} className="search-hit" onClick={() => onOpen(h.slug)}>
+              <span className="doc-title">{h.title}</span>
+              <span
+                className="snip"
+                dangerouslySetInnerHTML={{ __html: h.snip }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
       {docs.map((d) => (
         <button key={d.slug} className="doc-card" onClick={() => onOpen(d.slug)}>
           <span className="era">{d.year_display}</span>

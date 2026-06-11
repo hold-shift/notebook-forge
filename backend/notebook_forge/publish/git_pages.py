@@ -71,6 +71,26 @@ class GitPagesTarget(PublishTarget):
                 self._git("checkout", "-B", self.branch, "FETCH_HEAD", cwd=clone)
         return clone
 
+    def publish_root_files(self, root_files: dict[str, str]) -> str | None:
+        """Commit + push only the site-root artefacts (Rebuild index
+        action — e.g. after editing the homepage welcome). Returns the
+        commit sha, or None when nothing changed."""
+        clone = self._working_clone()
+        for name, content in root_files.items():
+            (clone / name).write_text(content)
+        for name in root_files:
+            self._git("add", "--", name, cwd=clone)
+        if not self._git("status", "--porcelain", cwd=clone):
+            return None
+        self._git(
+            "-c", f"user.name={self.author_name}", "-c", f"user.email={self.author_email}",
+            "commit", "-m", "Update collection index", cwd=clone,
+        )
+        sha = self._git("rev-parse", "HEAD", cwd=clone)
+        current = self._git("rev-parse", "--abbrev-ref", "HEAD", cwd=clone)
+        self._git("push", "origin", f"{current}:{self.branch}", cwd=clone)
+        return sha
+
     def publish(self, bundle: PublishBundle) -> PublishResult:
         clone = self._working_clone()
         dest = clone / self.subdir if self.subdir else clone

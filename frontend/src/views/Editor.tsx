@@ -110,6 +110,46 @@ function MetaBar({
   )
 }
 
+function SnapshotsPanel({ slug }: { slug: string }) {
+  const [snaps, setSnaps] = useState<{ id: number; note: string; created_at: string | null }[]>([])
+  const [restoring, setRestoring] = useState<number | null>(null)
+
+  useEffect(() => {
+    api.snapshots(slug).then(setSnaps, () => setSnaps([]))
+  }, [slug])
+
+  const restore = (id: number) => {
+    if (!confirm(`Restore snapshot #${id}? Current unpublished edits are replaced.`)) return
+    setRestoring(id)
+    api.rollback(slug, id).then(
+      () => window.location.reload(), // editor remounts with restored blocks
+      (e) => {
+        setRestoring(null)
+        alert(`Restore failed: ${e}`)
+      },
+    )
+  }
+
+  if (!snaps.length) return null
+  return (
+    <div className="pending-panel snapshots-panel">
+      <h3>Snapshots</h3>
+      {snaps.slice(0, 8).map((s) => (
+        <div key={s.id} className="pending-row">
+          <span className="pending-name">#{s.id}</span>
+          <span className="pending-state">
+            {s.note || 'snapshot'}
+            {s.created_at ? ` · ${s.created_at.slice(0, 16).replace('T', ' ')}` : ''}
+          </span>
+          <button type="button" disabled={restoring === s.id} onClick={() => restore(s.id)}>
+            {restoring === s.id ? 'Restoring…' : 'Restore'}
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -183,7 +223,10 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         <div className="editor-canvas">
           <BlockNoteView editor={editor} onChange={onChange} theme="light" />
         </div>
-        <PendingPanel targets={targets} onPush={onPush} pushing={pushing} />
+        <div className="editor-side">
+          <PendingPanel targets={targets} onPush={onPush} pushing={pushing} />
+          <SnapshotsPanel slug={doc.slug} />
+        </div>
       </div>
     </div>
   )
