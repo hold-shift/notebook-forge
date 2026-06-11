@@ -125,3 +125,37 @@ frontend tests green. `scripts/smoke.sh` = API happy path.
 - New-document ingest (PDF/DOCX) — extraction stays in MemoirForge for now
 - Editor niceties: snapshot browser UI, search UI over FTS, peopleCount
   surfaced on forgeImage, og:image support
+
+---
+
+# Sprint 2 addendum — 11 June 2026 (interactive)
+
+Built with Chris in the loop, same repo, commits `2987ec9..`:
+
+1. **Live GitHub Pages publishing** — PAT from the keychain, redacted from
+   errors; the Singapore title typo was fixed in the editor and pushed live
+   (commit `be83466` on family-history, one file, 5 lines).
+2. **Collection-index publishing** — catalogue/index/sitemap/robots/llms
+   regenerated on every publish; docnav derived from chronological order so
+   title fixes propagate to neighbours. Verified: regenerated index differed
+   from live by exactly the two true changes before pushing.
+3. **NotebookLM-safe edition + real Drive client** — `drive.file` OAuth
+   (token in keychain, account cskitch@gmail.com), markdown→Doc conversion,
+   stable URLs on republish. All seven memoirs uploaded; NotebookLM
+   ingestion verified by screenshot (sketches survive, links work).
+4. **Gemini sketch generation** — real client, content-hash cache, OpenCV
+   face gate (block/warn), generate/regenerate per figure. Live API not yet
+   exercised (cost-gated); mock-tested end to end.
+5. **New-document ingest** — MemoirForge extractors vendored
+   (`ingest_vendor/`, byte-faithful), PDF/DOCX → blocks, Add-document UI,
+   editor meta bar as the date-confirmation gate, document delete.
+6. **Settings screen** (homepage editing, rebuild-index, key status),
+   library search, snapshot browser with restore, ↗ open-published-output
+   links per target.
+
+Corpus note: `1942-1954_national-service` in MemoirForge out/ is an old
+test run of the In The Navy source — never import/publish it.
+
+Open items: one live Gemini generation (cost-gated, ~$0.13); add the six
+remaining Drive Docs as NotebookLM sources (manual); themes, first-run
+wizard, repo scan/sync remain unbuilt.
