@@ -38,10 +38,10 @@ export const forgeImageSpec = createReactBlockSpec(
             },
           })
         }
-        onGenerateSketch={async () => {
+        onGenerateSketch={async (prompt?: string) => {
           const slug = currentDocSlug()
           if (!slug) throw new Error('no document open')
-          const resp = await api.generateSketch(slug, block.id)
+          const resp = await api.generateSketch(slug, block.id, prompt)
           editor.updateBlock(block, {
             props: {
               ...block.props,

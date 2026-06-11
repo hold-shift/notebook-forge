@@ -260,3 +260,15 @@ sup.fn-ref { color: var(--accent); font-weight: 700; font-size: 0.72em; }
   background: #fff; line-height: 1.3;
 }
 .target-link:hover { border-color: #d9cdb8; background: #fffdf9; }
+
+.forge-generate.active { background: var(--paper-edge); border-color: var(--accent); }
+.forge-prompt-override {
+  width: 100%; font: inherit; font-size: 0.82rem; margin-top: 0.4rem;
+  border: 1px solid var(--rule); border-radius: 8px; background: #fffdf9;
+  padding: 0.5rem 0.7rem; color: var(--ink); box-sizing: border-box;
+}
+.settings select {
+  display: block; font: inherit; font-size: 0.95rem; margin-top: 0.25rem;
+  border: 1px solid var(--rule); border-radius: 8px; background: #fffdf9;
+  padding: 0.5rem 0.7rem; color: var(--ink);
+}

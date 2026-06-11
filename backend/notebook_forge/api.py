@@ -296,10 +296,12 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .models import Setting
     from .publish.drive_client import have_credentials
     from .secrets_store import get_secret
+    from .sketch_service import sketch_settings
 
     homepage = session.get(Setting, "homepage")
     return {
         "homepage": homepage.value if homepage else {},
+        "sketch": sketch_settings(session),
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -324,6 +326,33 @@ def save_homepage(body: HomepageBody, session: Session = Depends(get_session)) -
     else:
         setting.value = value
     return {"ok": True, "homepage": value}
+
+
+class SketchSettingsBody(BaseModel):
+    model: str
+    default_prompt: str
+    face_gate: str = "block"
+
+
+@app.put("/api/settings/sketch")
+def save_sketch_settings(
+    body: SketchSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    if body.face_gate not in ("block", "warn"):
+        raise HTTPException(422, "face_gate must be 'block' or 'warn'")
+    value = {
+        "model": body.model.strip(),
+        "default_prompt": body.default_prompt.strip(),
+        "face_gate": body.face_gate,
+    }
+    setting = session.get(Setting, "sketch")
+    if setting is None:
+        session.add(Setting(key="sketch", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "sketch": value}
 
 
 @app.post("/api/rebuild-index/{target_name}")

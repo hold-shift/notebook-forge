@@ -19,8 +19,9 @@ export interface ForgeImageViewProps {
   assetUrl: (sha: string) => string
   onCaptionChange?: (caption: string) => void
   onApprovalToggle?: () => void
-  /** Generate (or regenerate) the sketch via Gemini. Resolves when done. */
-  onGenerateSketch?: () => Promise<void>
+  /** Generate (or regenerate) the sketch via Gemini. An optional prompt
+   * overrides the default for this figure only. Resolves when done. */
+  onGenerateSketch?: (prompt?: string) => Promise<void>
 }
 
 export function ForgeImageView({
@@ -33,12 +34,14 @@ export function ForgeImageView({
   const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
+  const [showPrompt, setShowPrompt] = useState(false)
+  const [promptOverride, setPromptOverride] = useState('')
 
   const generate = onGenerateSketch
     ? () => {
         setGenerating(true)
         setGenError('')
-        onGenerateSketch()
+        onGenerateSketch(promptOverride.trim() || undefined)
           .catch((e: unknown) => setGenError(String(e)))
           .finally(() => setGenerating(false))
       }
@@ -74,15 +77,25 @@ export function ForgeImageView({
           readOnly={!onCaptionChange}
         />
         {generate && (
-          <button
-            type="button"
-            className="forge-generate"
-            onClick={generate}
-            disabled={generating}
-            title="Generate a NotebookLM-safe sketch via Gemini"
-          >
-            {generating ? 'Generating…' : sketchAssetId ? '↻ Regenerate' : '✏ Generate sketch'}
-          </button>
+          <>
+            <button
+              type="button"
+              className="forge-generate"
+              onClick={generate}
+              disabled={generating}
+              title="Generate a NotebookLM-safe sketch via Gemini"
+            >
+              {generating ? 'Generating…' : sketchAssetId ? '↻ Regenerate' : '✏ Generate sketch'}
+            </button>
+            <button
+              type="button"
+              className={`forge-generate ${showPrompt ? 'active' : ''}`}
+              onClick={() => setShowPrompt(!showPrompt)}
+              title="Override the silhouette prompt for this figure only"
+            >
+              ✎ prompt
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -93,6 +106,15 @@ export function ForgeImageView({
           {approval === 'approved' ? '✓ approved' : '○ pending'}
         </button>
       </figcaption>
+      {showPrompt && (
+        <textarea
+          className="forge-prompt-override"
+          rows={4}
+          placeholder="Per-figure prompt override — leave blank to use the default silhouette prompt (Settings → Sketch generation). Applies to the next Generate/Regenerate."
+          value={promptOverride}
+          onChange={(e) => setPromptOverride(e.target.value)}
+        />
+      )}
       {genError && <p className="forge-gen-error">{genError}</p>}
     </figure>
   )

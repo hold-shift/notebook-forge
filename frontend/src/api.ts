@@ -89,10 +89,17 @@ export const api = {
     fetch('/api/settings').then((r) =>
       json<{
         homepage: { title?: string; welcome?: string; dedication?: string }
+        sketch: { model: string; default_prompt: string; face_gate: string }
         secrets: Record<string, boolean>
         targets: { name: string; kind: string }[]
       }>(r),
     ),
+  saveSketchSettings: (sketch: { model: string; default_prompt: string; face_gate: string }) =>
+    fetch('/api/settings/sketch', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sketch),
+    }).then((r) => json<{ ok: boolean }>(r)),
   saveHomepage: (homepage: { title: string; welcome: string; dedication: string }) =>
     fetch('/api/settings/homepage', {
       method: 'PUT',

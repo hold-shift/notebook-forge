@@ -140,11 +140,13 @@ class GeminiSketchGenerator(SketchGenerator):
         return SketchResult(sketch, self.model, prompt)
 
 
-def make_generator(cache_dir: Path, face_gate: str = "block") -> SketchGenerator:
+def make_generator(
+    cache_dir: Path, model: str = SKETCH_MODEL, face_gate: str = "block"
+) -> SketchGenerator:
     """Real generator when a key is configured; the loud stub otherwise."""
     api_key = get_gemini_key()
     if not api_key:
         from .sketch import StubSketchGenerator
 
         return StubSketchGenerator()
-    return GeminiSketchGenerator(api_key, cache_dir, face_gate=face_gate)
+    return GeminiSketchGenerator(api_key, cache_dir, model=model, face_gate=face_gate)

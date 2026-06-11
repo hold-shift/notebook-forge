@@ -9,6 +9,10 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [targets, setTargets] = useState<{ name: string; kind: string }[]>([])
   const [state, setState] = useState('')
   const [rebuilding, setRebuilding] = useState('')
+  const [model, setModel] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [faceGate, setFaceGate] = useState('block')
+  const [sketchState, setSketchState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -17,8 +21,19 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setDedication(s.homepage.dedication ?? '')
       setSecrets(s.secrets)
       setTargets(s.targets.filter((t) => t.kind !== 'drive'))
+      setModel(s.sketch.model)
+      setPrompt(s.sketch.default_prompt)
+      setFaceGate(s.sketch.face_gate)
     })
   }, [])
+
+  const saveSketch = () => {
+    setSketchState('saving')
+    api.saveSketchSettings({ model, default_prompt: prompt, face_gate: faceGate }).then(
+      () => setSketchState('saved'),
+      (e) => setSketchState(`save failed: ${e}`),
+    )
+  }
 
   const save = () => {
     setState('saving')
@@ -85,6 +100,35 @@ export function Settings({ onBack }: { onBack: () => void }) {
           </button>
         ))}
         <span className="muted">{state}</span>
+      </div>
+
+      <h3>Sketch generation</h3>
+      <p className="muted">
+        Defaults are the production values that generated every published sketch. A figure-level
+        prompt override is available on each Regenerate button in the editor.
+      </p>
+      <label>
+        Gemini image model (production used <code>gemini-3-pro-image</code>; alternatives per the
+        PRD: <code>gemini-3.1-flash-image-preview</code>, <code>gemini-2.5-flash-image</code>)
+        <input value={model} onChange={(e) => setModel(e.target.value)} />
+      </label>
+      <label>
+        Default silhouette prompt
+        <textarea rows={10} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+      </label>
+      <label>
+        Face gate (block = refuse a sketch that still shows a face after retries; warn = allow
+        but flag)
+        <select value={faceGate} onChange={(e) => setFaceGate(e.target.value)}>
+          <option value="block">block</option>
+          <option value="warn">warn</option>
+        </select>
+      </label>
+      <div className="settings-actions">
+        <button type="button" onClick={saveSketch}>
+          Save sketch settings
+        </button>
+        <span className="muted">{sketchState}</span>
       </div>
 
       <h3>Connections</h3>

@@ -137,3 +137,23 @@ def test_generate_sketch_for_block_wires_asset_and_pending(
     asset = session.get(Asset, detail["sketchAssetId"])
     assert asset.kind == "sketches"
     assert asset_path(workspace, asset).read_bytes() == sketch
+
+
+def test_sketch_settings_defaults_and_override(session: Session) -> None:
+    from notebook_forge.models import Setting
+    from notebook_forge.sketch import SILHOUETTE_PROMPT, SKETCH_MODEL
+    from notebook_forge.sketch_service import sketch_settings
+
+    cfg = sketch_settings(session)
+    assert cfg == {
+        "model": SKETCH_MODEL,
+        "default_prompt": SILHOUETTE_PROMPT,
+        "face_gate": "block",
+    }
+    session.add(Setting(key="sketch", value={"model": "gemini-2.5-flash-image",
+                                             "face_gate": "warn"}))
+    session.flush()
+    cfg = sketch_settings(session)
+    assert cfg["model"] == "gemini-2.5-flash-image"
+    assert cfg["face_gate"] == "warn"
+    assert cfg["default_prompt"] == SILHOUETTE_PROMPT  # unset fields keep defaults

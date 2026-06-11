@@ -17,9 +17,21 @@ from sqlalchemy.orm import Session
 from . import services
 from .assets import asset_path, ingest_file
 from .blocks import FORGE_IMAGE
-from .models import Asset, Document
-from .sketch import SketchGenerator
+from .models import Asset, Document, Setting
+from .sketch import SILHOUETTE_PROMPT, SKETCH_MODEL, SketchGenerator
 from .sketch_gen import GeminiSketchGenerator, make_generator
+
+
+def sketch_settings(session: Session) -> dict:
+    """Operator-controlled generation settings, with the production values
+    as defaults (Settings screen edits these; stored in the settings table)."""
+    row = session.get(Setting, "sketch")
+    value = dict(row.value) if row else {}
+    return {
+        "model": value.get("model") or SKETCH_MODEL,
+        "default_prompt": value.get("default_prompt") or SILHOUETTE_PROMPT,
+        "face_gate": value.get("face_gate") or "block",
+    }
 
 
 def generate_sketch_for_block(
@@ -42,9 +54,13 @@ def generate_sketch_for_block(
         raise LookupError("figure has no original asset to sketch from")
     original_path = asset_path(workspace, original)
 
-    generator = generator or make_generator(workspace / "sketch-cache")
+    cfg = sketch_settings(session)
+    generator = generator or make_generator(
+        workspace / "sketch-cache", model=cfg["model"], face_gate=cfg["face_gate"]
+    )
     result = generator.generate(
-        original_path.read_bytes(), original.mime or "image/jpeg", prompt
+        original_path.read_bytes(), original.mime or "image/jpeg",
+        prompt or cfg["default_prompt"],
     )
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
