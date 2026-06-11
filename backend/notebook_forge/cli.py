@@ -22,7 +22,17 @@ def main(argv: list[str] | None = None) -> int:
     imp.add_argument("--reports", type=Path, default=Path("reports"))
     imp.add_argument("--workspace", type=Path, default=None)
 
+    auth = sub.add_parser("drive-auth", help="one-time Drive OAuth consent (opens a browser)")
+    auth.add_argument("--secrets", required=True, type=Path, help="OAuth client-secrets JSON")
+
     args = parser.parse_args(argv)
+    if args.command == "drive-auth":
+        from .publish.drive_client import run_consent_flow
+
+        creds = run_consent_flow(args.secrets.resolve())
+        print("Drive authenticated; token cached in the OS keychain.")
+        print("scopes:", " ".join(creds.scopes or []))
+        return 0
     if args.command == "import-published":
         ws = bootstrap_workspace(args.workspace or workspace_path())
         engine = make_engine(ws)

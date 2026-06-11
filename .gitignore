@@ -1,6 +1,7 @@
 # Secrets — never commit
 .env
 .env.*
+secret/
 
 # Read-only external reference material (cloned, not ours to version)
 vendor-readonly/

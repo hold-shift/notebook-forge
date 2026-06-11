@@ -121,9 +121,14 @@ def make_adapter(target: Target, workspace: Path) -> PublishTarget:
             ),
         )
     if target.kind == "drive":
-        # Real OAuth lands next sprint; the mocked client keeps the flow
-        # exercisable end to end.
-        return DriveTarget(MockDriveClient(), config.get("folder_id", "mock-folder"))
+        folder_id = config.get("folder_id", "")
+        if config.get("mock"):
+            return DriveTarget(MockDriveClient(), folder_id or "mock-folder")
+        if not folder_id:
+            raise PermissionError(f"drive target '{target.name}' has no folder_id configured")
+        from .drive_client import GoogleDriveClient
+
+        return DriveTarget(GoogleDriveClient(), folder_id)  # raises if unauthenticated
     raise ValueError(f"unknown target kind '{target.kind}'")
 
 
