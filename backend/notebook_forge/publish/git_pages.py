@@ -58,14 +58,17 @@ class GitPagesTarget(PublishTarget):
         clone = self.clones_dir / "pages-clone"
         if not (clone / ".git").exists():
             self.clones_dir.mkdir(parents=True, exist_ok=True)
-            self._git("clone", self.push_url, str(clone))
+            # shallow: the live repo carries hundreds of photos; pushing
+            # from a shallow clone is fine (proven by the MemoirForge flow)
+            self._git("clone", "--depth", "50", self.push_url, str(clone))
         else:
-            self._git("fetch", "origin", cwd=clone)
-            # the fixture starts empty: only sync when the branch exists
+            # explicit-branch fetch + checkout -B: works for shallow clones
+            # and for clones made from an initially-empty fixture (which
+            # may lack a fetch refspec)
             heads = self._git("ls-remote", "--heads", "origin", self.branch, cwd=clone)
             if heads:
-                self._git("checkout", self.branch, cwd=clone)
-                self._git("reset", "--hard", f"origin/{self.branch}", cwd=clone)
+                self._git("fetch", "origin", self.branch, cwd=clone)
+                self._git("checkout", "-B", self.branch, "FETCH_HEAD", cwd=clone)
         return clone
 
     def publish(self, bundle: PublishBundle) -> PublishResult:
