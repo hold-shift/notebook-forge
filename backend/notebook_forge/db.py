@@ -54,6 +54,9 @@ def fts_replace(session: Session, doc_id: int, slug: str, title: str, body: str)
 
 
 def fts_search(session: Session, query: str, limit: int = 20) -> list[dict]:
+    # Quote each term so user input (hyphens, apostrophes…) is never parsed
+    # as FTS5 query syntax; terms are implicitly ANDed.
+    query = " ".join(f'"{term.replace(chr(34), chr(34) * 2)}"' for term in query.split())
     rows = session.execute(
         text(
             "SELECT rowid, slug, title, snippet(doc_fts, 2, '<b>', '</b>', '…', 12) AS snip "

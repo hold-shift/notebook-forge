@@ -1,0 +1,85 @@
+/** BlockNote schema: defaults + the two Forge custom blocks + the fnRef
+ * inline style (footnote reference markers in prose). No @blocknote/xl-*
+ * packages — core/react/mantine only (licence guardrail). */
+
+import { BlockNoteSchema, defaultBlockSpecs, defaultStyleSpecs } from '@blocknote/core'
+import { createReactBlockSpec, createReactStyleSpec } from '@blocknote/react'
+import { api } from '../api'
+import { ForgeImageView, type ForgeImageProps } from './ForgeImageView'
+import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
+
+export const forgeImageSpec = createReactBlockSpec(
+  {
+    type: 'forgeImage',
+    propSchema: {
+      assetId: { default: '' },
+      sketchAssetId: { default: '' },
+      caption: { default: '' },
+      altText: { default: '' },
+      approval: { default: 'pending', values: ['pending', 'approved'] },
+      peopleCount: { default: 0 },
+      displayWidth: { default: 'full', values: ['full', 'portrait'] },
+    },
+    content: 'none',
+  },
+  {
+    render: ({ block, editor }) => (
+      <ForgeImageView
+        props={block.props as ForgeImageProps}
+        assetUrl={api.assetUrl}
+        onCaptionChange={(caption) =>
+          editor.updateBlock(block, { props: { ...block.props, caption } })
+        }
+        onApprovalToggle={() =>
+          editor.updateBlock(block, {
+            props: {
+              ...block.props,
+              approval: block.props.approval === 'approved' ? 'pending' : 'approved',
+            },
+          })
+        }
+      />
+    ),
+  },
+)
+
+export const forgeFootnoteSpec = createReactBlockSpec(
+  {
+    type: 'forgeFootnote',
+    propSchema: {
+      marker: { default: '' },
+      text: { default: '' },
+    },
+    content: 'none',
+  },
+  {
+    render: ({ block, editor }) => (
+      <ForgeFootnoteView
+        props={block.props as ForgeFootnoteProps}
+        onTextChange={(text) => editor.updateBlock(block, { props: { ...block.props, text } })}
+        onMarkerChange={(marker) =>
+          editor.updateBlock(block, { props: { ...block.props, marker } })
+        }
+      />
+    ),
+  },
+)
+
+export const fnRefStyleSpec = createReactStyleSpec(
+  { type: 'fnRef', propSchema: 'boolean' },
+  {
+    render: ({ contentRef }) => <sup className="fn-ref" ref={contentRef} />,
+  },
+)
+
+export const forgeSchema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    forgeImage: forgeImageSpec(),
+    forgeFootnote: forgeFootnoteSpec(),
+  },
+  styleSpecs: {
+    ...defaultStyleSpecs,
+    fnRef: fnRefStyleSpec,
+  },
+})
