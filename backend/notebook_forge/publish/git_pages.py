@@ -86,6 +86,9 @@ class GitPagesTarget(PublishTarget):
             else:
                 skipped += 1
 
+        for name, content in bundle.root_files.items():
+            (clone / name).write_text(content)
+
         # stage explicit paths only — never `git add -A`
         self._git("add", "--", str(html_rel), cwd=clone)
         assets_rel = str(
@@ -93,6 +96,8 @@ class GitPagesTarget(PublishTarget):
         )
         if bundle.assets:
             self._git("add", "--", assets_rel, cwd=clone)
+        for name in bundle.root_files:
+            self._git("add", "--", name, cwd=clone)
 
         status = self._git("status", "--porcelain", cwd=clone)
         commit_sha = None

@@ -23,6 +23,8 @@ class LocalFolderTarget(PublishTarget):
                 written += 1
             else:
                 skipped += 1
+        for name, content in bundle.root_files.items():
+            (self.folder / name).write_text(content)
         return PublishResult(
             ok=True,
             detail={"folder": str(self.folder), "html": f"{bundle.slug}.html"},

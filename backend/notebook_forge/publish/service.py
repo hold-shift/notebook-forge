@@ -67,7 +67,17 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
         ext = ext_for_asset.get(asset_id, ".jpeg")
         return f"{slug}_assets/figure-{n}-original{ext}"
 
-    html = render_document(doc.meta, doc.blocks, image_src)
+    # prev/next docnav is DERIVED from the catalogue's chronological order
+    # at publish time, so a neighbour's title fix propagates on republish.
+    from ..collection import nav_for
+
+    meta = dict(doc.meta)
+    nav_prev, nav_next = nav_for(session, doc)
+    if nav_prev or nav_next:
+        meta["nav_prev"] = nav_prev
+        meta["nav_next"] = nav_next
+
+    html = render_document(meta, doc.blocks, image_src)
     return PublishBundle(slug=slug, html=html, assets=assets)
 
 
@@ -126,6 +136,16 @@ def publish_document(
 ) -> dict[str, Any]:
     adapter = adapter or make_adapter(target, workspace)
     bundle = build_bundle(session, workspace, doc)
+    # regenerate the site-root artefacts with every publish (spec §8) so
+    # the index, catalogue, sitemap and llms.txt never drift from the docs
+    from ..collection import root_files
+
+    base_url = (target.config or {}).get(
+        "base_url", "https://chris-skitch.github.io/family-history"
+    )
+    bundle.root_files = root_files(
+        session, target=target, publishing_slug=doc.slug, base_url=base_url
+    )
     result = adapter.publish(bundle)  # raises on failure → no DB writes
     snap = services.snapshot_document(session, doc, note=f"publish to {target.name}")
     services.mark_published(session, doc, target, snap)

@@ -25,6 +25,10 @@ class PublishBundle:
     slug: str
     html: str
     assets: list[BundleAsset] = field(default_factory=list)
+    # Site-root artefacts regenerated with every publish (index.html,
+    # catalogue.json, sitemap.xml, robots.txt, llms.txt). Written at the
+    # TARGET ROOT, not inside the documents subdir.
+    root_files: dict[str, str] = field(default_factory=dict)
 
     @property
     def assets_dirname(self) -> str:
