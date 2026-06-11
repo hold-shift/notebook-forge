@@ -145,6 +145,19 @@ def _find_source(manifest: dict[str, Any], mf_work: Path | None) -> Path | None:
     return None
 
 
+def get_or_create_local_target(session: Session, workspace: Path) -> Target:
+    target = session.scalar(select(Target).where(Target.name == "local-folder"))
+    if target is None:
+        target = Target(
+            name="local-folder",
+            kind="local-folder",
+            config={"folder": str(workspace / "exports" / "site")},
+        )
+        session.add(target)
+        session.flush()
+    return target
+
+
 def get_or_create_pages_target(session: Session, repo_root: Path) -> Target:
     target = session.scalar(select(Target).where(Target.name == PAGES_TARGET_NAME))
     if target is None:
@@ -385,6 +398,7 @@ def import_all(
 ) -> tuple[list[DocCoverage], list[DocRoundtrip]]:
     slugs = discover_slugs(repo_root, subdir)
     target = get_or_create_pages_target(session, repo_root)
+    get_or_create_local_target(session, workspace)
 
     coverages: list[DocCoverage] = []
     docs = []

@@ -163,6 +163,23 @@ def rollback(
     return {"ok": True, "targets": _target_states(session, doc)}
 
 
+@app.post("/api/documents/{slug}/publish/{target_name}")
+def publish(
+    slug: str, target_name: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .publish import publish_document
+
+    doc = _get_doc(session, slug)
+    target = session.scalar(select(Target).where(Target.name == target_name))
+    if target is None:
+        raise HTTPException(404, f"no target '{target_name}'")
+    try:
+        detail = publish_document(session, _state()["workspace"], doc, target)
+    except PermissionError as exc:  # live publishing disabled this sprint
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
+
+
 @app.get("/api/targets")
 def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     return [
