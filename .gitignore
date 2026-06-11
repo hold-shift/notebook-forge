@@ -1,0 +1,26 @@
+# Secrets — never commit
+.env
+.env.*
+
+# Read-only external reference material (cloned, not ours to version)
+vendor-readonly/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Workspace / runtime artefacts (live outside the repo by default, but guard anyway)
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
