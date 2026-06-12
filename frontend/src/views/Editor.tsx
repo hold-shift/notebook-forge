@@ -325,7 +325,7 @@ function MetaBar({
         {slugError && <span className="error meta-slug-error">{slugError}</span>}
       </label>
       <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
-        {state === 'saving' ? 'Saving…' : needsConfirm ? 'Confirm details' : 'Save details'}
+        {state === 'saving' ? 'Saving…' : needsConfirm ? '💾 Meta' : '💾 Meta'}
       </button>
       {Boolean(meta.source_asset_id) && (
         <button
@@ -390,7 +390,7 @@ function MetaBar({
               title="Generate AI captions for images without one"
               onClick={() => void onGenerateCaptions()}
             >
-              {generatingCaptions ? 'Captioning…' : missingCount > 0 ? `Caption images (${missingCount})` : 'Caption images'}
+              {generatingCaptions ? '✨ Captioning…' : missingCount > 0 ? `✨ Caption images (${missingCount})` : '✨ Caption images'}
             </button>
           </>
         )

@@ -316,6 +316,7 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 13px;
 }
 .meta-bar input.meta-years { min-width: 7rem; }
+.meta-bar .meta-toc { margin-left: 12px; }
 .meta-bar .meta-toc select { min-width: 7rem; }
 .meta-bar select {
   border: 0.5px solid var(--color-border-tertiary);
