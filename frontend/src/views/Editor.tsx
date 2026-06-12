@@ -6,7 +6,7 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
-import { forgeSchema, docGroupSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { forgeSchema, docGroupSlashItem, dedicationSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -812,7 +812,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   triggerCharacter="/"
                   getItems={async (q) =>
                     filterSuggestionItems(
-                      [...getDefaultReactSlashMenuItems(editor), docGroupSlashItem(editor)],
+                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor)],
                       q,
                     )
                   }

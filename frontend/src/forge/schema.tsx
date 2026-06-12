@@ -171,4 +171,17 @@ export function docGroupSlashItem(editor: any) {
   }
 }
 
+/** Slash menu item for inserting a forgeDedication block (homepage only). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function dedicationSlashItem(editor: any) {
+  return {
+    title: 'Dedication',
+    aliases: ['dedication'],
+    group: 'Forge',
+    subtext: 'Italic dedication line',
+    icon: <i className="ti ti-heart" />,
+    onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeDedication' }),
+  }
+}
+
 export { filterSuggestionItems, getDefaultReactSlashMenuItems }
