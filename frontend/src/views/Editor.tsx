@@ -790,7 +790,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             generatingCaptions={generatingCaptions}
           />
         )}
-        <div className="editor-body with-outline">
+        <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
           {!isHomepage && (outlineOpen ? (
             <OutlineNavigator nodes={outline} activeId={activeHeading} onSelect={selectHeading} />
           ) : (
