@@ -79,11 +79,14 @@ def reindex(session: Session, doc: Document) -> None:
 
 
 def effective_content_hash(session: Session, doc: Document) -> str:
-    if doc.kind != "homepage":
-        return content_hash(doc.blocks, doc.meta)
-    from .homepage import group_listing_fingerprint
+    from .blocks import FORGE_NARRATIVE
     meta = dict(doc.meta)
-    meta["__group_listing__"] = group_listing_fingerprint(session, doc.blocks)
+    if doc.kind == "homepage":
+        from .homepage import group_listing_fingerprint
+        meta["__group_listing__"] = group_listing_fingerprint(session, doc.blocks)
+    if any(b.get("type") == FORGE_NARRATIVE for b in doc.blocks):
+        from .narrative import effective_narrative_label
+        meta["__narrative_label__"] = effective_narrative_label(session, doc)
     return content_hash(doc.blocks, meta)
 
 

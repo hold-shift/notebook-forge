@@ -605,6 +605,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
     from .secrets_store import get_secret
@@ -613,6 +614,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     return {
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
+        "narrative": {"label": narrative_label_setting(session)},
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -670,6 +672,25 @@ def save_polish_settings(
     else:
         setting.value = value
     return {"ok": True, "polish": value}
+
+
+class NarrativeSettingsBody(BaseModel):
+    label: str = ""
+
+
+@app.put("/api/settings/narrative")
+def save_narrative_settings(
+    body: NarrativeSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    value = {"label": body.label.strip()}
+    setting = session.get(Setting, "narrative")
+    if setting is None:
+        session.add(Setting(key="narrative", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "narrative": value}
 
 
 @app.get("/api/search")

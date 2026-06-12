@@ -10,6 +10,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [polishModel, setPolishModel] = useState('')
   const [polishRules, setPolishRules] = useState('')
   const [polishState, setPolishState] = useState('')
+  const [narrativeLabel, setNarrativeLabel] = useState('')
+  const [narrativeState, setNarrativeState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -19,6 +21,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setFaceGate(s.sketch.face_gate)
       setPolishModel(s.polish.model)
       setPolishRules(s.polish.extra_rules)
+      setNarrativeLabel(s.narrative.label)
     })
   }, [])
 
@@ -35,6 +38,14 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.savePolishSettings({ model: polishModel, extra_rules: polishRules }).then(
       () => setPolishState('Saved'),
       (e) => setPolishState(`Failed: ${e}`),
+    )
+  }
+
+  const saveNarrative = () => {
+    setNarrativeState('saving')
+    api.saveNarrativeSettings({ label: narrativeLabel }).then(
+      () => setNarrativeState('Saved'),
+      (e) => setNarrativeState(`Failed: ${e}`),
     )
   }
 
@@ -128,6 +139,37 @@ export function Settings({ onBack }: { onBack: () => void }) {
           <div className="settings-save-row">
             <button type="button" className="btn-primary" onClick={savePolish}>Save polish settings</button>
             {polishState && <span className="settings-state muted">{polishState}</span>}
+          </div>
+        </div>
+      </section>
+
+      {/* Narrative voice */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Narrative voice</h2>
+          <p>
+            Optional small-caps label above each narrative panel on published pages (e.g. 'From
+            the author'). Leave blank for none — the recommended default. Per-document override
+            lives in the document's meta bar.
+          </p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row">
+            <label htmlFor="narrative-label">Panel label</label>
+            <div className="settings-control">
+              <input
+                id="narrative-label"
+                value={narrativeLabel}
+                onChange={(e) => setNarrativeLabel(e.target.value)}
+                placeholder="e.g. From the author (leave blank for none)"
+              />
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <button type="button" className="btn-primary" onClick={saveNarrative}>
+              Save narrative settings
+            </button>
+            {narrativeState && <span className="settings-state muted">{narrativeState}</span>}
           </div>
         </div>
       </section>

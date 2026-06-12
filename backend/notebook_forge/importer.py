@@ -304,8 +304,11 @@ def _article_only(html: str) -> str:
 def roundtrip_document(
     session: Session, repo_root: Path, doc, subdir: str = "rfs"  # noqa: ANN001
 ) -> DocRoundtrip:
+    from .narrative import effective_narrative_label
+
     published = (repo_root / subdir / f"{doc.slug}.html").read_text()
-    rendered = render_document(doc.meta, doc.blocks, db_image_src(session, doc))
+    meta = {**doc.meta, "narrative_label": effective_narrative_label(session, doc)}
+    rendered = render_document(meta, doc.blocks, db_image_src(session, doc))
     result = compare(published, rendered)
     content = compare(_article_only(published), _article_only(rendered))
     return DocRoundtrip(

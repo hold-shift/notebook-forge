@@ -223,6 +223,13 @@ function MetaBar({
   const tocInitial =
     meta.show_toc === undefined || meta.show_toc === null ? 'auto' : meta.show_toc ? 'on' : 'off'
   const [toc, setToc] = useState(tocInitial)
+  const hasNarrativeBlocks = doc.blocks.some(
+    (b) => (b as { type: string }).type === 'forgeNarrative',
+  )
+  const narrativeLabelInitial = 'narrative_label' in meta
+  const narrativeLabelValueInitial = String(meta.narrative_label ?? '')
+  const [narrativeOverride, setNarrativeOverride] = useState(narrativeLabelInitial)
+  const [narrativeLabelValue, setNarrativeLabelValue] = useState(narrativeLabelValueInitial)
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const needsConfirm = meta.date_confirmed === false
 
@@ -256,7 +263,9 @@ function MetaBar({
     author !== String(meta.author ?? '') ||
     years !== String(meta.year_display ?? '') ||
     standfirst !== String(meta.standfirst ?? '') ||
-    toc !== tocInitial
+    toc !== tocInitial ||
+    narrativeOverride !== narrativeLabelInitial ||
+    (narrativeOverride && narrativeLabelValue !== narrativeLabelValueInitial)
 
   const save = () => {
     setState('saving')
@@ -271,6 +280,8 @@ function MetaBar({
     }
     if (toc === 'auto') delete updated.show_toc
     else updated.show_toc = toc === 'on'
+    if (narrativeOverride) updated.narrative_label = narrativeLabelValue
+    else delete updated.narrative_label
     api.saveMeta(doc.slug, editorDoc(), updated as Record<string, unknown>, 'edited document metadata').then(
       (resp) => {
         doc.meta = updated as DocDetail['meta']
@@ -307,6 +318,24 @@ function MetaBar({
           <option value="off">Off</option>
         </select>
       </label>
+      {hasNarrativeBlocks && (
+        <label className="meta-narrative" title="Override the workspace narrative panel label for this document. Unchecked = inherit workspace default.">
+          Narrative label
+          <span className="meta-narrative-row">
+            <input
+              type="checkbox"
+              checked={narrativeOverride}
+              onChange={(e) => setNarrativeOverride(e.target.checked)}
+            />
+            <input
+              value={narrativeLabelValue}
+              disabled={!narrativeOverride}
+              onChange={(e) => setNarrativeLabelValue(e.target.value)}
+              placeholder="e.g. From the author"
+            />
+          </span>
+        </label>
+      )}
       <label className="meta-slug" title="Internal library ID and URL path segment. Changing it makes the old URL a dead link until re-published.">
         Slug
         <span className="meta-slug-row">
