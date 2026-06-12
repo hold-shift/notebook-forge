@@ -155,6 +155,21 @@ def _cmd_reimport(args: argparse.Namespace) -> int:
             for slug in args.slugs:
                 doc = services.get_document(session, slug)
                 if doc is None:
+                    # Slug may be a manifest stem rather than the library slug
+                    # (e.g. 1934-1945_junior vs the ingested 1930-1945_junior).
+                    # Try to resolve via the manifest's source_file.
+                    try:
+                        from .reimport import find_memoir_manifest
+                        mf = find_memoir_manifest(slug)
+                        all_docs = services.list_documents(session)
+                        doc = next(
+                            (d for d in all_docs
+                             if d.meta.get("source_file") == mf.source_file),
+                            None,
+                        )
+                    except LookupError:
+                        pass
+                if doc is None:
                     print(f"  {slug}: SKIP — not found in library")
                 else:
                     docs.append(doc)
