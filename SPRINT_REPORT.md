@@ -156,6 +156,19 @@ Built with Chris in the loop, same repo, commits `2987ec9..`:
 Corpus note: `1942-1954_national-service` in MemoirForge out/ is an old
 test run of the In The Navy source — never import/publish it.
 
-Open items: one live Gemini generation (cost-gated, ~$0.13); add the six
-remaining Drive Docs as NotebookLM sources (manual); themes, first-run
-wizard, repo scan/sync remain unbuilt.
+Later additions (12 June, interactive): live Gemini generation proven
+(face gate auto-retried a flagged first attempt); Regenerate bypasses the
+sketch cache; sketch model/prompt/face-gate configurable in Settings with
+per-figure prompt override; PDF extraction preserves italics/bold and
+paragraph breaks (vendored-extractor divergence, documented in code);
+re-ingest from archived source carrying figure work over; modern
+token-based tool chrome from the design mockups; per-figure safe-edition
+mode (sketch/original/omit); ToC auto/on/off control; readable
+pending-changes panel with per-target behind-counts and push-all;
+**outline navigator sidebar** (heading tree with H-level chips,
+expand/collapse, click-to-scroll with flash, scrollspy, level-skip lint
+mirroring the generated ToC, hide-to-rail toggle).
+
+Open items: add the six remaining Drive Docs as NotebookLM sources
+(manual); LLM polish port (decision pending); themes, first-run wizard,
+repo scan/sync remain unbuilt.

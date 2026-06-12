@@ -4,8 +4,11 @@ import { useCreateBlockNote } from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
+import { useMemo } from 'react'
 import { api, type DocDetail, type TargetState } from '../api'
 import { forgeSchema } from '../forge/schema'
+import { OutlineNavigator } from '../forge/OutlineNavigator'
+import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
 import { timeAgo } from './Library'
 
 const AUTOSAVE_MS = 1200
@@ -281,12 +284,24 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pushing, setPushing] = useState<string | null>(null)
+  const [outlineOpen, setOutlineOpen] = useState(true)
+  const [outlineVersion, setOutlineVersion] = useState(0)
+  const [activeHeading, setActiveHeading] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(null)
+  const outlineTimer = useRef<ReturnType<typeof setTimeout>>(null)
 
   const editor = useCreateBlockNote({
     schema: forgeSchema,
     initialContent: doc.blocks as PartialBlock<typeof forgeSchema.blockSchema>[],
   })
+
+  // Memoised heading tree; rebuilt only when the debounced version bumps,
+  // so 100+ heading documents don't re-walk the tree on every keystroke.
+  const outline = useMemo(
+    () => buildOutline(editor.document as unknown as BlockLike[]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editor, outlineVersion],
+  )
 
   const save = useCallback(() => {
     setSaveState('saving')
@@ -302,11 +317,44 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const onChange = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(save, AUTOSAVE_MS)
+    if (outlineTimer.current) clearTimeout(outlineTimer.current)
+    outlineTimer.current = setTimeout(() => setOutlineVersion((v) => v + 1), 300)
   }, [save])
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
+    if (outlineTimer.current) clearTimeout(outlineTimer.current)
   }, [])
+
+  const selectHeading = useCallback((id: string) => {
+    const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${id}"]`)
+    if (!el) return
+    setActiveHeading(id)
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.classList.add('nf-flash')
+    setTimeout(() => el.classList.remove('nf-flash'), 900)
+  }, [])
+
+  // Scrollspy: highlight the heading currently near the top of the
+  // viewport. Re-armed whenever the outline rebuilds.
+  useEffect(() => {
+    const ids = new Set(headingIds(outline))
+    const els = [...document.querySelectorAll<HTMLElement>('.editor-canvas [data-id]')].filter(
+      (el) => ids.has(el.dataset.id ?? ''),
+    )
+    if (els.length === 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const hit = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+        if (hit) setActiveHeading((hit.target as HTMLElement).dataset.id ?? null)
+      },
+      { rootMargin: '0px 0px -70% 0px' },
+    )
+    els.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  }, [outline])
 
   const onPush = useCallback(
     async (target: string) => {
@@ -334,6 +382,17 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   return (
     <div className="shell">
       <header className="editor-header">
+        <button
+          type="button"
+          className="nf-ibtn"
+          title={outlineOpen ? 'Hide outline' : 'Show outline'}
+          onClick={() => setOutlineOpen((o) => !o)}
+        >
+          <i
+            className={`ti ${outlineOpen ? 'ti-layout-sidebar-left-collapse' : 'ti-list-tree'}`}
+            aria-hidden
+          />
+        </button>
         <button type="button" className="crumb" onClick={onBack}>
           Library
         </button>
@@ -354,7 +413,21 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       </header>
       <div className="editor-wrap">
         <MetaBar doc={doc} onSaved={setTargets} editorDoc={() => editor.document} />
-        <div className="editor-body">
+        <div className="editor-body with-outline">
+          {outlineOpen ? (
+            <OutlineNavigator nodes={outline} activeId={activeHeading} onSelect={selectHeading} />
+          ) : (
+            <div className="nf-rail">
+              <button
+                type="button"
+                className="nf-ibtn"
+                title="Show outline"
+                onClick={() => setOutlineOpen(true)}
+              >
+                <i className="ti ti-list-tree" aria-hidden />
+              </button>
+            </div>
+          )}
           <div className="editor-canvas">
             <BlockNoteView editor={editor} onChange={onChange} theme="light" />
           </div>
