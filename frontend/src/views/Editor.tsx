@@ -10,6 +10,7 @@ import { forgeSchema } from '../forge/schema'
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
 import { timeAgo } from './Library'
+import { PolishProgress } from './PolishProgress'
 import { PolishReview } from './PolishReview'
 
 const AUTOSAVE_MS = 1200
@@ -412,6 +413,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [polishing, setPolishing] = useState(false)
   const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
   const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
+  const [polishReviewOpen, setPolishReviewOpen] = useState(false)
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [outlineVersion, setOutlineVersion] = useState(0)
   const [activeHeading, setActiveHeading] = useState<string | null>(null)
@@ -560,13 +562,11 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         setPolishing(false)
         setTargets(report.targets)
         if (report.flagged.length === 0) {
-          alert(
-            `Polish complete: ${report.blocks_polished} block${report.blocks_polished !== 1 ? 's' : ''} cleaned, nothing to review.`,
-          )
           window.location.reload()
         } else {
           setPolishReport(report)
           setPolishRemaining(new Set(report.flagged.map((f) => f.block_id)))
+          setPolishReviewOpen(true)
         }
       },
       (e) => {
@@ -576,8 +576,73 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     )
   }, [doc.slug])
 
+  const onPolishDone = useCallback(() => {
+    setPolishReport(null)
+    setPolishRemaining(new Set())
+    setPolishReviewOpen(false)
+    window.location.reload()
+  }, [])
+
+  const onApplyAll = useCallback(() => {
+    if (!polishReport) return
+    const pending = polishReport.flagged.filter((f) => polishRemaining.has(f.block_id))
+    if (pending.length === 0) return
+    if (
+      !confirm(
+        `Apply all ${pending.length} remaining change${pending.length !== 1 ? 's' : ''}? Each replaces the block text with the polished version.`,
+      )
+    )
+      return
+    for (const f of pending) {
+      editor.updateBlock(f.block_id, { content: f.polished_content as PartialBlock['content'] })
+    }
+    setPolishRemaining(new Set())
+    save()
+  }, [polishReport, polishRemaining, editor, save])
+
+  const onSkipAll = useCallback(() => {
+    setPolishRemaining(new Set())
+  }, [])
+
+  const jumpToBlock = useCallback((blockId: string) => {
+    const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${blockId}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.classList.add('nf-flash')
+    setTimeout(() => el.classList.remove('nf-flash'), 900)
+  }, [])
+
   return (
     <div className="shell">
+      {polishing && <PolishProgress slug={doc.slug} />}
+
+      {polishReport && polishReviewOpen && (
+        <PolishReview
+          report={polishReport}
+          remaining={polishRemaining}
+          onApply={(blockId, content) => {
+            editor.updateBlock(blockId, { content: content as PartialBlock['content'] })
+            setPolishRemaining((prev) => {
+              const next = new Set(prev)
+              next.delete(blockId)
+              return next
+            })
+          }}
+          onSkip={(blockId) =>
+            setPolishRemaining((prev) => {
+              const next = new Set(prev)
+              next.delete(blockId)
+              return next
+            })
+          }
+          onDone={onPolishDone}
+          onClose={() => setPolishReviewOpen(false)}
+          onApplyAll={onApplyAll}
+          onSkipAll={onSkipAll}
+          onJumpToBlock={jumpToBlock}
+        />
+      )}
+
       <header className="editor-header">
         <button
           type="button"
@@ -635,49 +700,39 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             <BlockNoteView editor={editor} onChange={onChange} theme="light" />
           </div>
           <div className="editor-side">
-            {polishReport ? (
-              <PolishReview
-                report={polishReport}
-                remaining={polishRemaining}
-                onApply={(blockId, content) => {
-                  editor.updateBlock(blockId, { content: content as PartialBlock['content'] })
-                  setPolishRemaining((prev) => {
-                    const next = new Set(prev)
-                    next.delete(blockId)
-                    return next
-                  })
-                }}
-                onSkip={(blockId) =>
-                  setPolishRemaining((prev) => {
-                    const next = new Set(prev)
-                    next.delete(blockId)
-                    return next
-                  })
-                }
-                onDone={() => {
-                  setPolishReport(null)
-                  setPolishRemaining(new Set())
-                  window.location.reload()
-                }}
-              />
-            ) : (
-              <>
-                <PendingPanel
-                  slug={doc.slug}
-                  targets={targets}
-                  onPush={onPush}
-                  onUnpublish={onUnpublish}
-                  pushing={pushing}
-                  unpublishing={unpublishing}
-                />
-                <SnapshotsPanel slug={doc.slug} />
-                <div className="danger-panel">
-                  <button type="button" className="btn-danger" onClick={onDelete}>
-                    <i className="ti ti-trash" aria-hidden /> Delete document
+            {polishReport && !polishReviewOpen && (
+              <div className="polish-review-stub">
+                <span>
+                  Polish review — {polishRemaining.size} pending
+                </span>
+                <div className="polish-review-stub-actions">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => setPolishReviewOpen(true)}
+                  >
+                    Resume review
+                  </button>
+                  <button type="button" onClick={onPolishDone}>
+                    Done — reload editor
                   </button>
                 </div>
-              </>
+              </div>
             )}
+            <PendingPanel
+              slug={doc.slug}
+              targets={targets}
+              onPush={onPush}
+              onUnpublish={onUnpublish}
+              pushing={pushing}
+              unpublishing={unpublishing}
+            />
+            <SnapshotsPanel slug={doc.slug} />
+            <div className="danger-panel">
+              <button type="button" className="btn-danger" onClick={onDelete}>
+                <i className="ti ti-trash" aria-hidden /> Delete document
+              </button>
+            </div>
           </div>
         </div>
       </div>

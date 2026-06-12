@@ -147,3 +147,24 @@ def check_block_fidelity(
         summary=summary,
         marker_mismatch=marker_mismatch,
     )
+
+
+def diff_segments(original: str, polished: str) -> list[dict[str, str]]:
+    """Word-level diff of the RAW texts for display highlighting.
+
+    Returns [{"op": "equal"|"delete"|"insert"|"replace", "a": str, "b": str}]
+    where the concatenation of all "a" == original and all "b" == polished.
+    Uses raw text (no typography normalisation) — the smart-quote changes it
+    strips are exactly what the reviewer needs to see.
+    """
+    orig_tokens = re.findall(r"\S+\s*", original)
+    pol_tokens = re.findall(r"\S+\s*", polished)
+    sm = difflib.SequenceMatcher(a=orig_tokens, b=pol_tokens, autojunk=False)
+    segments = []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        segments.append({
+            "op": op,
+            "a": "".join(orig_tokens[i1:i2]),
+            "b": "".join(pol_tokens[j1:j2]),
+        })
+    return segments

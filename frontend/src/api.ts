@@ -31,12 +31,19 @@ export interface DocDetail {
   targets: TargetState[]
 }
 
+export interface DiffSegment {
+  op: 'equal' | 'delete' | 'insert' | 'replace'
+  a: string
+  b: string
+}
+
 export interface FlaggedBlock {
   block_id: string
   original: string
   polished: string
   summary: string
   polished_content: unknown[]
+  diff: DiffSegment[]
 }
 
 export interface PolishReport {
@@ -130,6 +137,10 @@ export const api = {
   polish: (slug: string) =>
     fetch(`/api/documents/${slug}/polish`, { method: 'POST' }).then((r) =>
       json<PolishReport>(r),
+    ),
+  polishProgress: (slug: string) =>
+    fetch(`/api/documents/${slug}/polish/progress`, { cache: 'no-store' }).then((r) =>
+      json<{ running: boolean; done: number; total: number; failed: number }>(r),
     ),
   savePolishSettings: (polish: { model: string; extra_rules: string }) =>
     fetch('/api/settings/polish', {

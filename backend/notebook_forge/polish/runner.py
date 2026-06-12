@@ -12,6 +12,7 @@ Run behaviour:
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -118,11 +119,15 @@ def run_chunks(
     runner: GeminiPolishRunner,
     *,
     extra_rules: str = "",
+    on_chunk_done: Callable[[bool], None] | None = None,
 ) -> tuple[dict[str, str], list[str]]:
     """Run all chunks concurrently (4 workers).
 
     Returns (results, failed_notes) where results is {block_id: polished_text}
     and failed_notes is a list of human-readable error strings.
+
+    on_chunk_done is called once per completed chunk with failed=True/False.
+    Callback errors are swallowed — they must never tank the run.
     """
     combined: dict[str, str] = {}
     failed: list[str] = []
@@ -141,5 +146,10 @@ def run_chunks(
                 failed.append(err)
             elif result:
                 combined.update(result)
+            if on_chunk_done is not None:
+                try:
+                    on_chunk_done(bool(err))
+                except Exception:
+                    pass
 
     return combined, failed

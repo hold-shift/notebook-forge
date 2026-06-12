@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from .. import services
 from ..models import Document, Setting
 from .chunker import chunk_blocks
-from .fidelity import check_block_fidelity
+from .fidelity import check_block_fidelity, diff_segments
 from .runner import POLISH_MODEL, GeminiPolishRunner, run_chunks
 from .textmap import polish_text_to_content, polishable_blocks
 
@@ -44,6 +44,7 @@ def polish_document(
     doc: Document,
     *,
     runner: GeminiPolishRunner | None = None,
+    progress: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the polish pass over doc and return the report.
 
@@ -75,13 +76,23 @@ def polish_document(
 
     # 3. Chunk
     chunks = chunk_blocks(poly)
+    if progress is not None:
+        progress["total"] = len(chunks)
 
     # 4. Run (real or injected)
     if runner is None:
         from .runner import make_runner
         runner = make_runner(cfg["model"])
 
-    results, failed_chunks = run_chunks(chunks, runner, extra_rules=cfg["extra_rules"])
+    def _on_chunk_done(failed: bool) -> None:
+        if progress is not None:
+            progress["done"] += 1
+            if failed:
+                progress["failed"] += 1
+
+    results, failed_chunks = run_chunks(
+        chunks, runner, extra_rules=cfg["extra_rules"], on_chunk_done=_on_chunk_done,
+    )
 
     # 5. Fidelity guard
     orig_by_id = {bid: text for bid, _kind, text in poly}
@@ -102,6 +113,7 @@ def polish_document(
                 "polished": polished_text,
                 "summary": verdict.summary,
                 "polished_content": polish_text_to_content(polished_text),
+                "diff": diff_segments(original, polished_text),
             })
 
     # 6. Apply clean updates

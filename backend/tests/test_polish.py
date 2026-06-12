@@ -417,3 +417,122 @@ class TestPolishSettings:
         cfg = polish_settings(session)
         assert cfg["model"] == "gemini-2.5-flash-lite"
         assert cfg["extra_rules"] == "Never shorten."
+
+
+# ------------------------------------------------------------------ diff_segments
+
+class TestDiffSegments:
+    def _segs(self, orig: str, pol: str):
+        from notebook_forge.polish.fidelity import diff_segments
+        return diff_segments(orig, pol)
+
+    def _roundtrip(self, orig: str, pol: str) -> None:
+        segs = self._segs(orig, pol)
+        assert "".join(s["a"] for s in segs) == orig
+        assert "".join(s["b"] for s in segs) == pol
+
+    def test_identical_is_all_equal(self) -> None:
+        segs = self._segs("Hello world.", "Hello world.")
+        assert all(s["op"] == "equal" for s in segs)
+        self._roundtrip("Hello world.", "Hello world.")
+
+    def test_word_replace_detected(self) -> None:
+        segs = self._segs("sailers went home.", "sailors went home.")
+        ops = [s["op"] for s in segs]
+        assert "replace" in ops
+        self._roundtrip("sailers went home.", "sailors went home.")
+
+    def test_insert_at_end(self) -> None:
+        segs = self._segs("Hello world.", "Hello beautiful world.")
+        ops = [s["op"] for s in segs]
+        assert "insert" in ops
+        self._roundtrip("Hello world.", "Hello beautiful world.")
+
+    def test_smart_quote_change_shows_as_replace(self) -> None:
+        # Smart-quote change is NOT normalised away here (unlike fidelity check)
+        orig = 'She said "hello".'
+        pol = "She said “hello”."
+        segs = self._segs(orig, pol)
+        ops = [s["op"] for s in segs]
+        assert "replace" in ops
+        self._roundtrip(orig, pol)
+
+    def test_round_trip_various(self) -> None:
+        cases = [
+            ("Hello world.", "Hello world."),
+            ("sailers", "sailors"),
+            ("Hello world.", "Hello beautiful world."),
+            ("Hello world extra.", "Hello world."),
+            ("word[^1] here", "word[^1] here"),
+        ]
+        for orig, pol in cases:
+            self._roundtrip(orig, pol)
+
+
+# ------------------------------------------------------------------ progress tracking
+
+class TestProgressTracking:
+    def _make_doc(self, session: Session, text: str = "Hello world.") -> Any:
+        blocks = [make_block("paragraph", content=[text_run(text)])]
+        return services.create_document(session, "prog-doc", "Prog", blocks)
+
+    def test_progress_total_set_to_chunk_count(self, session: Session, workspace: Path) -> None:
+        doc = self._make_doc(session)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "Hello world."}])
+        progress: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
+        polish_document(session, workspace, doc, runner=runner, progress=progress)
+        assert progress["total"] > 0
+        assert progress["done"] == progress["total"]
+        assert progress["failed"] == 0
+
+    def test_progress_failed_incremented_on_chunk_error(
+        self, session: Session, workspace: Path,
+    ) -> None:
+        doc = self._make_doc(session, "Some text.")
+        runner = AlwaysFailRunner()
+        progress: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
+        polish_document(session, workspace, doc, runner=runner, progress=progress)
+        assert progress["total"] > 0
+        assert progress["failed"] > 0
+        assert progress["done"] == progress["total"]
+
+    def test_progress_none_does_not_raise(self, session: Session, workspace: Path) -> None:
+        doc = self._make_doc(session)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "Hello world."}])
+        # No progress dict — must work exactly as before
+        report = polish_document(session, workspace, doc, runner=runner, progress=None)
+        assert report["blocks_polished"] == 0
+
+
+# ------------------------------------------------------------------ diff in flagged blocks
+
+class TestFlaggedBlockDiff:
+    def test_flagged_block_carries_diff(self, session: Session, workspace: Path) -> None:
+        blocks = [make_block("paragraph", content=[text_run("sailers went home.")])]
+        doc = services.create_document(session, "diff-doc", "Diff", blocks)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "sailors went home."}])
+        report = polish_document(session, workspace, doc, runner=runner)
+        assert len(report["flagged"]) == 1
+        f = report["flagged"][0]
+        assert "diff" in f
+        segs = f["diff"]
+        assert isinstance(segs, list)
+        assert len(segs) > 0
+        # Round-trip: a-concat == original, b-concat == polished
+        assert "".join(s["a"] for s in segs) == f["original"]
+        assert "".join(s["b"] for s in segs) == f["polished"]
+        # The replace segment is present
+        assert any(s["op"] == "replace" for s in segs)
+
+    def test_auto_applied_blocks_have_no_diff(self, session: Session, workspace: Path) -> None:
+        # Typography-only change is auto-applied, not in flagged, so no diff expected there
+        blocks = [make_block("paragraph", content=[text_run('She said "hello".')])]
+        doc = services.create_document(session, "nodiff-doc", "NoDiff", blocks)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "She said “hello”."}])
+        report = polish_document(session, workspace, doc, runner=runner)
+        assert report["blocks_polished"] == 1
+        assert report["flagged"] == []

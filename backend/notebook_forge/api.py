@@ -68,6 +68,11 @@ _site_dir = _state()["workspace"] / "exports" / "site"
 _site_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/site", StaticFiles(directory=_site_dir, html=True), name="site")
 
+# In-process progress registry for in-flight polish runs, keyed by doc slug.
+# Written by the /polish worker via its progress dict, read by /polish/progress.
+# GIL-safe dict mutations; not persisted — purely for the live chunk counter.
+_polish_progress: dict[str, dict] = {}
+
 
 class SaveBlocksBody(BaseModel):
     blocks: list[dict[str, Any]]
@@ -342,11 +347,27 @@ def polish(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]
     from .polish.service import polish_document
 
     doc = _get_doc(session, slug)
+    prog: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
+    _polish_progress[slug] = prog
     try:
-        detail = polish_document(session, _state()["workspace"], doc)
+        detail = polish_document(session, _state()["workspace"], doc, progress=prog)
     except RuntimeError as exc:  # no key configured
         raise HTTPException(409, str(exc)) from exc
+    finally:
+        prog["running"] = False
     return {"ok": True, **detail, "targets": _target_states(session, doc)}
+
+
+@app.get("/api/documents/{slug}/polish/progress")
+def polish_progress(slug: str) -> dict[str, Any]:
+    """Live progress for an in-flight polish run. The frontend polls this
+    while the synchronous POST is pending so the operator sees chunk movement.
+    Returns the zero shape for unknown slugs — the poll can race the POST.
+    """
+    p = _polish_progress.get(slug)
+    if not p:
+        return {"running": False, "done": 0, "total": 0, "failed": 0}
+    return dict(p)
 
 
 @app.post("/api/documents/{slug}/publish/{target_name}")
