@@ -185,3 +185,46 @@ mirroring the generated ToC, hide-to-rail toggle).
 
 Open items: add the six remaining Drive Docs as NotebookLM sources
 (manual); themes, first-run wizard, repo scan/sync remain unbuilt.
+
+---
+
+# Sprint 3 addendum — 12 June 2026 (autonomous)
+
+Plan: `docs/PLAN_groups_and_homepage.md` (M1–M7). Branch: `claude/confident-pascal-d21528`.
+
+## What shipped
+
+1. **M1 — Group model** (`Group`, `DocumentGroup` join table, idempotent migration). `assign_document`, `remove_document`, `set_positions`, `get_groups` service helpers. 15 backend tests.
+
+2. **M2 — Group API** (`GET/POST /api/groups`, `PUT /api/groups/{id}`, `DELETE /api/groups/{id}`, `POST /api/groups/{id}/assign`, `POST /api/groups/{id}/remove`, `POST /api/groups/{id}/positions`). Cascade-delete on group remove; 404/409 guards. 18 backend tests.
+
+3. **M3 — Group fingerprint & dirty** (`group_listing_fingerprint` hashes member title/years/standfirst/description/word_count in sort order; `effective_content_hash` for homepage folds the fingerprint into the hash; homepage goes dirty when any member's metadata changes). 14 backend tests.
+
+4. **M4 — Collection integration** — homepage rendered by `root_files()` using the canonical group fingerprint path; `body_entries` guard (`{% if body_entries is not none %}`) preserves old-path correctness. Template guard D21. `make check` green.
+
+5. **M5 — `ensure_homepage` migration** — idempotent, called at API bootstrap. Reads Settings seed, creates "The Memoirs" group from all memoir documents, builds BlockNote block tree (heading, standfirst, dedication, forgeDocGroup blocks), inserts homepage Document. Byte-equivalence check seeds PUBLISHED if fingerprint matches the already-published HTML. 6 migration tests + smoke step 8.
+
+6. **M6 — Frontend** — `forgeDedication` and `forgeDocGroup` custom blocks registered in `forgeSchema`; `ForgeDocGroupView` (group chooser, sort/display config, live member preview, "+N more", missing/empty states, manual-order footer); Editor homepage mode (suppress MetaBar/outline/delete panel, show group slash menu, focus-refetch); Settings stripped of homepage fields. 9 `ForgeDocGroupView` tests; schema smoke extended.
+
+7. **M7 — Hardening** — 28 backend edge-case tests (409 guard, concurrent save+reorder, rollback dirty reset, publish guard, integration smoke); smoke.sh step 8; README Groups & Homepage section; SPRINT_REPORT addendum (this entry).
+
+## Gate results
+
+| Gate | Tests | Status |
+|---|---|---|
+| M1 | 15 backend | ✅ |
+| M2 | 18 backend | ✅ |
+| M3 | 14 backend | ✅ |
+| M4 | `make check` | ✅ |
+| M5 | 6 migration + smoke | ✅ |
+| M6 | 9 frontend + schema smoke | ✅ |
+| M7 | 200 backend / 49 frontend | ✅ |
+
+## Operator notes
+
+- **First boot**: `ensure_homepage` runs automatically on `make dev` / any API start. It creates one group ("The Memoirs") from all documents whose slug is not `homepage`, then inserts the homepage document. Idempotent thereafter.
+- **Group management**: assign/remove documents via the Library (not yet wired in UI — use the API directly: `POST /api/groups/{id}/assign` with `{"slug": "..."}`). Group colour and sort order are editable via `PUT /api/groups/{id}`.
+- **Homepage editing**: open the Homepage document in the Editor. It is a first-class BlockNote document; push it like any other document to regenerate the collection index on all targets.
+- **forgeDocGroup block**: insert via the slash menu (`/document group`) inside the homepage editor. The block's live preview updates on window focus (refetch from API).
+- **Dirty state**: the homepage goes dirty whenever any member document's title, year-display, standfirst, description, or word-count changes. Changing only a member's body text does *not* mark the homepage dirty (by design — word count is stored separately and only updates on publish or explicit recalculation).
+- **sort='manual' vs date_range**: the group fingerprint is computed in the configured sort order. Reordering positions only marks the homepage dirty when `sort='manual'`; with `sort='date_range'` the order is derived from the slug so position changes are ignored.

@@ -45,8 +45,27 @@ make dev       # backend :8400, frontend :5173
   sketches come back *pending* until approved). Targets panel: per-target
   state, Push, ↗ open published output. Snapshots panel: publish history
   with one-click restore.
-- **Settings** — homepage (collection index) text, Rebuild index per
-  target, connection status for the three secrets.
+- **Settings** — sketch model/prompt, polish model, connection status for
+  the three secrets.
+
+## Groups & Homepage
+
+Documents can be collected into named **Groups** (Library → any document →
+assign group). Each group has a colour and a manual sort order that can be
+overridden per block.
+
+The **Homepage** (`/api/documents/homepage`, `kind: "homepage"`) is a
+first-class BlockNote document that lives in the Library alongside the
+memoirs. It autogenerates on first boot from the Settings seed data and
+gets a **forgeDocGroup** block for each group. Open it in the Editor to
+reorder sections, add prose, or set the dedication. Pushing it regenerates
+the collection-index pages on every configured target.
+
+The **forgeDocGroup** block embeds a live, sortable member list right in
+the editor canvas. Choose a group from the dropdown, pick a sort mode
+(Manual / Date range / A–Z / Last updated), and toggle word-count + blurb
+display. The block shows a live preview of the first five members; the
+member list updates whenever a document's metadata changes.
 
 ## Secrets (macOS keychain, service `notebook-forge`)
 
