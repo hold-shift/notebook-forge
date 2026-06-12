@@ -111,6 +111,40 @@ function MetaBar({
       <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
         {state === 'saving' ? 'Saving…' : needsConfirm ? 'Confirm details' : 'Save details'}
       </button>
+      {Boolean(meta.source_asset_id) && (
+        <button
+          type="button"
+          disabled={state === 'saving'}
+          title="Re-run extraction from the archived source file"
+          onClick={() => {
+            if (
+              !confirm(
+                'Re-ingest from the source file?\n\nThe document TEXT is rebuilt from the ' +
+                  'archived PDF/DOCX (prose edits are replaced). Figure work — sketches, ' +
+                  'approvals, caption edits — carries over. A snapshot is taken first, so ' +
+                  'Restore undoes this.',
+              )
+            )
+              return
+            setState('saving')
+            api.reingest(doc.slug).then(
+              (r) => {
+                alert(
+                  `Re-ingested: ${r.detail.blocks} blocks, ${r.detail.figures} figures ` +
+                    `(${r.detail.figures_matched} kept their sketches/edits, ${r.detail.figures_new} new).`,
+                )
+                window.location.reload()
+              },
+              (e) => {
+                setState('error')
+                alert(`Re-ingest failed: ${e}`)
+              },
+            )
+          }}
+        >
+          ⟳ Re-ingest from source
+        </button>
+      )}
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.

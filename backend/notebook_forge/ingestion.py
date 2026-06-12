@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from . import services
 from .assets import ingest_file
-from .blocks import make_block, text_run
+from .blocks import FORGE_IMAGE, make_block, text_run
 from .ingest_vendor import detect_year_range, extract_docx, extract_pdf, normalise
 from .ingest_vendor.footnotes import MARKER_RE, referenced_numbers
 
@@ -126,15 +126,10 @@ def draft_to_blocks(
     return blocks
 
 
-def ingest_document(
-    session: Session,
-    workspace: Path,
-    file_path: Path,
-    original_filename: str | None = None,
-) -> dict[str, Any]:
-    """Extract, adapt and create the document. Returns slug + detection
-    info for the operator to confirm."""
-    name = original_filename or file_path.name
+def _extract_blocks(
+    session: Session, workspace: Path, file_path: Path, name: str
+) -> tuple[Any, list[dict[str, Any]], str, str]:
+    """Shared extraction: source file → (draft, blocks, date_stem, display)."""
     suffix = Path(name).suffix.lower()
     with tempfile.TemporaryDirectory() as tmp:
         media = Path(tmp) / "media"
@@ -148,16 +143,81 @@ def ingest_document(
         draft.source_file = name
         draft = normalise(draft)
         date_stem, date_display = detect_year_range(draft)
-
-        title = (draft.detected_title or Path(name).stem).strip()
-        slug_base = f"{date_stem}_{slugify(title)}" if date_stem else slugify(title)
-        slug = slug_base
-        i = 2
-        while services.get_document(session, slug) is not None:
-            slug = f"{slug_base}-{i}"
-            i += 1
-
         blocks = draft_to_blocks(draft, session, workspace, media)
+    return draft, blocks, date_stem, date_display
+
+
+def reingest_document(session: Session, workspace: Path, doc) -> dict[str, Any]:  # noqa: ANN001
+    """Re-run extraction from the archived source file, REPLACING the text
+    while carrying over all human figure work: matched by content-addressed
+    original (same photo bytes → same assetId), each figure keeps its
+    sketch, approval state and caption edits. A safety snapshot is taken
+    first, so Restore undoes the whole thing."""
+    from .assets import asset_path
+    from .models import Asset
+
+    source_id = doc.meta.get("source_asset_id", "")
+    source = session.get(Asset, source_id) if source_id else None
+    if source is None:
+        raise LookupError(f"'{doc.slug}' has no archived source file to re-ingest from")
+    source_path = asset_path(workspace, source)
+    if not source_path.exists():
+        raise LookupError("archived source file is missing from the workspace")
+    name = source.filename or f"source{source.ext}"
+
+    old_props_by_asset: dict[str, dict[str, Any]] = {}
+    for block in doc.blocks:
+        if block.get("type") == FORGE_IMAGE:
+            asset_id = block.get("props", {}).get("assetId", "")
+            if asset_id:
+                old_props_by_asset.setdefault(asset_id, dict(block["props"]))
+
+    _, blocks, _, _ = _extract_blocks(session, workspace, source_path, name)
+
+    matched = 0
+    for block in blocks:
+        if block.get("type") != FORGE_IMAGE:
+            continue
+        asset_id = block.get("props", {}).get("assetId", "")
+        if asset_id in old_props_by_asset:
+            block["props"] = dict(old_props_by_asset[asset_id])
+            matched += 1
+
+    services.snapshot_document(session, doc, note="before re-ingest from source")
+    services.save_blocks(
+        session, doc, blocks,
+        summary=f"re-ingested from {name} (figure work carried over)",
+    )
+    figures = sum(1 for b in blocks if b.get("type") == FORGE_IMAGE)
+    return {
+        "slug": doc.slug,
+        "blocks": len(blocks),
+        "figures": figures,
+        "figures_matched": matched,
+        "figures_new": figures - matched,
+    }
+
+
+def ingest_document(
+    session: Session,
+    workspace: Path,
+    file_path: Path,
+    original_filename: str | None = None,
+) -> dict[str, Any]:
+    """Extract, adapt and create the document. Returns slug + detection
+    info for the operator to confirm."""
+    name = original_filename or file_path.name
+    draft, blocks, date_stem, date_display = _extract_blocks(
+        session, workspace, file_path, name
+    )
+
+    title = (draft.detected_title or Path(name).stem).strip()
+    slug_base = f"{date_stem}_{slugify(title)}" if date_stem else slugify(title)
+    slug = slug_base
+    i = 2
+    while services.get_document(session, slug) is not None:
+        slug = f"{slug_base}-{i}"
+        i += 1
 
     source_asset = ingest_file(session, workspace, file_path, "sources")
     source_asset.filename = name

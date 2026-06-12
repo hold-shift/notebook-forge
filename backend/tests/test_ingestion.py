@@ -79,3 +79,52 @@ def test_unsupported_type_refuses(workspace: Path, session: Session, tmp_path: P
     bad.write_text("hello")
     with pytest.raises(ValueError, match="unsupported source type"):
         ingest_document(session, workspace, bad)
+
+
+@needs_samples
+def test_reingest_carries_figure_work_over(workspace: Path, session: Session) -> None:
+    from notebook_forge.ingestion import reingest_document
+    from notebook_forge.models import Snapshot
+
+    detail = ingest_document(session, workspace, SAMPLES / "Test_Word_Document.docx")
+    session.commit()
+    doc = services.get_document(session, detail["slug"])
+
+    # simulate operator figure work: sketch attached, approved, caption edit
+    blocks = [dict(b) for b in doc.blocks]
+    fig = next(b for b in blocks if b["type"] == FORGE_IMAGE)
+    fig["props"] = {
+        **fig["props"],
+        "sketchAssetId": "f" * 64,
+        "approval": "approved",
+        "caption": "An edited caption.",
+    }
+    services.save_blocks(session, doc, blocks, summary="figure work")
+    asset_id = fig["props"]["assetId"]
+    session.commit()
+
+    result = reingest_document(session, workspace, doc)
+    session.commit()
+
+    assert result["figures_matched"] >= 1
+    refreshed = next(
+        b for b in doc.blocks
+        if b["type"] == FORGE_IMAGE and b["props"]["assetId"] == asset_id
+    )
+    assert refreshed["props"]["sketchAssetId"] == "f" * 64
+    assert refreshed["props"]["approval"] == "approved"
+    assert refreshed["props"]["caption"] == "An edited caption."
+    # a safety snapshot exists
+    notes = [s.note for s in session.query(Snapshot).filter_by(document_id=doc.id)]
+    assert "before re-ingest from source" in notes
+    # meta untouched (title/date confirmation state preserved)
+    assert doc.meta["source_file"] == "Test_Word_Document.docx"
+
+
+def test_reingest_without_source_refuses(workspace: Path, session: Session) -> None:
+    from notebook_forge.ingestion import reingest_document
+
+    doc = services.create_document(session, "no-source", "No Source", [])
+    session.commit()
+    with pytest.raises(LookupError, match="no archived source"):
+        reingest_document(session, workspace, doc)

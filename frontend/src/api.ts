@@ -71,6 +71,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blocks, meta, summary }),
     }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  reingest: (slug: string) =>
+    fetch(`/api/documents/${slug}/reingest`, { method: 'POST' }).then((r) =>
+      json<{
+        ok: boolean
+        detail: { blocks: number; figures: number; figures_matched: number; figures_new: number }
+      }>(r),
+    ),
   search: (q: string) =>
     fetch(`/api/search?q=${encodeURIComponent(q)}`).then((r) =>
       json<{ slug: string; title: string; snip: string }[]>(r),

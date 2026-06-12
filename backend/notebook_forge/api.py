@@ -234,6 +234,23 @@ def ingest(
     return {"ok": True, **detail}
 
 
+@app.post("/api/documents/{slug}/reingest")
+def reingest(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Re-run extraction from the archived source file. Text is replaced;
+    figure work (sketches, approvals, caption edits) carries over by
+    content-addressed match. A snapshot is taken first."""
+    from .ingestion import reingest_document
+
+    doc = _get_doc(session, slug)
+    try:
+        detail = reingest_document(session, _state()["workspace"], doc)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
+
+
 class GenerateSketchBody(BaseModel):
     prompt: str | None = None
     force: bool = False  # regenerate: bypass the cache for a fresh variation
