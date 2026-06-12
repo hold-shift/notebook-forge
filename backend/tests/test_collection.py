@@ -112,8 +112,9 @@ def test_root_files_regenerate_on_publish(
 
 def test_root_files_shape(tmp_path: Path, workspace: Path, session: Session) -> None:
     _import_two(tmp_path, workspace, session)
-    files = root_files(session, base_url="https://example.org/archive")
+    files, warnings = root_files(session, base_url="https://example.org/archive")
     assert set(files) == {"index.html", "catalogue.json", "sitemap.xml", "robots.txt", "llms.txt"}
+    assert warnings == []
     assert '"rebuilt"' in files["catalogue.json"]
     assert "https://example.org/archive/sitemap.xml" in files["robots.txt"]
     assert 'application/ld+json' in files["index.html"]

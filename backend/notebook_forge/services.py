@@ -78,12 +78,21 @@ def reindex(session: Session, doc: Document) -> None:
     fts_replace(session, doc.id, doc.slug, doc.title, plain_text(doc.blocks))
 
 
+def effective_content_hash(session: Session, doc: Document) -> str:
+    if doc.kind != "homepage":
+        return content_hash(doc.blocks, doc.meta)
+    from .homepage import group_listing_fingerprint
+    meta = dict(doc.meta)
+    meta["__group_listing__"] = group_listing_fingerprint(session, doc.blocks)
+    return content_hash(doc.blocks, meta)
+
+
 def snapshot_document(session: Session, doc: Document, note: str = "") -> Snapshot:
     snap = Snapshot(
         document_id=doc.id,
         blocks=doc.blocks,
         meta=doc.meta,
-        content_hash=content_hash(doc.blocks, doc.meta),
+        content_hash=effective_content_hash(session, doc),
         note=note,
     )
     session.add(snap)
@@ -115,7 +124,7 @@ def is_dirty(session: Session, doc: Document, target: Target) -> bool:
     snap = session.get(Snapshot, state.snapshot_id)
     if snap is None:
         return True
-    return content_hash(doc.blocks, doc.meta) != snap.content_hash
+    return effective_content_hash(session, doc) != snap.content_hash
 
 
 def mark_published(

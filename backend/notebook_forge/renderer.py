@@ -341,8 +341,9 @@ def render_index(
     canonical_url: str = "",
     og_description: str = "",
     jsonld_script: str = "",
+    body_entries: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Collection index page from document metadata (no editing UI tonight)."""
+    """Collection index page from document metadata."""
     tpl = _env().get_template("index.html.j2")
     return tpl.render(
         title=title,
@@ -353,4 +354,5 @@ def render_index(
         canonical_url=canonical_url,
         og_description=og_description,
         jsonld_script=jsonld_script,
+        body_entries=body_entries,
     )

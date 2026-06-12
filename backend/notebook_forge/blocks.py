@@ -20,6 +20,9 @@ from typing import Any
 
 FORGE_IMAGE = "forgeImage"
 FORGE_FOOTNOTE = "forgeFootnote"
+FORGE_DOC_GROUP = "forgeDocGroup"
+FORGE_DEDICATION = "forgeDedication"
+HOMEPAGE_SLUG = "homepage"
 
 
 def new_id() -> str:

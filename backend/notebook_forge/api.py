@@ -122,6 +122,8 @@ class PositionsBody(BaseModel):
 def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN001
     out = []
     for target in session.scalars(select(Target)):
+        if doc.kind == "homepage" and target.kind == "drive":
+            continue
         state = session.scalar(
             select(SyncState).where(
                 SyncState.document_id == doc.id, SyncState.target_id == target.id
@@ -266,6 +268,7 @@ def get_document(slug: str, session: Session = Depends(get_session)) -> dict[str
     return {
         "slug": doc.slug,
         "title": doc.title,
+        "kind": doc.kind,
         "blocks": doc.blocks,
         "meta": doc.meta,
         "targets": _target_states(session, doc),
@@ -353,6 +356,8 @@ def rename_document(
         raise HTTPException(409, f"slug '{new_slug}' is already in use")
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage slug is fixed")
     old_slug = doc.slug
     doc.slug = new_slug
 
@@ -392,6 +397,8 @@ def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[
     from sqlalchemy import text as sql_text
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage cannot be deleted")
     session.execute(sql_text("DELETE FROM doc_fts WHERE rowid = :rid").bindparams(rid=doc.id))
     session.delete(doc)
     return {"ok": True, "deleted": slug}
@@ -521,6 +528,8 @@ def polish(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]
     from .polish.service import polish_document
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "polish does not run on the homepage")
     prog: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
     _polish_progress[slug] = prog
     try:
@@ -568,6 +577,8 @@ def unpublish(
     from .publish.service import unpublish_document
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "unpublishing the site index is not supported")
     target = session.scalar(select(Target).where(Target.name == target_name))
     if target is None:
         raise HTTPException(404, f"no target '{target_name}'")
@@ -586,23 +597,14 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
     ]
 
 
-class HomepageBody(BaseModel):
-    title: str
-    welcome: str
-    dedication: str = ""
-
-
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .models import Setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
     from .secrets_store import get_secret
     from .sketch_service import sketch_settings
 
-    homepage = session.get(Setting, "homepage")
     return {
-        "homepage": homepage.value if homepage else {},
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
         "secrets": {
@@ -615,20 +617,6 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
             for t in session.scalars(select(Target))
         ],
     }
-
-
-@app.put("/api/settings/homepage")
-def save_homepage(body: HomepageBody, session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .models import Setting
-
-    setting = session.get(Setting, "homepage")
-    value = dict(setting.value) if setting else {}
-    value.update({"title": body.title, "welcome": body.welcome, "dedication": body.dedication})
-    if setting is None:
-        session.add(Setting(key="homepage", value=value))
-    else:
-        setting.value = value
-    return {"ok": True, "homepage": value}
 
 
 class SketchSettingsBody(BaseModel):
@@ -676,24 +664,6 @@ def save_polish_settings(
     else:
         setting.value = value
     return {"ok": True, "polish": value}
-
-
-@app.post("/api/rebuild-index/{target_name}")
-def rebuild_index_endpoint(
-    target_name: str, session: Session = Depends(get_session)
-) -> dict[str, Any]:
-    from .publish.service import rebuild_index
-
-    target = session.scalar(select(Target).where(Target.name == target_name))
-    if target is None:
-        raise HTTPException(404, f"no target '{target_name}'")
-    try:
-        detail = rebuild_index(session, _state()["workspace"], target)
-    except PermissionError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-    return {"ok": True, "detail": detail}
 
 
 @app.get("/api/search")
