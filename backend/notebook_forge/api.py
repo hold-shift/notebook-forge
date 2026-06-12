@@ -12,20 +12,37 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import services
 from .assets import asset_path
 from .config import bootstrap_workspace, workspace_path
 from .db import fts_search, make_engine, make_session_factory
-from .models import Asset, Change, Snapshot, SyncState, Target
+from .groups import (
+    assign_document,
+    catalogue_descriptions,
+    create_group,
+    delete_group,
+    group_member_dict,
+    list_groups,
+    reorder_groups,
+    set_positions,
+    update_group,
+)
+from .models import Asset, Change, Group, Snapshot, SyncState, Target
 
 
 @lru_cache(maxsize=1)
 def _state() -> dict[str, Any]:
     ws = bootstrap_workspace(workspace_path())
     engine = make_engine(ws)
-    return {"workspace": ws, "engine": engine, "factory": make_session_factory(engine)}
+    factory = make_session_factory(engine)
+    with factory() as session:
+        from .homepage_migration import ensure_homepage
+        ensure_homepage(session)
+        session.commit()
+    return {"workspace": ws, "engine": engine, "factory": factory}
 
 
 def _drive_doc_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
@@ -47,7 +64,8 @@ def _target_url(session: Session, doc, target: Target) -> str | None:  # noqa: A
     if target.kind == "github-pages":
         return doc.meta.get("canonical_url") or None
     if target.kind == "local-folder":
-        return f"/site/{doc.slug}.html"  # served by the /site mount below
+        filename = "index.html" if doc.kind == "homepage" else f"{doc.slug}.html"
+        return f"/site/{filename}"  # served by the /site mount below
     if target.kind == "drive":
         return _drive_doc_url(session, doc, target)
     return None
@@ -84,9 +102,34 @@ class RollbackBody(BaseModel):
     snapshot_id: int
 
 
+class GroupBody(BaseModel):
+    name: str
+    color: str = "#9c5a3c"
+
+
+class GroupPatchBody(BaseModel):
+    name: str | None = None
+    color: str | None = None
+
+
+class GroupOrderBody(BaseModel):
+    ids: list[int]
+
+
+class DocGroupBody(BaseModel):
+    group_id: int | None
+
+
+class PositionsBody(BaseModel):
+    group_id: int | None
+    slugs: list[str]
+
+
 def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN001
     out = []
     for target in session.scalars(select(Target)):
+        if doc.kind == "homepage" and target.kind == "drive":
+            continue
         state = session.scalar(
             select(SyncState).where(
                 SyncState.document_id == doc.id, SyncState.target_id == target.id
@@ -110,9 +153,85 @@ def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN0
     return out
 
 
+@app.get("/api/groups")
+def list_groups_route(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    descs = catalogue_descriptions(session)
+    return [group_member_dict(session, g, descs) for g in list_groups(session)]
+
+
+@app.post("/api/groups")
+def create_group_route(
+    body: GroupBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        group = create_group(session, body.name, body.color)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(409, f"group name '{body.name}' already in use") from None
+    return {
+        "id": group.id, "name": group.name,
+        "color": group.color, "sort_order": group.sort_order,
+    }
+
+
+@app.put("/api/groups/order")
+def reorder_groups_route(
+    body: GroupOrderBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        reorder_groups(session, body.ids)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True}
+
+
+@app.put("/api/groups/{group_id}")
+def update_group_route(
+    group_id: int, body: GroupPatchBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    group = session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, f"no group {group_id}")
+    try:
+        group = update_group(session, group, name=body.name, color=body.color)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(409, "group name already in use") from None
+    return {
+        "id": group.id, "name": group.name,
+        "color": group.color, "sort_order": group.sort_order,
+    }
+
+
+@app.delete("/api/groups/{group_id}")
+def delete_group_route(
+    group_id: int, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    group = session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, f"no group {group_id}")
+    moved = delete_group(session, group)
+    return {"ok": True, "moved": moved}
+
+
+@app.put("/api/documents/positions")
+def set_positions_route(
+    body: PositionsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        set_positions(session, body.group_id, body.slugs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True}
+
+
 @app.get("/api/documents")
 def list_documents(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
-    docs = services.list_documents(session)
+    docs = [d for d in services.list_documents(session) if d.kind == "memoir"]
     out = []
     for d in docs:
         figs = [b for b in d.blocks if b.get("type") == "forgeImage"]
@@ -133,6 +252,9 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict[str, An
                 "pending_review": sum(
                     1 for b in figs if b.get("props", {}).get("approval") == "pending"
                 ),
+                "group_id": d.group_id,
+                "group_position": d.group_position,
+                "date_confirmed": d.meta.get("date_confirmed", True) is not False,
                 "targets": _target_states(session, d),
             }
         )
@@ -152,6 +274,7 @@ def get_document(slug: str, session: Session = Depends(get_session)) -> dict[str
     return {
         "slug": doc.slug,
         "title": doc.title,
+        "kind": doc.kind,
         "blocks": doc.blocks,
         "meta": doc.meta,
         "targets": _target_states(session, doc),
@@ -239,6 +362,8 @@ def rename_document(
         raise HTTPException(409, f"slug '{new_slug}' is already in use")
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage slug is fixed")
     old_slug = doc.slug
     doc.slug = new_slug
 
@@ -255,6 +380,22 @@ def rename_document(
     return {"ok": True, "slug": new_slug}
 
 
+@app.put("/api/documents/{slug}/group")
+def set_document_group(
+    slug: str, body: DocGroupBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage cannot be grouped")
+    group = None
+    if body.group_id is not None:
+        group = session.get(Group, body.group_id)
+        if group is None:
+            raise HTTPException(404, f"no group {body.group_id}")
+    assign_document(session, doc, group)
+    return {"ok": True, "group_id": doc.group_id, "group_position": doc.group_position}
+
+
 @app.delete("/api/documents/{slug}")
 def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     """Remove a document and its snapshots/sync/changes (cascade). Assets
@@ -262,6 +403,8 @@ def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[
     from sqlalchemy import text as sql_text
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage cannot be deleted")
     session.execute(sql_text("DELETE FROM doc_fts WHERE rowid = :rid").bindparams(rid=doc.id))
     session.delete(doc)
     return {"ok": True, "deleted": slug}
@@ -391,6 +534,8 @@ def polish(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]
     from .polish.service import polish_document
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "polish does not run on the homepage")
     prog: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
     _polish_progress[slug] = prog
     try:
@@ -438,6 +583,8 @@ def unpublish(
     from .publish.service import unpublish_document
 
     doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "unpublishing the site index is not supported")
     target = session.scalar(select(Target).where(Target.name == target_name))
     if target is None:
         raise HTTPException(404, f"no target '{target_name}'")
@@ -456,23 +603,14 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
     ]
 
 
-class HomepageBody(BaseModel):
-    title: str
-    welcome: str
-    dedication: str = ""
-
-
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .models import Setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
     from .secrets_store import get_secret
     from .sketch_service import sketch_settings
 
-    homepage = session.get(Setting, "homepage")
     return {
-        "homepage": homepage.value if homepage else {},
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
         "secrets": {
@@ -485,20 +623,6 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
             for t in session.scalars(select(Target))
         ],
     }
-
-
-@app.put("/api/settings/homepage")
-def save_homepage(body: HomepageBody, session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .models import Setting
-
-    setting = session.get(Setting, "homepage")
-    value = dict(setting.value) if setting else {}
-    value.update({"title": body.title, "welcome": body.welcome, "dedication": body.dedication})
-    if setting is None:
-        session.add(Setting(key="homepage", value=value))
-    else:
-        setting.value = value
-    return {"ok": True, "homepage": value}
 
 
 class SketchSettingsBody(BaseModel):
@@ -546,24 +670,6 @@ def save_polish_settings(
     else:
         setting.value = value
     return {"ok": True, "polish": value}
-
-
-@app.post("/api/rebuild-index/{target_name}")
-def rebuild_index_endpoint(
-    target_name: str, session: Session = Depends(get_session)
-) -> dict[str, Any]:
-    from .publish.service import rebuild_index
-
-    target = session.scalar(select(Target).where(Target.name == target_name))
-    if target is None:
-        raise HTTPException(404, f"no target '{target_name}'")
-    try:
-        detail = rebuild_index(session, _state()["workspace"], target)
-    except PermissionError as exc:
-        raise HTTPException(409, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-    return {"ok": True, "detail": detail}
 
 
 @app.get("/api/search")

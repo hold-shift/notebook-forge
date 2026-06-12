@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
-import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react'
+import { SuggestionMenuController, useCreateBlockNote } from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
-import { forgeSchema } from '../forge/schema'
+import { forgeSchema, docGroupSlashItem, dedicationSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -79,6 +79,7 @@ function PendingPanel({
   onUnpublish,
   pushing,
   unpublishing,
+  hideUnpublish,
 }: {
   slug: string
   targets: TargetState[]
@@ -86,6 +87,7 @@ function PendingPanel({
   onUnpublish: (target: string) => void
   pushing: string | null
   unpublishing: string | null
+  hideUnpublish?: boolean
 }) {
   const [changes, setChanges] = useState<ChangeRow[]>([])
   const [showHistory, setShowHistory] = useState(false)
@@ -164,7 +166,7 @@ function PendingPanel({
               >
                 {pushing === t.target ? 'Pushing…' : 'Push'}
               </button>
-              {t.status === 'PUBLISHED' && (
+              {t.status === 'PUBLISHED' && !hideUnpublish && (
                 <button
                   type="button"
                   className="btn-danger-sm"
@@ -446,6 +448,7 @@ function SnapshotsPanel({ slug }: { slug: string }) {
 }
 
 function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
+  const isHomepage = doc.kind === 'homepage'
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pushing, setPushing] = useState<string | null>(null)
@@ -497,6 +500,20 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     if (outlineTimer.current) clearTimeout(outlineTimer.current)
   }, [])
 
+  // Homepage: re-fetch targets on window focus so group changes elsewhere
+  // (Library reorder) mark the homepage dirty without a manual reload.
+  useEffect(() => {
+    if (!isHomepage) return
+    const onFocus = () => {
+      api.getDocument(doc.slug).then(
+        (fresh) => setTargets(fresh.targets),
+        () => {},
+      )
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [isHomepage, doc.slug])
+
   const selectHeading = useCallback((id: string) => {
     const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${id}"]`)
     if (!el) return
@@ -540,6 +557,10 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         for (const name of names) {
           const resp = await api.publish(doc.slug, name)
           setTargets(resp.targets)
+          const warns = resp.detail?.warnings
+          if (warns && warns.length > 0) {
+            alert('Published with warnings:\n' + warns.join('\n'))
+          }
         }
       } catch (e) {
         alert(`Publish failed: ${e}`)
@@ -723,24 +744,28 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       )}
 
       <header className="editor-header">
-        <button
-          type="button"
-          className="nf-ibtn"
-          title={outlineOpen ? 'Hide outline' : 'Show outline'}
-          onClick={() => setOutlineOpen((o) => !o)}
-        >
-          <i
-            className={`ti ${outlineOpen ? 'ti-layout-sidebar-left-collapse' : 'ti-list-tree'}`}
-            aria-hidden
-          />
-        </button>
+        {!isHomepage && (
+          <button
+            type="button"
+            className="nf-ibtn"
+            title={outlineOpen ? 'Hide outline' : 'Show outline'}
+            onClick={() => setOutlineOpen((o) => !o)}
+          >
+            <i
+              className={`ti ${outlineOpen ? 'ti-layout-sidebar-left-collapse' : 'ti-list-tree'}`}
+              aria-hidden
+            />
+          </button>
+        )}
         <button type="button" className="crumb" onClick={onBack}>
           Library
         </button>
         <i className="ti ti-chevron-right crumb-sep" aria-hidden />
         <div className="editor-titles">
-          <h2>{doc.title}</h2>
-          <span className="muted">{String(doc.meta.year_display ?? '')}</span>
+          <h2>{isHomepage ? 'Homepage' : doc.title}</h2>
+          <span className="muted">
+            {isHomepage ? 'Site index — push to publish' : String(doc.meta.year_display ?? '')}
+          </span>
         </div>
         <span className={`save-state ${saveState}`}>
           {saveState === 'saving'
@@ -753,18 +778,20 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         </span>
       </header>
       <div className="editor-wrap">
-        <MetaBar
-          doc={doc}
-          onSaved={setTargets}
-          editorDoc={() => editor.document}
-          onPolish={onPolish}
-          polishing={polishing}
-          onApproveAll={onApproveAll}
-          onGenerateCaptions={onGenerateMissingCaptions}
-          generatingCaptions={generatingCaptions}
-        />
-        <div className="editor-body with-outline">
-          {outlineOpen ? (
+        {!isHomepage && (
+          <MetaBar
+            doc={doc}
+            onSaved={setTargets}
+            editorDoc={() => editor.document}
+            onPolish={onPolish}
+            polishing={polishing}
+            onApproveAll={onApproveAll}
+            onGenerateCaptions={onGenerateMissingCaptions}
+            generatingCaptions={generatingCaptions}
+          />
+        )}
+        <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
+          {!isHomepage && (outlineOpen ? (
             <OutlineNavigator nodes={outline} activeId={activeHeading} onSelect={selectHeading} />
           ) : (
             <div className="nf-rail">
@@ -777,39 +804,51 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 <i className="ti ti-list-tree" aria-hidden />
               </button>
             </div>
-          )}
+          ))}
           <div className="editor-canvas">
-            <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={false}>
-              <SuggestionMenuController
-                triggerCharacter="/"
-                getItems={async (query) => {
-                  const defaults = getDefaultReactSlashMenuItems(editor).filter(
-                    (i) => i.title !== 'Image',
-                  )
-                  const photoItem = {
-                    title: 'Photo / Figure',
-                    subtext: 'Insert a photo or illustration',
-                    aliases: ['im', 'image', 'photo', 'figure', 'fig'],
-                    group: 'Media',
-                    onItemClick: () => {
-                      editor.insertBlocks(
-                        [{ type: 'forgeImage', props: {} }],
-                        editor.getTextCursorPosition().block,
-                        'after',
-                      )
-                    },
+            <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={!isHomepage ? undefined : false}>
+              {isHomepage ? (
+                <SuggestionMenuController
+                  triggerCharacter="/"
+                  getItems={async (q) =>
+                    filterSuggestionItems(
+                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor)],
+                      q,
+                    )
                   }
-                  const all = [...defaults, photoItem]
-                  const q = query.toLowerCase()
-                  return q
-                    ? all.filter(
-                        (i) =>
-                          i.title.toLowerCase().includes(q) ||
-                          i.aliases?.some((a) => a.includes(q)),
-                      )
-                    : all
-                }}
-              />
+                />
+              ) : (
+                <SuggestionMenuController
+                  triggerCharacter="/"
+                  getItems={async (query) => {
+                    const defaults = getDefaultReactSlashMenuItems(editor).filter(
+                      (i) => i.title !== 'Image',
+                    )
+                    const photoItem = {
+                      title: 'Photo / Figure',
+                      subtext: 'Insert a photo or illustration',
+                      aliases: ['im', 'image', 'photo', 'figure', 'fig'],
+                      group: 'Media',
+                      onItemClick: () => {
+                        editor.insertBlocks(
+                          [{ type: 'forgeImage', props: {} }],
+                          editor.getTextCursorPosition().block,
+                          'after',
+                        )
+                      },
+                    }
+                    const all = [...defaults, photoItem]
+                    const q = query.toLowerCase()
+                    return q
+                      ? all.filter(
+                          (i) =>
+                            i.title.toLowerCase().includes(q) ||
+                            i.aliases?.some((a) => a.includes(q)),
+                        )
+                      : all
+                  }}
+                />
+              )}
             </BlockNoteView>
           </div>
           <button
@@ -847,13 +886,16 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
               onUnpublish={onUnpublish}
               pushing={pushing}
               unpublishing={unpublishing}
+              hideUnpublish={isHomepage}
             />
             <SnapshotsPanel slug={doc.slug} />
-            <div className="danger-panel">
-              <button type="button" className="btn-danger" onClick={onDelete}>
-                <i className="ti ti-trash" aria-hidden /> Delete document
-              </button>
-            </div>
+            {!isHomepage && (
+              <div className="danger-panel">
+                <button type="button" className="btn-danger" onClick={onDelete}>
+                  <i className="ti ti-trash" aria-hidden /> Delete document
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

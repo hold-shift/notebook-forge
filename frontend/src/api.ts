@@ -10,6 +10,24 @@ export interface TargetState {
   url: string | null
 }
 
+export interface GroupMember {
+  slug: string
+  title: string
+  year_display: string
+  standfirst: string
+  description: string
+  word_count: number
+  group_position: number
+}
+
+export interface GroupInfo {
+  id: number
+  name: string
+  color: string
+  sort_order: number
+  members: GroupMember[]
+}
+
 export interface DocSummary {
   slug: string
   title: string
@@ -20,12 +38,16 @@ export interface DocSummary {
   figures: number
   sketched: number
   pending_review: number
+  group_id: number | null
+  group_position: number
+  date_confirmed: boolean
   targets: TargetState[]
 }
 
 export interface DocDetail {
   slug: string
   title: string
+  kind: string
   blocks: unknown[]
   meta: Record<string, unknown>
   targets: TargetState[]
@@ -82,7 +104,7 @@ export const api = {
     fetch(`/api/documents/${slug}/changes`).then((r) => json<ChangeEntry[]>(r)),
   publish: (slug: string, target: string) =>
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean; targets: TargetState[] }>(r),
+      json<{ ok: boolean; targets: TargetState[]; detail?: { warnings?: string[] } }>(r),
     ),
   unpublish: (slug: string, target: string) =>
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'DELETE' }).then((r) =>
@@ -163,11 +185,9 @@ export const api = {
   settings: () =>
     fetch('/api/settings').then((r) =>
       json<{
-        homepage: { title?: string; welcome?: string; dedication?: string }
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
         secrets: Record<string, boolean>
-        targets: { name: string; kind: string }[]
       }>(r),
     ),
   saveSketchSettings: (sketch: { model: string; default_prompt: string; face_gate: string }) =>
@@ -176,16 +196,6 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sketch),
     }).then((r) => json<{ ok: boolean }>(r)),
-  saveHomepage: (homepage: { title: string; welcome: string; dedication: string }) =>
-    fetch('/api/settings/homepage', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(homepage),
-    }).then((r) => json<{ ok: boolean }>(r)),
-  rebuildIndex: (target: string) =>
-    fetch(`/api/rebuild-index/${target}`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean; detail: { commit: string | null } }>(r),
-    ),
   ingest: (file: File) => {
     const form = new FormData()
     form.append('file', file)
@@ -193,4 +203,39 @@ export const api = {
       json<{ ok: boolean; slug: string; title: string; detected_date: string; figures: number }>(r),
     )
   },
+  groups: () => fetch('/api/groups').then((r) => json<GroupInfo[]>(r)),
+  createGroup: (name: string, color: string) =>
+    fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color }),
+    }).then((r) => json<{ id: number; name: string; color: string; sort_order: number }>(r)),
+  updateGroup: (id: number, patch: { name?: string; color?: string }) =>
+    fetch(`/api/groups/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).then((r) => json<{ id: number; name: string; color: string; sort_order: number }>(r)),
+  reorderGroups: (ids: number[]) =>
+    fetch('/api/groups/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).then((r) => json<{ ok: boolean }>(r)),
+  deleteGroup: (id: number) =>
+    fetch(`/api/groups/${id}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean; moved: number }>(r),
+    ),
+  setDocumentGroup: (slug: string, groupId: number | null) =>
+    fetch(`/api/documents/${slug}/group`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId }),
+    }).then((r) => json<{ ok: boolean; group_id: number | null; group_position: number }>(r)),
+  setPositions: (groupId: number | null, slugs: string[]) =>
+    fetch('/api/documents/positions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, slugs }),
+    }).then((r) => json<{ ok: boolean }>(r)),
 }

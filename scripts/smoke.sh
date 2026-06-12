@@ -79,4 +79,10 @@ curl -fsS -o /tmp/smoke_asset "$BASE/api/assets/$SHA"
 [ -s /tmp/smoke_asset ] || fail "asset empty"
 echo "   ok: asset $SHA served ($(wc -c < /tmp/smoke_asset | tr -d ' ') bytes)"
 
+echo "8. homepage document"
+curl -fsS "$BASE/api/documents/homepage" | jqpy "
+assert d['kind'] == 'homepage', f'expected homepage kind, got {d.get(\"kind\")}'
+assert d['slug'] == 'homepage', d['slug']
+print('   ok: homepage doc kind =', d['kind'])"
+
 echo "SMOKE PASS"

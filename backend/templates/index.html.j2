@@ -82,6 +82,8 @@
     .doc .meta{flex-wrap:wrap;}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+  .docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.9rem;margin:0 0 1.1rem;}
+  .docgrid .doc{margin:0;padding:1.1rem 1.2rem .9rem;}
 </style>
 {{ jsonld_script|safe }}
 </head>
@@ -91,6 +93,35 @@
   <p class="overline">The Family Archive · Collected Memoirs</p>
   <h1 class="title">{{ title }}</h1>
 
+  {%- macro doc_card(e, compact) -%}
+  <a class="doc" href="{{ e.url }}">
+    {% if e.years %}<p class="era">{{ e.years }}</p>{% endif %}
+    <h2>{{ e.title }}</h2>
+    {% if e.subtitle %}<p class="sub">{{ e.subtitle }}</p>{% endif %}
+    {% if not compact and e.description %}<p class="desc">{{ e.description }}</p>{% endif %}
+    <div class="meta">
+      {%- if e.word_count %}<span>{{ "{:,}".format(e.word_count) }} words</span>{% endif -%}
+      {%- if e.word_count and e.reading_time %}<span class="dot">·</span>{% endif -%}
+      {%- if e.reading_time %}<span class="read">{{ e.reading_time }}</span>{% endif -%}
+      <span class="arrow">Read →</span>
+    </div>
+  </a>
+  {%- endmacro -%}
+
+  {% if body_entries is not none %}
+  {% for e in body_entries %}
+    {% if e.kind == 'intro' %}<p class="intro{% if e.lead is defined and e.lead %} lead{% endif %}">{{ e.html|safe }}</p>
+    {% elif e.kind == 'dedication' %}<p class="dedication">{{ e.text }}</p>
+    {% elif e.kind == 'hr' %}<hr class="div">
+    {% elif e.kind == 'seclabel' %}<p class="seclabel">{{ e.text }}</p>
+    {% elif e.kind == 'group' %}
+      <p class="seclabel">{{ e.label }}</p>
+      {% if e.layout == 'compact_grid' %}<div class="docgrid">{% endif %}
+      {% for card in e.entries %}{{ doc_card(card, e.layout == 'compact_grid') }}{% endfor %}
+      {% if e.layout == 'compact_grid' %}</div>{% endif %}
+    {% endif %}
+  {% endfor %}
+  {% else %}
   {% if welcome %}
   {% for para in welcome.split('\n\n') if para.strip() %}
   <p class="intro{% if loop.first %} lead{% endif %}">{{ para.strip() }}</p>
@@ -102,22 +133,8 @@
   <hr class="div">
   <p class="seclabel">The Memoirs</p>
 
-  {% for e in entries %}
-  <a class="doc" href="{{ e.url }}">
-    {% if e.years %}<p class="era">{{ e.years }}</p>{% endif %}
-    <h2>{{ e.title }}</h2>
-    {% if e.subtitle %}<p class="sub">{{ e.subtitle }}</p>{% endif %}
-    {% if e.description %}<p class="desc">{{ e.description }}</p>{% endif %}
-    {% if e.word_count or e.reading_time %}
-    <div class="meta">
-      {%- if e.word_count %}<span>{{ "{:,}".format(e.word_count) }} words</span>{% endif -%}
-      {%- if e.word_count and e.reading_time %}<span class="dot">·</span>{% endif -%}
-      {%- if e.reading_time %}<span class="read">{{ e.reading_time }}</span>{% endif -%}
-      <span class="arrow">Read →</span>
-    </div>
-    {% endif %}
-  </a>
-  {% endfor %}
+  {% for e in entries %}{{ doc_card(e, false) }}{% endfor %}
+  {% endif %}
 
   {% if footer_text %}
   <footer>

@@ -27,6 +27,8 @@ def make_engine(workspace: Path | None = None) -> Engine:
         cur.close()
 
     Base.metadata.create_all(engine)
+    from .migrate import run_migrations
+    run_migrations(engine, db_path(ws))
     with engine.begin() as conn:
         conn.execute(
             text("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(slug, title, body)")

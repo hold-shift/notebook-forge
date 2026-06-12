@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 
 export function Settings({ onBack }: { onBack: () => void }) {
-  const [title, setTitle] = useState('')
-  const [welcome, setWelcome] = useState('')
-  const [dedication, setDedication] = useState('')
   const [secrets, setSecrets] = useState<Record<string, boolean>>({})
-  const [targets, setTargets] = useState<{ name: string; kind: string }[]>([])
-  const [state, setState] = useState('')
-  const [rebuilding, setRebuilding] = useState('')
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [faceGate, setFaceGate] = useState('block')
@@ -19,11 +13,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     api.settings().then((s) => {
-      setTitle(s.homepage.title ?? '')
-      setWelcome(s.homepage.welcome ?? '')
-      setDedication(s.homepage.dedication ?? '')
       setSecrets(s.secrets)
-      setTargets(s.targets.filter((t) => t.kind !== 'drive'))
       setModel(s.sketch.model)
       setPrompt(s.sketch.default_prompt)
       setFaceGate(s.sketch.face_gate)
@@ -32,152 +22,136 @@ export function Settings({ onBack }: { onBack: () => void }) {
     })
   }, [])
 
-  const savePolish = () => {
-    setPolishState('saving')
-    api.savePolishSettings({ model: polishModel, extra_rules: polishRules }).then(
-      () => setPolishState('saved'),
-      (e) => setPolishState(`save failed: ${e}`),
-    )
-  }
-
   const saveSketch = () => {
     setSketchState('saving')
     api.saveSketchSettings({ model, default_prompt: prompt, face_gate: faceGate }).then(
-      () => setSketchState('saved'),
-      (e) => setSketchState(`save failed: ${e}`),
+      () => setSketchState('Saved'),
+      (e) => setSketchState(`Failed: ${e}`),
     )
   }
 
-  const save = () => {
-    setState('saving')
-    api.saveHomepage({ title, welcome, dedication }).then(
-      () => setState('saved — use Rebuild index to publish'),
-      (e) => setState(`save failed: ${e}`),
-    )
-  }
-
-  const rebuild = (target: string) => {
-    setRebuilding(target)
-    api.rebuildIndex(target).then(
-      (r) => {
-        setRebuilding('')
-        setState(
-          r.detail.commit
-            ? `index pushed to ${target} (${r.detail.commit.slice(0, 7)})`
-            : `index rebuilt for ${target}`,
-        )
-      },
-      (e) => {
-        setRebuilding('')
-        setState(`rebuild failed: ${e}`)
-      },
+  const savePolish = () => {
+    setPolishState('saving')
+    api.savePolishSettings({ model: polishModel, extra_rules: polishRules }).then(
+      () => setPolishState('Saved'),
+      (e) => setPolishState(`Failed: ${e}`),
     )
   }
 
   return (
-    <div className="settings">
-      <button type="button" onClick={onBack}>
+    <div className="settings-page">
+      <button type="button" className="settings-back" onClick={onBack}>
         ← Library
       </button>
-      <h1>Settings</h1>
 
-      <h3>Homepage (collection index)</h3>
-      <p className="muted">
-        The index page is generated from these fields plus the document catalogue. Saving here
-        does not publish — use Rebuild index below.
-      </p>
-      <label>
-        Site title
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label>
-        Welcome (blank line separates paragraphs)
-        <textarea rows={6} value={welcome} onChange={(e) => setWelcome(e.target.value)} />
-      </label>
-      <label>
-        Dedication (optional)
-        <input value={dedication} onChange={(e) => setDedication(e.target.value)} />
-      </label>
-      <div className="settings-actions">
-        <button type="button" onClick={save}>
-          Save homepage
-        </button>
-        {targets.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            disabled={rebuilding === t.name}
-            onClick={() => rebuild(t.name)}
-          >
-            {rebuilding === t.name ? 'Rebuilding…' : `Rebuild index → ${t.name}`}
-          </button>
-        ))}
-        <span className="muted">{state}</span>
-      </div>
+      <h1 className="settings-title">Settings</h1>
 
-      <h3>Sketch generation</h3>
-      <p className="muted">
-        Defaults are the production values that generated every published sketch. A figure-level
-        prompt override is available on each Regenerate button in the editor.
-      </p>
-      <label>
-        Gemini image model (production used <code>gemini-3-pro-image</code>; alternatives per the
-        PRD: <code>gemini-3.1-flash-image-preview</code>, <code>gemini-2.5-flash-image</code>)
-        <input value={model} onChange={(e) => setModel(e.target.value)} />
-      </label>
-      <label>
-        Default silhouette prompt
-        <textarea rows={10} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-      </label>
-      <label>
-        Face gate (block = refuse a sketch that still shows a face after retries; warn = allow
-        but flag)
-        <select value={faceGate} onChange={(e) => setFaceGate(e.target.value)}>
-          <option value="block">block</option>
-          <option value="warn">warn</option>
-        </select>
-      </label>
-      <div className="settings-actions">
-        <button type="button" onClick={saveSketch}>
-          Save sketch settings
-        </button>
-        <span className="muted">{sketchState}</span>
-      </div>
+      {/* Sketch generation */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Sketch generation</h2>
+          <p>Production defaults for every figure sketch. Override per-figure via the Regenerate button in the editor.</p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row">
+            <label htmlFor="sketch-model">Image model</label>
+            <div className="settings-control">
+              <input
+                id="sketch-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="gemini-3-pro-image"
+              />
+              <span className="settings-hint">
+                Alternatives: <code>gemini-3.1-flash-image-preview</code>, <code>gemini-2.5-flash-image</code>
+              </span>
+            </div>
+          </div>
+          <div className="settings-row settings-row-tall">
+            <label htmlFor="sketch-prompt">Silhouette prompt</label>
+            <textarea
+              id="sketch-prompt"
+              rows={8}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </div>
+          <div className="settings-row">
+            <label htmlFor="face-gate">Face gate</label>
+            <div className="settings-control">
+              <select id="face-gate" value={faceGate} onChange={(e) => setFaceGate(e.target.value)}>
+                <option value="block">block</option>
+                <option value="warn">warn</option>
+              </select>
+              <span className="settings-hint">
+                block = refuse sketches with visible faces after retries · warn = allow but flag
+              </span>
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <button type="button" className="btn-primary" onClick={saveSketch}>Save sketch settings</button>
+            {sketchState && <span className="settings-state muted">{sketchState}</span>}
+          </div>
+        </div>
+      </section>
 
-      <h3>Text polish</h3>
-      <p className="muted">
-        Gemini Flash mechanical cleanup — typography, whitespace, and obvious spelling typos. Run
-        via ✨ Polish text in the editor. Flags any word-level change for review; never auto-applies
-        prose edits.
-      </p>
-      <label>
-        Gemini text model (default: <code>gemini-2.5-flash</code>)
-        <input value={polishModel} onChange={(e) => setPolishModel(e.target.value)} />
-      </label>
-      <label>
-        Extra rules (appended after the built-in scope rules; blank = defaults only)
-        <textarea rows={4} value={polishRules} onChange={(e) => setPolishRules(e.target.value)} />
-      </label>
-      <div className="settings-actions">
-        <button type="button" onClick={savePolish}>
-          Save polish settings
-        </button>
-        <span className="muted">{polishState}</span>
-      </div>
+      {/* Text polish */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Text polish</h2>
+          <p>Mechanical cleanup — typography, whitespace, obvious spelling typos. Flags any word-level change for review; never auto-applies prose edits.</p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row">
+            <label htmlFor="polish-model">Text model</label>
+            <div className="settings-control">
+              <input
+                id="polish-model"
+                value={polishModel}
+                onChange={(e) => setPolishModel(e.target.value)}
+                placeholder="gemini-2.5-flash"
+              />
+            </div>
+          </div>
+          <div className="settings-row settings-row-tall">
+            <label htmlFor="polish-rules">Extra rules</label>
+            <div className="settings-control">
+              <textarea
+                id="polish-rules"
+                rows={4}
+                value={polishRules}
+                onChange={(e) => setPolishRules(e.target.value)}
+                placeholder="Appended after the built-in scope rules. Leave blank to use defaults only."
+              />
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <button type="button" className="btn-primary" onClick={savePolish}>Save polish settings</button>
+            {polishState && <span className="settings-state muted">{polishState}</span>}
+          </div>
+        </div>
+      </section>
 
-      <h3>Connections</h3>
-      <ul className="secret-list">
-        {Object.entries(secrets).map(([name, present]) => (
-          <li key={name}>
-            <span className={`dot ${present ? 'clean' : 'dirty'}`} /> {name}:{' '}
-            {present ? 'configured' : 'not configured'}
-          </li>
-        ))}
-      </ul>
-      <p className="muted">
-        Secrets live in the macOS keychain — set them from a terminal, e.g.{' '}
-        <code>uv run keyring set notebook-forge gemini-api-key</code>.
-      </p>
+      {/* Connections */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Connections</h2>
+          <p>Secrets live in the macOS keychain. Set them from a terminal: <code>uv run keyring set notebook-forge &lt;name&gt;</code></p>
+        </div>
+        <div className="settings-fields">
+          <ul className="secret-list">
+            {Object.entries(secrets).map(([name, present]) => (
+              <li key={name}>
+                <span className={`dot ${present ? 'clean' : 'dirty'}`} />
+                <span className="secret-name">{name}</span>
+                <span className={`secret-status ${present ? 'ok' : 'missing'}`}>
+                  {present ? 'Configured' : 'Not configured'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
     </div>
   )
 }

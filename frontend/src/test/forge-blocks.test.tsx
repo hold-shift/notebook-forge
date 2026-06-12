@@ -77,22 +77,25 @@ describe('forgeFootnote block', () => {
 })
 
 describe('forge schema', () => {
-  it('registers both custom blocks and the fnRef style alongside defaults', () => {
+  it('registers all custom blocks and the fnRef style alongside defaults', () => {
     expect(Object.keys(forgeSchema.blockSpecs)).toEqual(
-      expect.arrayContaining(['paragraph', 'heading', 'quote', 'table', 'forgeImage', 'forgeFootnote']),
+      expect.arrayContaining([
+        'paragraph', 'heading', 'quote', 'table',
+        'forgeImage', 'forgeFootnote', 'forgeDedication', 'forgeDocGroup',
+      ]),
     )
     expect(Object.keys(forgeSchema.styleSpecs)).toContain('fnRef')
     const props = forgeSchema.blockSpecs.forgeImage.config.propSchema
     expect(Object.keys(props)).toEqual(
       expect.arrayContaining([
-        'assetId',
-        'sketchAssetId',
-        'caption',
-        'altText',
-        'approval',
-        'peopleCount',
-        'displayWidth',
+        'assetId', 'sketchAssetId', 'caption', 'altText',
+        'approval', 'peopleCount', 'displayWidth',
       ]),
+    )
+    expect(Object.keys(forgeSchema.blockSpecs.forgeDedication.config.propSchema)).toContain('text')
+    const dgProps = forgeSchema.blockSpecs.forgeDocGroup.config.propSchema
+    expect(Object.keys(dgProps)).toEqual(
+      expect.arrayContaining(['groupId', 'sort', 'showBlurbs', 'showWordCounts', 'layout']),
     )
   })
 })

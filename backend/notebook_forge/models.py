@@ -40,6 +40,9 @@ class Document(Base):
     # Header/publication metadata that feeds rendering: author, overline,
     # standfirst, place, year display, date prefix, datePublished, …
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    kind: Mapped[str] = mapped_column(String, default="memoir")  # memoir | homepage
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"), nullable=True)
+    group_position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -126,6 +129,18 @@ class Change(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     document: Mapped[Document] = relationship(back_populates="changes")
+
+
+class Group(Base):
+    """Library document groups (single-group membership, v1)."""
+
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    color: Mapped[str] = mapped_column(String, default="#9c5a3c")  # '#rrggbb'
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Setting(Base):

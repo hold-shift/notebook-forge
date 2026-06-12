@@ -139,20 +139,47 @@ def publish_document(
     target: Target,
     adapter: PublishTarget | None = None,
 ) -> dict[str, Any]:
+    from ..collection import root_files
+    from ..homepage import get_homepage
+
+    base_url = (target.config or {}).get(
+        "base_url", "https://chris-skitch.github.io/family-history"
+    )
+
+    if doc.kind == "homepage":
+        if target.kind == "drive":
+            raise PermissionError("the homepage is not published to Drive targets")
+        adapter = adapter or make_adapter(target, workspace)
+        files, warnings = root_files(session, target=target, base_url=base_url)
+        publish_fn = getattr(adapter, "publish_root_files", None)
+        if publish_fn is None:
+            raise PermissionError(
+                f"target kind '{target.kind}' cannot publish the homepage"
+            )
+        commit = publish_fn(files)
+        snap = services.snapshot_document(session, doc, note=f"publish to {target.name}")
+        services.mark_published(session, doc, target, snap)
+        services.record_change(
+            session, doc, "publish", f"published homepage to {target.name}",
+            detail={
+                "target": target.name, "snapshot_id": snap.id,
+                "files": sorted(files), "warnings": warnings,
+                "commit": commit if isinstance(commit, str) else None,
+            },
+        )
+        return {
+            "snapshot_id": snap.id, "files": sorted(files),
+            "warnings": warnings,
+            "commit": commit if isinstance(commit, str) else None,
+        }
+
     adapter = adapter or make_adapter(target, workspace)
     bundle = build_bundle(session, workspace, doc)
     if adapter.kind == "drive":
         from ..safe_edition import build_safe_markdown
 
         bundle.safe_md = build_safe_markdown(session, workspace, doc)
-    # regenerate the site-root artefacts with every publish (spec §8) so
-    # the index, catalogue, sitemap and llms.txt never drift from the docs
-    from ..collection import root_files
-
-    base_url = (target.config or {}).get(
-        "base_url", "https://chris-skitch.github.io/family-history"
-    )
-    bundle.root_files = root_files(
+    bundle.root_files, root_warnings = root_files(
         session, target=target, publishing_slug=doc.slug, base_url=base_url
     )
     result = adapter.publish(bundle)  # raises on failure → no DB writes
@@ -168,10 +195,23 @@ def publish_document(
             "snapshot_id": snap.id,
             "assets_written": result.assets_written,
             "assets_skipped": result.assets_skipped,
+            "warnings": root_warnings,
             **result.detail,
         },
     )
-    return {"snapshot_id": snap.id, **result.detail}
+    # D14: if homepage was dirty for this target, mark it clean too
+    hp = get_homepage(session)
+    if hp is not None and target.kind != "drive" and services.is_dirty(session, hp, target):
+        hp_snap = services.snapshot_document(
+            session, hp, note=f"publish to {target.name} (with {doc.slug})"
+        )
+        services.mark_published(session, hp, target, hp_snap)
+        services.record_change(
+            session, hp, "publish",
+            f"homepage refreshed by publish of {doc.slug} to {target.name}",
+            detail={"target": target.name, "snapshot_id": hp_snap.id},
+        )
+    return {"snapshot_id": snap.id, "warnings": root_warnings, **result.detail}
 
 
 def unpublish_document(
@@ -192,29 +232,6 @@ def unpublish_document(
         detail={"target": target.name},
     )
     return {"target": target.name}
-
-
-def rebuild_index(
-    session: Session,
-    workspace: Path,
-    target: Target,
-    adapter: PublishTarget | None = None,
-) -> dict[str, Any]:
-    """Regenerate and publish ONLY the site-root artefacts to a target —
-    the `Rebuild index` action (Collection Index spec §8): editing the
-    homepage text takes effect without republishing any document."""
-    from ..collection import root_files
-
-    adapter = adapter or make_adapter(target, workspace)
-    base_url = (target.config or {}).get(
-        "base_url", "https://chris-skitch.github.io/family-history"
-    )
-    files = root_files(session, target=target, base_url=base_url)
-    publish_fn = getattr(adapter, "publish_root_files", None)
-    if publish_fn is None:
-        raise ValueError(f"target kind '{target.kind}' has no index to rebuild")
-    result = publish_fn(files)
-    return {"files": sorted(files), "commit": result if isinstance(result, str) else None}
 
 
 def rollback_and_republish(
