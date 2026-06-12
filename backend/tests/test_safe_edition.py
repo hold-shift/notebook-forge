@@ -134,3 +134,46 @@ def test_safe_markdown_falls_back_to_original_when_no_sketch(
     session.commit()
     md = build_safe_markdown(session, workspace, doc)
     assert md.count("](data:") == 15  # figure 1 fell back to its original
+
+
+def test_safe_mode_original_and_omit() -> None:
+    base = {
+        "sketchAssetId": "sk", "caption": "C", "altText": "A",
+        "approval": "approved", "displayWidth": "full",
+    }
+    blocks = [
+        make_block("forgeImage", {**base, "assetId": "a1"}),
+        make_block("forgeImage", {**base, "assetId": "a2", "safeMode": "omit"}),
+        make_block("forgeImage", {**base, "assetId": "a3"}),
+    ]
+    meta = {"title": "T", "canonical_url": "https://x"}
+    md = render_safe_markdown(meta, blocks, lambda b, n: f"src-{n}")
+
+    assert "**Figure 1.**" in md
+    assert "**Figure 2.**" not in md  # omitted from the safe edition...
+    assert "**Figure 3.**" in md       # ...but its NUMBER was consumed,
+    assert "#figure-3" in md           # keeping anchors aligned with HTML
+
+
+def test_safe_mode_original_uses_original_asset(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    repo = make_repo(tmp_path)
+    pages = get_or_create_pages_target(session, repo)
+    doc, _ = import_document(session, workspace, repo, SLUG, pages)
+    # mark figure 1 as original-in-safe-edition (e.g. a map)
+    blocks = [dict(b) for b in doc.blocks]
+    fig = next(b for b in blocks if b["type"] == "forgeImage")
+    fig["props"] = {**fig["props"], "safeMode": "original"}
+    from notebook_forge import services
+
+    services.save_blocks(session, doc, blocks)
+    session.commit()
+
+    md = build_safe_markdown(session, workspace, doc)
+    # fixture originals are b"original-bytes-N"; sketches are b"sketch-bytes-N"
+    import base64
+
+    first_img = md.split("![", 2)[1].split("](data:", 1)[1]
+    payload = base64.b64decode(first_img.split("base64,", 1)[1].split(")", 1)[0])
+    assert payload.startswith(b"original-bytes")

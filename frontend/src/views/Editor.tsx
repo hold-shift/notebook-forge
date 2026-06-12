@@ -6,49 +6,117 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { api, type DocDetail, type TargetState } from '../api'
 import { forgeSchema } from '../forge/schema'
+import { timeAgo } from './Library'
 
 const AUTOSAVE_MS = 1200
 
+interface ChangeRow {
+  id: number
+  kind: string
+  summary: string
+  created_at: string | null
+}
+
+function changeIcon(c: ChangeRow): string {
+  if (c.summary.includes('sketch')) return 'ti-photo'
+  if (c.summary.includes('caption')) return 'ti-text-caption'
+  if (c.kind === 'publish') return 'ti-upload'
+  if (c.kind === 'rollback') return 'ti-arrow-back-up'
+  if (c.kind === 'import') return 'ti-file-import'
+  return 'ti-edit'
+}
+
 function PendingPanel({
+  slug,
   targets,
   onPush,
   pushing,
 }: {
+  slug: string
   targets: TargetState[]
   onPush: (target: string) => void
   pushing: string | null
 }) {
+  const [changes, setChanges] = useState<ChangeRow[]>([])
+
+  useEffect(() => {
+    api.changes(slug).then(
+      (rows) => setChanges(rows as ChangeRow[]),
+      () => setChanges([]),
+    )
+  }, [slug, targets])
+
+  const behindCount = (t: TargetState): number =>
+    changes.filter(
+      (c) =>
+        c.kind !== 'publish' &&
+        c.created_at &&
+        (!t.published_at || c.created_at > t.published_at),
+    ).length
+
+  const recentEdits = changes.filter((c) => c.kind !== 'publish').slice(0, 4)
+  const anyDirty = targets.some((t) => t.dirty)
+
   return (
     <div className="pending-panel">
-      <h3>Targets</h3>
-      {targets.map((t) => (
-        <div key={t.target} className="pending-row">
-          <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
-          <span className="pending-name">{t.target}</span>
-          {t.url && (
-            <a
-              className="target-link"
-              href={t.url}
-              target="_blank"
-              rel="noreferrer"
-              title={`Open the published ${t.kind} output`}
-            >
-              ↗
-            </a>
-          )}
-          <span className="pending-state">
-            {t.dirty ? 'pending changes' : t.status === 'PUBLISHED' ? 'clean' : t.status}
-            {t.published_at ? ` · published ${t.published_at.slice(0, 10)}` : ''}
-          </span>
-          <button
-            type="button"
-            disabled={!t.dirty || pushing === t.target}
-            onClick={() => onPush(t.target)}
-          >
-            {pushing === t.target ? 'Pushing…' : 'Push'}
-          </button>
+      <h3>Pending changes</h3>
+      {anyDirty && recentEdits.length > 0 && (
+        <div className="change-list">
+          {recentEdits.map((c) => (
+            <div key={c.id} className="change-row">
+              <i className={`ti ${changeIcon(c)}`} aria-hidden />
+              <span className="change-summary">{c.summary}</span>
+              <span className="change-when">{timeAgo(c.created_at)}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+      <div className="target-rows">
+        {targets.map((t) => {
+          const behind = behindCount(t)
+          return (
+            <div key={t.target} className="pending-row">
+              <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
+              <span className="pending-name">{t.target}</span>
+              {t.url && (
+                <a
+                  className="target-link"
+                  href={t.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Open the published ${t.kind} output`}
+                >
+                  ↗
+                </a>
+              )}
+              <span className="pending-state">
+                {t.status !== 'PUBLISHED'
+                  ? 'never published'
+                  : t.dirty
+                    ? `${behind || 'some'} change${behind === 1 ? '' : 's'} behind`
+                    : 'up to date'}
+              </span>
+              <button
+                type="button"
+                disabled={!t.dirty || pushing === t.target}
+                onClick={() => onPush(t.target)}
+              >
+                {pushing === t.target ? 'Pushing…' : 'Push'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      {targets.filter((t) => t.dirty).length > 1 && (
+        <button
+          type="button"
+          className="btn-primary push-all"
+          disabled={!!pushing}
+          onClick={() => onPush('__all__')}
+        >
+          {pushing === '__all__' ? 'Pushing all…' : 'Push to all targets'}
+        </button>
+      )}
     </div>
   )
 }
@@ -66,17 +134,21 @@ function MetaBar({
   const [title, setTitle] = useState(String(meta.title ?? ''))
   const [years, setYears] = useState(String(meta.year_display ?? ''))
   const [standfirst, setStandfirst] = useState(String(meta.standfirst ?? ''))
+  const tocInitial =
+    meta.show_toc === undefined || meta.show_toc === null ? 'auto' : meta.show_toc ? 'on' : 'off'
+  const [toc, setToc] = useState(tocInitial)
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const needsConfirm = meta.date_confirmed === false
 
   const dirty =
     title !== String(meta.title ?? '') ||
     years !== String(meta.year_display ?? '') ||
-    standfirst !== String(meta.standfirst ?? '')
+    standfirst !== String(meta.standfirst ?? '') ||
+    toc !== tocInitial
 
   const save = () => {
     setState('saving')
-    const updated = {
+    const updated: Record<string, unknown> = {
       ...doc.meta,
       title,
       year_display: years,
@@ -84,9 +156,11 @@ function MetaBar({
       meta_description: standfirst,
       date_confirmed: true,
     }
-    api.saveMeta(doc.slug, editorDoc(), updated, 'edited document metadata').then(
+    if (toc === 'auto') delete updated.show_toc
+    else updated.show_toc = toc === 'on'
+    api.saveMeta(doc.slug, editorDoc(), updated as Record<string, unknown>, 'edited document metadata').then(
       (resp) => {
-        doc.meta = updated
+        doc.meta = updated as DocDetail['meta']
         setState('saved')
         onSaved(resp.targets)
       },
@@ -107,6 +181,14 @@ function MetaBar({
       <label className="meta-standfirst">
         Standfirst
         <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
+      </label>
+      <label title="Contents nav on the published HTML page. Auto = on when the document has more than 15 headings. Always rebuilt from current headings at publish.">
+        Contents
+        <select value={toc} onChange={(e) => setToc(e.target.value)}>
+          <option value="auto">Auto</option>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
       </label>
       <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
         {state === 'saving' ? 'Saving…' : needsConfirm ? 'Confirm details' : 'Save details'}
@@ -227,20 +309,26 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   }, [])
 
   const onPush = useCallback(
-    (target: string) => {
+    async (target: string) => {
+      // '__all__' pushes every dirty target sequentially (git clones and
+      // Drive uploads don't love racing each other).
+      const names =
+        target === '__all__'
+          ? targets.filter((t) => t.dirty).map((t) => t.target)
+          : [target]
       setPushing(target)
-      api.publish(doc.slug, target).then(
-        (resp) => {
+      try {
+        for (const name of names) {
+          const resp = await api.publish(doc.slug, name)
           setTargets(resp.targets)
-          setPushing(null)
-        },
-        (e) => {
-          setPushing(null)
-          alert(`Publish failed: ${e}`)
-        },
-      )
+        }
+      } catch (e) {
+        alert(`Publish failed: ${e}`)
+      } finally {
+        setPushing(null)
+      }
     },
-    [doc.slug],
+    [doc.slug, targets],
   )
 
   return (
@@ -271,7 +359,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             <BlockNoteView editor={editor} onChange={onChange} theme="light" />
           </div>
           <div className="editor-side">
-            <PendingPanel targets={targets} onPush={onPush} pushing={pushing} />
+            <PendingPanel slug={doc.slug} targets={targets} onPush={onPush} pushing={pushing} />
             <SnapshotsPanel slug={doc.slug} />
           </div>
         </div>

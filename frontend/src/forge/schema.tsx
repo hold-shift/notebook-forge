@@ -19,6 +19,11 @@ export const forgeImageSpec = createReactBlockSpec(
       approval: { default: 'pending', values: ['pending', 'approved'] },
       peopleCount: { default: 0 },
       displayWidth: { default: 'full', values: ['full', 'portrait'] },
+      // What the NotebookLM-safe edition embeds for this figure:
+      // the sketch (default), the original photo (maps/diagrams), or
+      // nothing at all (the figure number is still consumed so anchors
+      // stay aligned with the HTML edition).
+      safeMode: { default: 'sketch', values: ['sketch', 'original', 'omit'] },
     },
     content: 'none',
   },
@@ -37,6 +42,9 @@ export const forgeImageSpec = createReactBlockSpec(
               approval: block.props.approval === 'approved' ? 'pending' : 'approved',
             },
           })
+        }
+        onSafeModeChange={(safeMode) =>
+          editor.updateBlock(block, { props: { ...block.props, safeMode } })
         }
         onGenerateSketch={async (prompt?: string) => {
           const slug = currentDocSlug()

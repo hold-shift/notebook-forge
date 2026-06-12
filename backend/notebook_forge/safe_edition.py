@@ -152,6 +152,13 @@ def render_safe_markdown(
                 src = sketch_src(block, n)
                 if asset_key:
                     seen_assets[asset_key] = (n, src)
+            # safeMode: "sketch" (default) embeds the sketch; "original"
+            # embeds the real photo (maps/diagrams that silhouetting only
+            # degrades); "omit" drops the figure from the safe edition
+            # entirely. The figure NUMBER is consumed either way so the
+            # numbering stays aligned with the HTML edition's anchors.
+            if props.get("safeMode") == "omit":
+                continue
             alt = (props.get("altText") or f"Figure {n}").replace("\n", " ")
             caption = html_fragment_to_md(props.get("caption", "")).replace("\n", " ").strip()
             lines += [f"![{alt}]({src})", ""]
@@ -193,7 +200,11 @@ def build_safe_markdown(session: Session, workspace: Path, doc: Document) -> str
 
     def sketch_src(block: dict[str, Any], n: int) -> str:
         props = block.get("props", {})
-        for key in ("sketchAssetId", "assetId"):
+        if props.get("safeMode") == "original":
+            keys = ("assetId",)  # maps/diagrams: the real image, deliberately
+        else:
+            keys = ("sketchAssetId", "assetId")
+        for key in keys:
             asset = session.get(Asset, props.get(key) or "")
             if asset is not None:
                 path = asset_path(workspace, asset)

@@ -4,6 +4,8 @@
 
 import { useState } from 'react'
 
+export type SafeMode = 'sketch' | 'original' | 'omit'
+
 export interface ForgeImageProps {
   assetId: string
   sketchAssetId: string
@@ -12,6 +14,7 @@ export interface ForgeImageProps {
   approval: 'pending' | 'approved'
   displayWidth: 'full' | 'portrait'
   peopleCount?: number
+  safeMode?: SafeMode
 }
 
 export interface ForgeImageViewProps {
@@ -22,6 +25,8 @@ export interface ForgeImageViewProps {
   /** Generate (or regenerate) the sketch via Gemini. An optional prompt
    * overrides the default for this figure only. Resolves when done. */
   onGenerateSketch?: (prompt?: string) => Promise<void>
+  /** What the NotebookLM-safe edition embeds for this figure. */
+  onSafeModeChange?: (mode: SafeMode) => void
 }
 
 export function ForgeImageView({
@@ -30,6 +35,7 @@ export function ForgeImageView({
   onCaptionChange,
   onApprovalToggle,
   onGenerateSketch,
+  onSafeModeChange,
 }: ForgeImageViewProps) {
   const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
   const [generating, setGenerating] = useState(false)
@@ -96,6 +102,18 @@ export function ForgeImageView({
               ✎ prompt
             </button>
           </>
+        )}
+        {onSafeModeChange && (
+          <select
+            className="forge-safemode"
+            value={props.safeMode ?? 'sketch'}
+            title="What the NotebookLM-safe edition embeds for this figure"
+            onChange={(e) => onSafeModeChange(e.target.value as SafeMode)}
+          >
+            <option value="sketch">Safe: sketch</option>
+            <option value="original">Safe: original</option>
+            <option value="omit">Safe: omit</option>
+          </select>
         )}
         <button
           type="button"
