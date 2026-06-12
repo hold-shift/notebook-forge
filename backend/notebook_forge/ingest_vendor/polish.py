@@ -56,8 +56,11 @@ _CLOSING_PUNCT = set("\"'’”)]}")
 
 
 def _is_broken_break(cur: str, nxt: str) -> bool:
-    cur_end = cur.rstrip()
-    nxt_start = nxt.lstrip()
+    # NotebookForge divergence: Markdown emphasis markers from the
+    # style-preserving PDF extractor are transparent to the sentence-end
+    # test — "…is best.*" really did end its sentence.
+    cur_end = cur.rstrip().rstrip("*").rstrip()
+    nxt_start = nxt.lstrip().lstrip("*").lstrip()
     if not cur_end or not nxt_start:
         return False
     last = cur_end[-1]

@@ -36,6 +36,23 @@ _FOOTNOTE_LEAD_RE = re.compile(r"^\s*(\d{1,2})\s+(.+)$", re.DOTALL)
 # Headings are typically short — anything over ~100 chars is paragraph prose
 # that happens to be bold (rare but possible) and shouldn't get promoted.
 _BOLD_FLAG = 16
+_ITALIC_FLAG = 2  # PyMuPDF span flag bit (NotebookForge divergence)
+
+
+def _md_line(style_runs: list[list]) -> str:
+    """Line text with PDF span styles as Markdown emphasis. Whitespace stays
+    outside the markers; unstyled runs pass through verbatim."""
+    parts: list[str] = []
+    for text, (italic, bold) in style_runs:
+        core = text.strip()
+        if not core or not (italic or bold):
+            parts.append(text)
+            continue
+        lead = text[: len(text) - len(text.lstrip())]
+        trail = text[len(text.rstrip()):]
+        marker = "***" if (italic and bold) else ("**" if bold else "*")
+        parts.append(f"{lead}{marker}{core}{marker}{trail}")
+    return "".join(parts).strip()
 _BOLD_LINE_RATIO = 0.8
 _HEADING_LINE_MAX_CHARS = 100
 
@@ -192,6 +209,11 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                 line_sizes: list[float] = []
                 line_bold_chars = 0
                 line_total_chars = 0
+                # NotebookForge divergence from upstream: collect per-span
+                # style runs so italics/bold survive extraction as Markdown
+                # emphasis (upstream discarded them — reported by Chris,
+                # 11 Jun 2026). Adjacent same-style spans merge first.
+                style_runs: list[list] = []  # [text, (italic, bold)]
                 for span in line.get("spans", []):
                     span_text = span.get("text", "") or ""
                     line_pieces.append(span_text)
@@ -200,11 +222,20 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                         line_sizes.append(sz)
                     span_chars = sum(1 for c in span_text if not c.isspace())
                     line_total_chars += span_chars
-                    if int(span.get("flags", 0)) & _BOLD_FLAG:
+                    span_flags = int(span.get("flags", 0))
+                    if span_flags & _BOLD_FLAG:
                         line_bold_chars += span_chars
+                    style = (bool(span_flags & _ITALIC_FLAG), bool(span_flags & _BOLD_FLAG))
+                    if style_runs and style_runs[-1][1] == style:
+                        style_runs[-1][0] += span_text
+                    else:
+                        style_runs.append([span_text, style])
                 line_text = "".join(line_pieces).strip()
                 if not line_text:
-                    block_line_records.append({"text": "", "bbox": line.get("bbox"), "size": 0, "bold": False})
+                    block_line_records.append({
+                        "text": "", "md_text": "", "li": line_idx,
+                        "bbox": line.get("bbox"), "size": 0, "bold": False,
+                    })
                     continue
                 if line_sizes:
                     rounded = [round(s * 2) / 2 for s in line_sizes]
@@ -216,7 +247,8 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                     and (line_bold_chars / line_total_chars) >= _BOLD_LINE_RATIO
                 )
                 block_line_records.append({
-                    "text": line_text, "bbox": line.get("bbox", (0,0,0,0)),
+                    "text": line_text, "md_text": _md_line(style_runs),
+                    "li": line_idx, "bbox": line.get("bbox", (0,0,0,0)),
                     "size": line_size, "bold": line_bold,
                 })
                 page_lines.append({
@@ -340,17 +372,26 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                 continue
             block_idx = tb.get("block_idx", -1)
             line_records = tb.get("line_records", [])
+            # NotebookForge divergence: PyMuPDF merges consecutive
+            # paragraphs into one block when their spacing is uniform; the
+            # paragraph BREAKS survive as whitespace-only lines. Group the
+            # kept lines into paragraphs at those blank lines instead of
+            # flattening the whole block (upstream merged them — reported
+            # by Chris, 11 Jun 2026). Caption-claimed lines are still
+            # removed, keyed by each record's ORIGINAL line index.
+            groups: list[list[dict]] = [[]]
             if line_records and block_idx >= 0:
-                kept = [
-                    rec["text"]
-                    for li, rec in enumerate(line_records)
-                    if rec["text"] and (block_idx, li) not in consumed_line_keys
-                ]
-                text = " ".join(kept).strip()
-            else:
-                text = tb["text"]
-            if not text:
-                continue
+                for rec in line_records:
+                    if not rec["text"]:
+                        if groups[-1]:
+                            groups.append([])
+                        continue
+                    li = rec.get("li")
+                    if li is not None and (block_idx, li) in consumed_line_keys:
+                        continue
+                    groups[-1].append(rec)
+            groups = [g for g in groups if g]
+
             x0, y0, x1, y1 = tb["bbox"]
             sz = tb["size"]
             # Bold-line splitter set kind_hint when it lifted a heading out
@@ -365,6 +406,26 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                 kind = "h2"
             else:
                 kind = "p"
+
+            if kind == "p" and groups:
+                # One body paragraph per group; emphasis-preserving text.
+                for group in groups:
+                    text = " ".join(
+                        rec.get("md_text") or rec["text"] for rec in group
+                    ).strip()
+                    if not text:
+                        continue
+                    gy = group[0]["bbox"][1] if group[0].get("bbox") else y0
+                    page_items.append((gy, {"kind": "p", "text": text}))
+                    last_para_text = text
+                continue
+
+            if groups:
+                text = " ".join(r["text"] for g in groups for r in g).strip()
+            else:
+                text = tb["text"]
+            if not text:
+                continue
             page_items.append((y0, {"kind": kind, "text": text}))
             if kind == "h1" and sz > detected_title_size:
                 detected_title = text.splitlines()[0][:200]
@@ -673,8 +734,8 @@ def _split_blocks_at_bold_headings(
     page_left = min(xs) if xs else 0.0
 
     for tb in raw_text_blocks:
-        line_records = [r for r in tb.get("line_records", []) if r.get("text")]
-        if not line_records:
+        line_records = tb.get("line_records", [])
+        if not any(r.get("text") for r in line_records):
             out.append(tb)
             continue
 
@@ -683,6 +744,11 @@ def _split_blocks_at_bold_headings(
         for rec in line_records:
             text = rec.get("text", "").strip()
             if not text:
+                # NotebookForge divergence: blank lines are paragraph
+                # breaks — keep them in the body run so the emission pass
+                # can split paragraphs even inside a heading-split block.
+                if body_run:
+                    body_run.append(rec)
                 continue
             is_bold = bool(rec.get("bold"))
             is_short = len(text) <= _HEADING_LINE_MAX_CHARS
@@ -710,14 +776,15 @@ def _split_blocks_at_bold_headings(
         # Emit one synthetic block per chunk, preserving bbox + size from
         # its lines so caption detection + reading-order sort still work.
         for kind, records in chunks:
-            text = " ".join(r["text"] for r in records).strip()
+            text = " ".join(r["text"] for r in records if r.get("text")).strip()
             if not text:
                 continue
-            sizes = [r.get("size", 0) for r in records if r.get("size", 0) > 0]
-            bx0 = min((r["bbox"][0] for r in records if r.get("bbox")), default=tb["bbox"][0])
-            by0 = min((r["bbox"][1] for r in records if r.get("bbox")), default=tb["bbox"][1])
-            bx1 = max((r["bbox"][2] for r in records if r.get("bbox")), default=tb["bbox"][2])
-            by1 = max((r["bbox"][3] for r in records if r.get("bbox")), default=tb["bbox"][3])
+            kept = [r for r in records if r.get("text")]
+            sizes = [r.get("size", 0) for r in kept if r.get("size", 0) > 0]
+            bx0 = min((r["bbox"][0] for r in kept if r.get("bbox")), default=tb["bbox"][0])
+            by0 = min((r["bbox"][1] for r in kept if r.get("bbox")), default=tb["bbox"][1])
+            bx1 = max((r["bbox"][2] for r in kept if r.get("bbox")), default=tb["bbox"][2])
+            by1 = max((r["bbox"][3] for r in kept if r.get("bbox")), default=tb["bbox"][3])
             out.append({
                 "bbox": (bx0, by0, bx1, by1),
                 "text": text,
