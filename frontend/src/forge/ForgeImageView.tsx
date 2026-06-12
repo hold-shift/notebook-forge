@@ -2,7 +2,7 @@
  * NotebookLM-safe sketch side by side, caption + approval state below.
  * Kept editor-free so it can be unit-tested directly. */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AutoTextarea } from './AutoTextarea'
 
 export type SafeMode = 'sketch' | 'original' | 'omit'
@@ -28,6 +28,8 @@ export interface ForgeImageViewProps {
   onGenerateSketch?: (prompt?: string) => Promise<void>
   /** What the NotebookLM-safe edition embeds for this figure. */
   onSafeModeChange?: (mode: SafeMode) => void
+  /** Upload a photo file — called when the block has no assetId yet. */
+  onImageUpload?: (file: File) => Promise<void>
 }
 
 export function ForgeImageView({
@@ -37,12 +39,30 @@ export function ForgeImageView({
   onApprovalToggle,
   onGenerateSketch,
   onSafeModeChange,
+  onImageUpload,
 }: ForgeImageViewProps) {
   const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
   const [showPrompt, setShowPrompt] = useState(false)
   const [promptOverride, setPromptOverride] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUpload = async (file: File) => {
+    if (!onImageUpload) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      await onImageUpload(file)
+    } catch (e) {
+      setUploadError(String(e))
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const generate = onGenerateSketch
     ? () => {
@@ -53,6 +73,45 @@ export function ForgeImageView({
           .finally(() => setGenerating(false))
       }
     : undefined
+
+  if (!assetId && onImageUpload) {
+    return (
+      <figure className="forge-image forge-image-upload-wrap" data-testid="forge-image">
+        <div
+          className={`forge-upload-area${dragging ? ' dragging' : ''}`}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) void handleUpload(file)
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void handleUpload(file)
+            }}
+          />
+          {uploading ? (
+            <span>Uploading…</span>
+          ) : (
+            <>
+              <span className="forge-upload-icon">🖼️</span>
+              <span>Click or drop a photo to add a figure</span>
+            </>
+          )}
+        </div>
+        {uploadError && <p className="forge-gen-error">{uploadError}</p>}
+      </figure>
+    )
+  }
 
   return (
     <figure

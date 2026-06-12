@@ -92,6 +92,14 @@ export const api = {
     fetch(`/api/documents/${slug}`, { method: 'DELETE' }).then((r) =>
       json<{ ok: boolean; deleted: string }>(r),
     ),
+  uploadFigureImage: (slug: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`/api/documents/${slug}/figures/upload-image`, {
+      method: 'POST',
+      body: form,
+    }).then((r) => json<{ assetId: string }>(r))
+  },
   generateCaption: (slug: string, blockId: string) =>
     fetch(`/api/documents/${slug}/figures/${blockId}/generate-caption`, { method: 'POST' }).then(
       (r) => json<{ caption: string }>(r),

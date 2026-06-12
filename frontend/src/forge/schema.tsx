@@ -61,6 +61,12 @@ export const forgeImageSpec = createReactBlockSpec(
             },
           })
         }}
+        onImageUpload={async (file: File) => {
+          const slug = currentDocSlug()
+          if (!slug) throw new Error('no document open')
+          const resp = await api.uploadFigureImage(slug, file)
+          editor.updateBlock(block, { props: { ...block.props, assetId: resp.assetId } })
+        }}
       />
     ),
   },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
-import { useCreateBlockNote } from '@blocknote/react'
+import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
@@ -375,7 +375,7 @@ function MetaBar({
               title="Mark all pending images as approved"
               onClick={onApproveAll}
             >
-              {pendingCount > 0 ? `Approve all (${pendingCount})` : 'Approve all'}
+              {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
             </button>
             <button
               type="button"
@@ -772,8 +772,49 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             </div>
           )}
           <div className="editor-canvas">
-            <BlockNoteView editor={editor} onChange={onChange} theme="light" />
+            <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={false}>
+              <SuggestionMenuController
+                triggerCharacter="/"
+                getItems={async (query) => {
+                  const defaults = getDefaultReactSlashMenuItems(editor).filter(
+                    (i) => i.title !== 'Image',
+                  )
+                  const photoItem = {
+                    title: 'Photo / Figure',
+                    subtext: 'Insert a photo or illustration',
+                    aliases: ['im', 'image', 'photo', 'figure', 'fig'],
+                    group: 'Media',
+                    onItemClick: () => {
+                      editor.insertBlocks(
+                        [{ type: 'forgeImage', props: {} }],
+                        editor.getTextCursorPosition().block,
+                        'after',
+                      )
+                    },
+                  }
+                  const all = [...defaults, photoItem]
+                  const q = query.toLowerCase()
+                  return q
+                    ? all.filter(
+                        (i) =>
+                          i.title.toLowerCase().includes(q) ||
+                          i.aliases?.some((a) => a.includes(q)),
+                      )
+                    : all
+                }}
+              />
+            </BlockNoteView>
           </div>
+          <button
+            type="button"
+            className="scroll-top-btn"
+            title="Scroll to top"
+            onClick={() =>
+              document.querySelector('.editor-canvas')?.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+          >
+            ↑
+          </button>
           <div className="editor-side">
             {polishReport && !polishReviewOpen && (
               <div className="polish-review-stub">

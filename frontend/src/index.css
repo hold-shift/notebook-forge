@@ -223,6 +223,27 @@ button:disabled { opacity: 0.55; cursor: default; }
   padding: 12px 0;
 }
 .editor-side { display: flex; flex-direction: column; gap: 12px; align-self: start; position: sticky; top: 12px; }
+.scroll-top-btn {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0.5px solid var(--color-border-tertiary);
+  background: var(--color-background-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.scroll-top-btn:hover { background: var(--color-background-secondary); box-shadow: 0 4px 12px rgba(0,0,0,0.16); }
 
 .pending-panel {
   border: 0.5px solid var(--color-border-tertiary);
@@ -394,6 +415,27 @@ button:disabled { opacity: 0.55; cursor: default; }
   box-sizing: border-box;
 }
 .forge-gen-error { color: var(--pill-danger-fg); font-size: 12px; margin: 4px 0 0; }
+.forge-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border: 2px dashed var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 120px;
+  user-select: none;
+}
+.forge-upload-area:hover, .forge-upload-area.dragging {
+  border-color: var(--color-border-primary);
+  background: var(--color-background-secondary);
+}
+.forge-upload-icon { font-size: 32px; line-height: 1; }
 sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em; }
 
 /* ---- forgeFootnote block ---- */

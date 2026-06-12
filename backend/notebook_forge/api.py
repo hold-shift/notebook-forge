@@ -336,6 +336,32 @@ def generate_sketch(
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 
 
+@app.post("/api/documents/{slug}/figures/upload-image")
+def upload_figure_image(
+    slug: str,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Upload a photo as a new figure asset. Returns the asset SHA for use as assetId."""
+    import shutil
+    import tempfile
+
+    from .assets import ingest_file
+
+    _get_doc(session, slug)  # ensures doc exists
+    suffix = Path(file.filename or "upload").suffix or ".jpg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        asset = ingest_file(session, _state()["workspace"], tmp_path, "figures")
+        asset.filename = file.filename or f"upload{suffix}"
+        session.commit()
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"assetId": asset.sha256}
+
+
 @app.post("/api/documents/{slug}/figures/{block_id}/generate-caption")
 def generate_caption(
     slug: str,
