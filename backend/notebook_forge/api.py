@@ -64,7 +64,8 @@ def _target_url(session: Session, doc, target: Target) -> str | None:  # noqa: A
     if target.kind == "github-pages":
         return doc.meta.get("canonical_url") or None
     if target.kind == "local-folder":
-        return f"/site/{doc.slug}.html"  # served by the /site mount below
+        filename = "index.html" if doc.kind == "homepage" else f"{doc.slug}.html"
+        return f"/site/{filename}"  # served by the /site mount below
     if target.kind == "drive":
         return _drive_doc_url(session, doc, target)
     return None
