@@ -22,6 +22,7 @@
     --paper:#faf8f3; --paper-edge:#f3efe6; --ink:#2a2520; --ink-soft:#5b5248;
     --ink-faint:#8a8073; --accent:#9c5a3c; --accent-deep:#7d4226; --rule:#e4ddd0;
     --measure:680px;
+    --narr-bg:#f1eada; --narr-border:#b8a580;
   }
   *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%;}
@@ -70,6 +71,9 @@
 
   footer{margin-top:3.5rem; padding-top:1.8rem; border-top:1px solid var(--rule);
     font-size:.84rem; color:var(--ink-faint); line-height:1.6;}
+  div.narrative{background:var(--narr-bg); border-left:3px solid var(--narr-border); border-radius:0 10px 10px 0; padding:1.05rem 1.25rem; margin:1.6rem 0;}
+  div.narrative p{margin:0 0 1.05rem;}
+  div.narrative p:last-child{margin-bottom:0;}
   footer p{margin:0 0 .5rem;}
   footer a{color:var(--accent-deep); text-decoration:none;}
   footer a:hover{text-decoration:underline;}
@@ -111,6 +115,7 @@
   {% if body_entries is not none %}
   {% for e in body_entries %}
     {% if e.kind == 'intro' %}<p class="intro{% if e.lead is defined and e.lead %} lead{% endif %}">{{ e.html|safe }}</p>
+    {% elif e.kind == 'narrative' %}<div class="narrative">{% for p in e.paragraphs %}<p>{{ p|safe }}</p>{% endfor %}</div>
     {% elif e.kind == 'dedication' %}<p class="dedication">{{ e.text }}</p>
     {% elif e.kind == 'hr' %}<hr class="div">
     {% elif e.kind == 'seclabel' %}<p class="seclabel">{{ e.text }}</p>

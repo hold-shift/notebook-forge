@@ -21,7 +21,7 @@ from ..blocks import text_run
 
 # Block types that the polish pass handles (forgeImage / forgeFootnote excluded v1).
 POLISHABLE = frozenset({
-    "paragraph", "heading", "quote", "bulletListItem", "numberedListItem",
+    "paragraph", "heading", "quote", "bulletListItem", "numberedListItem", "forgeNarrative",
 })
 
 # Matches ***both***, **bold**, or *italic* — longest marker wins (left-to-right).

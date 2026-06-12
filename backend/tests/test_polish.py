@@ -125,6 +125,22 @@ class TestBlockToPolishText:
         block = make_block("paragraph", content=[text_run("   ")]) | {"id": "blank"}
         assert polishable_blocks([block]) == []
 
+    def test_forge_narrative_is_polishable(self) -> None:
+        """forgeNarrative block participates in polish (D16): typo is reachable."""
+        block = (
+            make_block("forgeNarrative", content=[text_run("Lookng back on those yeras.")])
+            | {"id": "narr1"}
+        )
+        poly = polishable_blocks([block])
+        assert len(poly) == 1
+        bid, kind, text = poly[0]
+        assert bid == "narr1"
+        assert kind == "p"  # narrative serialises as kind p (existing else-branch)
+        assert "yeras" in text  # the typo is present
+        # round-trip: correcting the text and applying back works
+        corrected = polish_text_to_content("Looking back on those years.")
+        assert any(r["text"] == "Looking back on those years." for r in corrected)
+
 
 class TestJuniorRoundTrip:
     """Every paragraph/heading in the Junior fixture must survive the round-trip."""
