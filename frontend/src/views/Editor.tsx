@@ -30,6 +30,46 @@ function changeIcon(c: ChangeRow): string {
   return 'ti-edit'
 }
 
+function ChangesModal({
+  changes,
+  onClose,
+}: {
+  changes: ChangeRow[]
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box changes-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Change history</h3>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <i className="ti ti-x" aria-hidden />
+          </button>
+        </div>
+        <div className="changes-modal-list">
+          {changes.length === 0 ? (
+            <p className="muted">No changes recorded.</p>
+          ) : (
+            changes.map((c) => (
+              <div key={c.id} className="changes-modal-row">
+                <i className={`ti ${changeIcon(c)}`} aria-hidden />
+                <span className="changes-modal-summary">{c.summary}</span>
+                <span className="change-when">{timeAgo(c.created_at)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PendingPanel({
   slug,
   targets,
@@ -46,6 +86,7 @@ function PendingPanel({
   unpublishing: string | null
 }) {
   const [changes, setChanges] = useState<ChangeRow[]>([])
+  const [showHistory, setShowHistory] = useState(false)
 
   useEffect(() => {
     api.changes(slug).then(
@@ -62,24 +103,34 @@ function PendingPanel({
         (!t.published_at || c.created_at > t.published_at),
     ).length
 
-  const recentEdits = changes.filter((c) => c.kind !== 'publish').slice(0, 4)
+  const edits = changes.filter((c) => c.kind !== 'publish')
+  const recentEdits = edits.slice(0, 3)
   const anyDirty = targets.some((t) => t.dirty)
 
   return (
-    <div className="pending-panel">
-      <h3>Pending changes</h3>
-      {anyDirty && recentEdits.length > 0 && (
-        <div className="change-list">
-          {recentEdits.map((c) => (
-            <div key={c.id} className="change-row">
-              <i className={`ti ${changeIcon(c)}`} aria-hidden />
-              <span className="change-summary">{c.summary}</span>
-              <span className="change-when">{timeAgo(c.created_at)}</span>
-            </div>
-          ))}
+    <>
+      {showHistory && <ChangesModal changes={changes} onClose={() => setShowHistory(false)} />}
+      <div className="pending-panel">
+        <div className="pending-panel-header">
+          <h3>Pending changes</h3>
+          {edits.length > 0 && (
+            <button type="button" className="changes-history-btn" onClick={() => setShowHistory(true)}>
+              History
+            </button>
+          )}
         </div>
-      )}
-      <div className="target-rows">
+        {anyDirty && recentEdits.length > 0 && (
+          <div className="change-list">
+            {recentEdits.map((c) => (
+              <div key={c.id} className="change-row">
+                <i className={`ti ${changeIcon(c)}`} aria-hidden />
+                <span className="change-summary" title={c.summary}>{c.summary}</span>
+                <span className="change-when">{timeAgo(c.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="target-rows">
         {targets.map((t) => {
           const behind = behindCount(t)
           return (
@@ -136,7 +187,8 @@ function PendingPanel({
           {pushing === '__all__' ? 'Pushing all…' : 'Push to all targets'}
         </button>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
