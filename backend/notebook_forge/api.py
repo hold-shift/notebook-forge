@@ -37,7 +37,12 @@ from .models import Asset, Change, Group, Snapshot, SyncState, Target
 def _state() -> dict[str, Any]:
     ws = bootstrap_workspace(workspace_path())
     engine = make_engine(ws)
-    return {"workspace": ws, "engine": engine, "factory": make_session_factory(engine)}
+    factory = make_session_factory(engine)
+    with factory() as session:
+        from .homepage_migration import ensure_homepage
+        ensure_homepage(session)
+        session.commit()
+    return {"workspace": ws, "engine": engine, "factory": factory}
 
 
 def _drive_doc_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
