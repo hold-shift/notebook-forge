@@ -2,11 +2,13 @@
  * inline style (footnote reference markers in prose). No @blocknote/xl-*
  * packages — core/react/mantine only (licence guardrail). */
 
-import { BlockNoteSchema, defaultBlockSpecs, defaultStyleSpecs } from '@blocknote/core'
-import { createReactBlockSpec, createReactStyleSpec } from '@blocknote/react'
+import { BlockNoteSchema, defaultBlockSpecs, defaultStyleSpecs, filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
+import { createReactBlockSpec, createReactStyleSpec, getDefaultReactSlashMenuItems } from '@blocknote/react'
 import { api } from '../api'
 import { ForgeImageView, type ForgeImageProps } from './ForgeImageView'
 import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
+import { ForgeDedicationView } from './ForgeDedicationView'
+import { ForgeDocGroupView, type ForgeDocGroupProps } from './ForgeDocGroupView'
 
 export const forgeImageSpec = createReactBlockSpec(
   {
@@ -108,14 +110,65 @@ export const fnRefStyleSpec = createReactStyleSpec(
   },
 )
 
+export const forgeDedicationSpec = createReactBlockSpec(
+  { type: 'forgeDedication', propSchema: { text: { default: '' } }, content: 'none' },
+  {
+    render: ({ block, editor }) => (
+      <ForgeDedicationView
+        text={block.props.text}
+        onChange={(text) => editor.updateBlock(block, { props: { ...block.props, text } })}
+      />
+    ),
+  },
+)
+
+export const forgeDocGroupSpec = createReactBlockSpec(
+  {
+    type: 'forgeDocGroup',
+    propSchema: {
+      groupId: { default: '' },
+      sort: { default: 'manual', values: ['manual', 'date_range', 'title_az', 'last_updated'] },
+      showBlurbs: { default: true },
+      showWordCounts: { default: true },
+      layout: { default: 'list', values: ['list', 'compact_grid'] },
+    },
+    content: 'none',
+  },
+  {
+    render: ({ block, editor }) => (
+      <ForgeDocGroupView
+        props={block.props as ForgeDocGroupProps}
+        onChange={(patch) => editor.updateBlock(block, { props: { ...block.props, ...patch } })}
+      />
+    ),
+  },
+)
+
 export const forgeSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     forgeImage: forgeImageSpec(),
     forgeFootnote: forgeFootnoteSpec(),
+    forgeDedication: forgeDedicationSpec(),
+    forgeDocGroup: forgeDocGroupSpec(),
   },
   styleSpecs: {
     ...defaultStyleSpecs,
     fnRef: fnRefStyleSpec,
   },
 })
+
+/** Slash menu item for inserting a forgeDocGroup block (homepage only). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function docGroupSlashItem(editor: any) {
+  return {
+    title: 'Document group',
+    aliases: ['group'],
+    group: 'Forge',
+    subtext: 'Curated list of library documents',
+    icon: <i className="ti ti-folders" />,
+    onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeDocGroup' }),
+  }
+}
+
+export { filterSuggestionItems, getDefaultReactSlashMenuItems }

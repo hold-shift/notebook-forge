@@ -104,7 +104,7 @@ export const api = {
     fetch(`/api/documents/${slug}/changes`).then((r) => json<ChangeEntry[]>(r)),
   publish: (slug: string, target: string) =>
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean; targets: TargetState[] }>(r),
+      json<{ ok: boolean; targets: TargetState[]; detail?: { warnings?: string[] } }>(r),
     ),
   unpublish: (slug: string, target: string) =>
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'DELETE' }).then((r) =>
@@ -185,11 +185,9 @@ export const api = {
   settings: () =>
     fetch('/api/settings').then((r) =>
       json<{
-        homepage: { title?: string; welcome?: string; dedication?: string }
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
         secrets: Record<string, boolean>
-        targets: { name: string; kind: string }[]
       }>(r),
     ),
   saveSketchSettings: (sketch: { model: string; default_prompt: string; face_gate: string }) =>
@@ -198,16 +196,6 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sketch),
     }).then((r) => json<{ ok: boolean }>(r)),
-  saveHomepage: (homepage: { title: string; welcome: string; dedication: string }) =>
-    fetch('/api/settings/homepage', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(homepage),
-    }).then((r) => json<{ ok: boolean }>(r)),
-  rebuildIndex: (target: string) =>
-    fetch(`/api/rebuild-index/${target}`, { method: 'POST' }).then((r) =>
-      json<{ ok: boolean; detail: { commit: string | null } }>(r),
-    ),
   ingest: (file: File) => {
     const form = new FormData()
     form.append('file', file)

@@ -1060,3 +1060,38 @@ mark.diff-ins {
   border-top: 1px solid var(--color-border-tertiary);
 }
 .inline-error { font-size: 12px; color: #dc2626; }
+
+/* ---- forgeDedication block ---- */
+.forge-dedication-wrap { text-align: center; padding: 1rem 0; }
+.forge-dedication-input {
+  font-family: "Fraunces", serif; font-style: italic; font-size: 1.1rem;
+  color: #7d4226; text-align: center; background: transparent;
+  border: none; border-bottom: 1px dashed #c4a882; outline: none;
+  width: 100%; max-width: 480px;
+}
+.forge-dedication-input::placeholder { color: #c4a882; }
+
+/* ---- forgeDocGroup block ---- */
+.forge-docgroup {
+  border: 1px solid var(--color-border-tertiary); border-radius: 8px;
+  padding: 10px 12px; margin: 4px 0; background: var(--color-background-secondary);
+  user-select: none;
+}
+.forge-docgroup.warn { border-color: #f59e0b; background: #fffbeb; }
+.forge-docgroup-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.forge-docgroup-header select { flex: 1; }
+.forge-docgroup-config {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  flex-wrap: wrap; font-size: 13px;
+}
+.forge-docgroup-config select { font-size: 13px; }
+.forge-docgroup-check { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.forge-docgroup-body { font-size: 13px; }
+.forge-docgroup-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; }
+.forge-docgroup-title { font-weight: 500; }
+.forge-docgroup-years { color: var(--color-text-secondary); font-size: 12px; }
+.forge-docgroup-hint, .forge-docgroup-more { color: var(--color-text-secondary); margin: 4px 0; }
+.forge-docgroup-warn { color: #b45309; }
+.forge-docgroup-footer { font-size: 12px; color: var(--color-text-secondary); margin-top: 6px; border-top: 1px solid var(--color-border-tertiary); padding-top: 4px; }
