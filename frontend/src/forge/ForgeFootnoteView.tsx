@@ -3,6 +3,8 @@
  * carry minimal inline HTML from import (one corpus footnote has <em>);
  * it is edited as raw text here. */
 
+import { AutoTextarea } from './AutoTextarea'
+
 export interface ForgeFootnoteProps {
   marker: string
   text: string
@@ -24,7 +26,7 @@ export function ForgeFootnoteView({ props, onTextChange, onMarkerChange }: Forge
         onChange={(e) => onMarkerChange?.(e.target.value)}
         readOnly={!onMarkerChange}
       />
-      <input
+      <AutoTextarea
         className="forge-footnote-text"
         value={props.text}
         aria-label="Footnote text"

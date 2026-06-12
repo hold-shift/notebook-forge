@@ -21,6 +21,14 @@ from .models import Asset, Document, Setting
 from .sketch import SILHOUETTE_PROMPT, SKETCH_MODEL, SketchGenerator
 from .sketch_gen import GeminiSketchGenerator, make_generator
 
+CAPTION_MODEL = "gemini-2.5-flash"
+CAPTION_PROMPT = (
+    "Write a brief, descriptive caption for this photograph as it would appear "
+    "in a memoir or personal history book. Identify the main subjects, people, "
+    "or scene clearly visible. 5 to 20 words. No period at the end. "
+    "Output the caption text only, nothing else."
+)
+
 
 def sketch_settings(session: Session) -> dict:
     """Operator-controlled generation settings, with the production values
@@ -103,3 +111,59 @@ def generate_sketch_for_block(
         "face_gate": gate.status if gate else "n/a",
         "model": result.model,
     }
+
+
+def generate_caption_for_block(
+    session: Session,
+    workspace: Path,
+    doc: Document,
+    block_id: str,
+) -> str:
+    """Return an AI-generated caption for the named forgeImage block.
+
+    Does not persist anything — the editor updates the block via its normal
+    onChange/autosave flow after receiving the caption text.
+    """
+    block = next(
+        (b for b in doc.blocks if b.get("id") == block_id and b.get("type") == FORGE_IMAGE), None
+    )
+    if block is None:
+        raise LookupError(f"no forgeImage block '{block_id}' in {doc.slug}")
+    original = session.get(Asset, block.get("props", {}).get("assetId", ""))
+    if original is None:
+        raise LookupError("figure has no original asset")
+    image_bytes = asset_path(workspace, original).read_bytes()
+    return _gemini_caption(image_bytes, original.mime or "image/jpeg")
+
+
+def _gemini_caption(image_bytes: bytes, mime: str) -> str:
+    import base64
+
+    import httpx
+
+    from .sketch import get_gemini_key  # noqa: PLC0415
+
+    api_key = get_gemini_key()
+    if not api_key:
+        raise RuntimeError("no Gemini API key configured")
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    body = {
+        "contents": [{
+            "parts": [
+                {"text": CAPTION_PROMPT},
+                {"inline_data": {"mime_type": mime, "data": encoded}},
+            ]
+        }],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 80},
+    }
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{CAPTION_MODEL}:generateContent"
+    )
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(endpoint, headers={"x-goog-api-key": api_key}, json=body)
+    resp.raise_for_status()
+    for candidate in resp.json().get("candidates", []):
+        for part in candidate.get("content", {}).get("parts", []):
+            if "text" in part:
+                return part["text"].strip().strip('"').strip("'").rstrip(".")
+    raise RuntimeError("Gemini returned no caption text")

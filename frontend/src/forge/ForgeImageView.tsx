@@ -3,6 +3,7 @@
  * Kept editor-free so it can be unit-tested directly. */
 
 import { useState } from 'react'
+import { AutoTextarea } from './AutoTextarea'
 
 export type SafeMode = 'sketch' | 'original' | 'omit'
 
@@ -75,54 +76,56 @@ export function ForgeImageView({
         )}
       </div>
       <figcaption>
-        <input
+        <AutoTextarea
           className="forge-caption-input"
           value={caption}
           placeholder="Caption…"
           onChange={(e) => onCaptionChange?.(e.target.value)}
           readOnly={!onCaptionChange}
         />
-        {generate && (
-          <>
-            <button
-              type="button"
-              className="forge-generate"
-              onClick={generate}
-              disabled={generating}
-              title="Generate a NotebookLM-safe sketch via Gemini"
+        <div className="forge-caption-controls">
+          {generate && (
+            <>
+              <button
+                type="button"
+                className="forge-generate"
+                onClick={generate}
+                disabled={generating}
+                title="Generate a NotebookLM-safe sketch via Gemini"
+              >
+                {generating ? 'Generating…' : sketchAssetId ? '↻ Regenerate' : '✏ Generate sketch'}
+              </button>
+              <button
+                type="button"
+                className={`forge-generate ${showPrompt ? 'active' : ''}`}
+                onClick={() => setShowPrompt(!showPrompt)}
+                title="Override the silhouette prompt for this figure only"
+              >
+                ✎ prompt
+              </button>
+            </>
+          )}
+          {onSafeModeChange && (
+            <select
+              className="forge-safemode"
+              value={props.safeMode ?? 'sketch'}
+              title="What the NotebookLM-safe edition embeds for this figure"
+              onChange={(e) => onSafeModeChange(e.target.value as SafeMode)}
             >
-              {generating ? 'Generating…' : sketchAssetId ? '↻ Regenerate' : '✏ Generate sketch'}
-            </button>
-            <button
-              type="button"
-              className={`forge-generate ${showPrompt ? 'active' : ''}`}
-              onClick={() => setShowPrompt(!showPrompt)}
-              title="Override the silhouette prompt for this figure only"
-            >
-              ✎ prompt
-            </button>
-          </>
-        )}
-        {onSafeModeChange && (
-          <select
-            className="forge-safemode"
-            value={props.safeMode ?? 'sketch'}
-            title="What the NotebookLM-safe edition embeds for this figure"
-            onChange={(e) => onSafeModeChange(e.target.value as SafeMode)}
+              <option value="sketch">Safe: sketch</option>
+              <option value="original">Safe: original</option>
+              <option value="omit">Safe: omit</option>
+            </select>
+          )}
+          <button
+            type="button"
+            className={`forge-approval ${approval}`}
+            onClick={onApprovalToggle}
+            title="Toggle sketch approval"
           >
-            <option value="sketch">Safe: sketch</option>
-            <option value="original">Safe: original</option>
-            <option value="omit">Safe: omit</option>
-          </select>
-        )}
-        <button
-          type="button"
-          className={`forge-approval ${approval}`}
-          onClick={onApprovalToggle}
-          title="Toggle sketch approval"
-        >
-          {approval === 'approved' ? '✓ approved' : '○ pending'}
-        </button>
+            {approval === 'approved' ? '✓ approved' : '○ pending'}
+          </button>
+        </div>
       </figcaption>
       {showPrompt && (
         <textarea

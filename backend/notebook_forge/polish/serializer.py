@@ -110,19 +110,29 @@ def _build_preamble(extra_rules: str = "") -> str:
 _PROMPT_PREAMBLE = _build_preamble()
 
 
+def _build_short_id_map(chunk: Chunk) -> dict[str, str]:
+    """Returns {short_id: full_block_id} for all polishable blocks in the chunk.
+
+    Short IDs (b000, b001, …) are used in the prompt instead of full UUIDs
+    so the model has less opportunity to hallucinate a corrupted identifier.
+    """
+    return {f"b{i:03d}": b.id for i, b in enumerate(chunk.blocks)}
+
+
 def serialize_chunk_for_prompt(chunk: Chunk, *, extra_rules: str = "") -> str:
     """Build the full prompt for one chunk (preamble + tagged input lines)."""
+    full_to_short = {b.id: f"b{i:03d}" for i, b in enumerate(chunk.blocks)}
     lines: list[str] = [_build_preamble(extra_rules), ""]
     if chunk.context_block is not None:
-        lines.append(_format_line("CONTEXT", chunk.context_block))
+        lines.append(_format_line("CONTEXT", chunk.context_block, sid="ctx"))
     for b in chunk.blocks:
-        lines.append(_format_line("POLISH ", b))
+        lines.append(_format_line("POLISH ", b, sid=full_to_short[b.id]))
     return "\n".join(lines)
 
 
-def _format_line(tag: str, b: BlockRef) -> str:
+def _format_line(tag: str, b: BlockRef, *, sid: str) -> str:
     safe_text = b.text.replace("\n", " ").replace("\r", " ")
-    return f"{tag} {b.id} {b.kind:2s} :: {safe_text}"
+    return f"{tag} {sid} {b.kind:2s} :: {safe_text}"
 
 
 # ---------------------------------------------------------------- parse-side
@@ -135,17 +145,18 @@ _CODE_FENCE_RE = re.compile(
 def parse_polished_jsonl(raw: str, chunk: Chunk) -> dict[str, str]:
     """Parse the LLM response and return {block_id: polished_text}.
 
-    Validates the structural contract: every POLISH block id appears
-    exactly once, each id's kind is unchanged, no extra ids appear.
-    Context blocks that slip back are silently stripped.
+    The prompt uses short IDs (b000, b001, …) which the model echoes back.
+    They are remapped to full block UUIDs before returning so the rest of
+    the pipeline never sees the short IDs.
 
+    Context blocks that slip back (as 'ctx') are silently stripped.
     Raises SerializationError on structural violations.
     """
     text = _CODE_FENCE_RE.sub(r"\1", raw.strip())
-    expected = {b.id: b for b in chunk.blocks}
-    context_id = chunk.context_block.id if chunk.context_block else None
+    short_map = _build_short_id_map(chunk)  # short_id → full_block_id
+    expected = {b.id: b for b in chunk.blocks}  # full_block_id → BlockRef
 
-    seen: dict[str, str] = {}
+    seen: dict[str, str] = {}  # full_block_id → polished_text
     parse_errors: list[str] = []
 
     decoder = json.JSONDecoder()
@@ -181,18 +192,23 @@ def parse_polished_jsonl(raw: str, chunk: Chunk) -> dict[str, str]:
                 f"id {bid}: text must be string, got {type(polished).__name__}"
             )
             continue
-        if context_id and bid == context_id:
-            continue
-        if bid not in expected:
-            parse_errors.append(f"unexpected id {bid!r}")
-            continue
-        if kind != expected[bid].kind:
-            # Model changed kind — recover by keeping original kind, note it.
+        if bid == "ctx":
+            continue  # context block slipping through — skip silently
+        full_bid = short_map.get(bid)
+        if full_bid is None:
+            # Tolerate model returning the full UUID directly (forward compat)
+            if bid in expected:
+                full_bid = bid
+            else:
+                parse_errors.append(f"unexpected id {bid!r}")
+                continue
+        if kind != expected[full_bid].kind:
+            # Model changed kind — recover by keeping original kind.
             pass
-        if bid in seen:
+        if full_bid in seen:
             parse_errors.append(f"duplicate id {bid!r}")
             continue
-        seen[bid] = polished
+        seen[full_bid] = polished
 
     missing = [bid for bid in expected if bid not in seen]
     if missing:

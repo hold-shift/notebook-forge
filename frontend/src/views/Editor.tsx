@@ -7,6 +7,7 @@ import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
 import { forgeSchema } from '../forge/schema'
+// forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
 import { timeAgo } from './Library'
@@ -199,12 +200,18 @@ function MetaBar({
   editorDoc,
   onPolish,
   polishing,
+  onApproveAll,
+  onGenerateCaptions,
+  generatingCaptions,
 }: {
   doc: DocDetail
   onSaved: (targets: TargetState[]) => void
   editorDoc: () => unknown[]
   onPolish: () => void
   polishing: boolean
+  onApproveAll: () => void
+  onGenerateCaptions: () => Promise<void>
+  generatingCaptions: boolean
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
@@ -355,6 +362,32 @@ function MetaBar({
       >
         {polishing ? 'Polishing…' : '✨ Polish text'}
       </button>
+      {(() => {
+        const blocks = editorDoc() as { type: string; props?: Record<string, unknown> }[]
+        const images = blocks.filter((b) => b.type === 'forgeImage')
+        const pendingCount = images.filter((b) => b.props?.approval === 'pending').length
+        const missingCount = images.filter((b) => !b.props?.caption).length
+        return (
+          <>
+            <button
+              type="button"
+              disabled={pendingCount === 0}
+              title="Mark all pending images as approved"
+              onClick={onApproveAll}
+            >
+              {pendingCount > 0 ? `Approve all (${pendingCount})` : 'Approve all'}
+            </button>
+            <button
+              type="button"
+              disabled={missingCount === 0 || generatingCaptions}
+              title="Generate AI captions for images without one"
+              onClick={() => void onGenerateCaptions()}
+            >
+              {generatingCaptions ? 'Captioning…' : missingCount > 0 ? `Caption images (${missingCount})` : 'Caption images'}
+            </button>
+          </>
+        )
+      })()}
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.
@@ -411,6 +444,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [pushing, setPushing] = useState<string | null>(null)
   const [unpublishing, setUnpublishing] = useState<string | null>(null)
   const [polishing, setPolishing] = useState(false)
+  const [generatingCaptions, setGeneratingCaptions] = useState(false)
   const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
   const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
   const [polishReviewOpen, setPolishReviewOpen] = useState(false)
@@ -604,6 +638,44 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     setPolishRemaining(new Set())
   }, [])
 
+  const onApproveAll = useCallback(() => {
+    type ImageBlock = { id: string; type: string; props: Record<string, unknown>; children: unknown[] }
+    const pending = (editor.document as unknown as ImageBlock[]).filter(
+      (b) => b.type === 'forgeImage' && b.props.approval === 'pending',
+    )
+    if (pending.length === 0) return
+    for (const b of pending) {
+      editor.updateBlock(b.id, {
+        props: { ...b.props, approval: 'approved' },
+      } as PartialBlock<typeof forgeSchema.blockSchema>)
+    }
+    save()
+  }, [editor, save])
+
+  const onGenerateMissingCaptions = useCallback(async () => {
+    type ImageBlock = { id: string; type: string; props: Record<string, unknown>; children: unknown[] }
+    const missing = (editor.document as unknown as ImageBlock[]).filter(
+      (b) => b.type === 'forgeImage' && !b.props.caption,
+    )
+    if (missing.length === 0) return
+    setGeneratingCaptions(true)
+    try {
+      for (const b of missing) {
+        try {
+          const result = await api.generateCaption(doc.slug, b.id)
+          editor.updateBlock(b.id, {
+            props: { ...b.props, caption: result.caption },
+          } as PartialBlock<typeof forgeSchema.blockSchema>)
+        } catch {
+          // skip failed images silently
+        }
+      }
+      save()
+    } finally {
+      setGeneratingCaptions(false)
+    }
+  }, [editor, doc.slug, save])
+
   const jumpToBlock = useCallback((blockId: string) => {
     const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${blockId}"]`)
     if (!el) return
@@ -680,6 +752,9 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
           editorDoc={() => editor.document}
           onPolish={onPolish}
           polishing={polishing}
+          onApproveAll={onApproveAll}
+          onGenerateCaptions={onGenerateMissingCaptions}
+          generatingCaptions={generatingCaptions}
         />
         <div className="editor-body with-outline">
           {outlineOpen ? (

@@ -160,15 +160,15 @@ class TestSerializer:
     def test_well_formed_response_parses(self) -> None:
         chunk = self._make_chunk(2)
         raw = json.dumps([
-            {"id": "uuid-0000", "kind": "p", "text": "Block 0 text here."},
-            {"id": "uuid-0001", "kind": "p", "text": "Block 1 text here."},
+            {"id": "b000", "kind": "p", "text": "Block 0 text here."},
+            {"id": "b001", "kind": "p", "text": "Block 1 text here."},
         ])
         result = parse_polished_jsonl(raw, chunk)
         assert result == {"uuid-0000": "Block 0 text here.", "uuid-0001": "Block 1 text here."}
 
     def test_fenced_code_block_stripped(self) -> None:
         chunk = self._make_chunk(1)
-        raw = '```json\n[{"id":"uuid-0000","kind":"p","text":"Fine."}]\n```'
+        raw = '```json\n[{"id":"b000","kind":"p","text":"Fine."}]\n```'
         result = parse_polished_jsonl(raw, chunk)
         assert result["uuid-0000"] == "Fine."
 
@@ -184,15 +184,15 @@ class TestSerializer:
 
     def test_missing_block_raises(self) -> None:
         chunk = self._make_chunk(2)
-        raw = json.dumps([{"id": "uuid-0000", "kind": "p", "text": "Only first."}])
+        raw = json.dumps([{"id": "b000", "kind": "p", "text": "Only first."}])
         with pytest.raises(SerializationError, match="missing polished output"):
             parse_polished_jsonl(raw, chunk)
 
     def test_unexpected_id_raises(self) -> None:
         chunk = self._make_chunk(1)
         raw = json.dumps([
-            {"id": "uuid-0000", "kind": "p", "text": "Fine."},
-            {"id": "uuid-9999", "kind": "p", "text": "Extra."},
+            {"id": "b000", "kind": "p", "text": "Fine."},
+            {"id": "b999", "kind": "p", "text": "Extra."},
         ])
         with pytest.raises(SerializationError, match="unexpected id"):
             parse_polished_jsonl(raw, chunk)
@@ -202,8 +202,8 @@ class TestSerializer:
                 BlockRef(block_id="main-id", idx=1, kind="p", text="Main.")]
         chunk = Chunk(idx=0, blocks=[refs[1]], context_block=refs[0])
         raw = json.dumps([
-            {"id": "ctx-id", "kind": "p", "text": "Context."},
-            {"id": "main-id", "kind": "p", "text": "Main."},
+            {"id": "ctx", "kind": "p", "text": "Context."},
+            {"id": "b000", "kind": "p", "text": "Main."},
         ])
         result = parse_polished_jsonl(raw, chunk)
         assert "ctx-id" not in result
@@ -214,7 +214,9 @@ class TestSerializer:
         prompt = serialize_chunk_for_prompt(chunk)
         assert "MECHANICAL polish" in prompt
         assert "POLISH " in prompt
-        assert "uuid-0000" in prompt
+        assert "b000" in prompt
+        assert "b001" in prompt
+        assert "uuid-0000" not in prompt  # full UUIDs must not appear in prompt
 
     def test_extra_rules_appear_in_prompt(self) -> None:
         chunk = self._make_chunk(1)

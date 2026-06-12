@@ -336,6 +336,24 @@ def generate_sketch(
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 
 
+@app.post("/api/documents/{slug}/figures/{block_id}/generate-caption")
+def generate_caption(
+    slug: str,
+    block_id: str,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    from .sketch_service import generate_caption_for_block
+
+    doc = _get_doc(session, slug)
+    try:
+        caption = generate_caption_for_block(session, _state()["workspace"], doc, block_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"caption": caption}
+
+
 @app.post("/api/documents/{slug}/polish")
 def polish(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     """Run the mechanical LLM polish pass and return the report.

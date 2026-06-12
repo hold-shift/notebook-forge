@@ -487,8 +487,13 @@ def _strip_emphasis(text: str) -> str:
 
 def _as_bold_heading(entry: dict) -> dict | None:
     """If `entry` is a paragraph whose ENTIRE text is a single bold span and
-    short enough to read as a heading, return an {kind:'h2', text} dict with
-    the ** markers stripped. Otherwise None.
+    short enough to read as a heading, return an {kind, text} dict with the
+    ** markers stripped. Otherwise None.
+
+    Heading level is inferred from capitalisation — a convention common in
+    memoir-style Word documents where authors style section heads by hand:
+      - All alphabetic characters UPPERCASE → h2 (major section, e.g. "KAPOOKA")
+      - Mixed case → h3 (subsection, e.g. "Off to Kapooka")
 
     Rejects:
       - paragraphs with bold only on part of the text (prose with an
@@ -514,7 +519,9 @@ def _as_bold_heading(entry: dict) -> dict | None:
     inner = inner.replace("\\", "").strip()
     if not inner:
         return None
-    return {"kind": "h2", "text": inner}
+    alpha = [c for c in inner if c.isalpha()]
+    kind = "h2" if alpha and all(c.isupper() for c in alpha) else "h3"
+    return {"kind": kind, "text": inner}
 
 
 def _is_prose_block(entry: dict) -> bool:

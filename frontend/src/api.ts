@@ -92,6 +92,10 @@ export const api = {
     fetch(`/api/documents/${slug}`, { method: 'DELETE' }).then((r) =>
       json<{ ok: boolean; deleted: string }>(r),
     ),
+  generateCaption: (slug: string, blockId: string) =>
+    fetch(`/api/documents/${slug}/figures/${blockId}/generate-caption`, { method: 'POST' }).then(
+      (r) => json<{ caption: string }>(r),
+    ),
   generateSketch: (slug: string, blockId: string, prompt?: string, force = false) =>
     fetch(`/api/documents/${slug}/figures/${blockId}/generate-sketch`, {
       method: 'POST',
