@@ -63,6 +63,7 @@ class DocRoundtrip:
     # was published with an older template revision.
     content_similarity: float = 0.0
     content_diffs: int = 0
+    narrative_count: int = 0  # number of forgeNarrative blocks in stored doc
 
 
 def discover_slugs(repo_root: Path, subdir: str = "rfs") -> list[str]:
@@ -312,6 +313,7 @@ def _article_only(html: str) -> str:
 def roundtrip_document(
     session: Session, repo_root: Path, doc, subdir: str = "rfs"  # noqa: ANN001
 ) -> DocRoundtrip:
+    from .blocks import FORGE_NARRATIVE
     from .narrative import effective_narrative_label
 
     published = (repo_root / subdir / f"{doc.slug}.html").read_text()
@@ -319,12 +321,14 @@ def roundtrip_document(
     rendered = render_document(meta, doc.blocks, db_image_src(session, doc))
     result = compare(published, rendered)
     content = compare(_article_only(published), _article_only(rendered))
+    narrative_count = sum(1 for b in doc.blocks if b.get("type") == FORGE_NARRATIVE)
     return DocRoundtrip(
         slug=doc.slug,
         similarity=result.similarity,
         result=result,
         content_similarity=content.similarity,
         content_diffs=len(content.diffs),
+        narrative_count=narrative_count,
     )
 
 
@@ -372,6 +376,14 @@ def write_roundtrip_report(rows: list[DocRoundtrip], path: Path) -> None:
             f"| {r.result.total_nodes} | {len(r.result.diffs)} | {ok} |"
         )
     lines.append("")
+    for r in rows:
+        if r.narrative_count:
+            lines += [
+                f"**Note ({r.slug}):** contains {r.narrative_count} narrative panel(s) — "
+                "published page predates the feature; divergence on those paragraphs is "
+                "intentional until republished.",
+                "",
+            ]
     for r in rows:
         if not r.result.diffs:
             continue

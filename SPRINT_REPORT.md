@@ -228,3 +228,53 @@ Plan: `docs/PLAN_groups_and_homepage.md` (M1–M7). Branch: `claude/confident-pa
 - **forgeDocGroup block**: insert via the slash menu (`/document group`) inside the homepage editor. The block's live preview updates on window focus (refetch from API).
 - **Dirty state**: the homepage goes dirty whenever any member document's title, year-display, standfirst, description, or word-count changes. Changing only a member's body text does *not* mark the homepage dirty (by design — word count is stored separately and only updates on publish or explicit recalculation).
 - **sort='manual' vs date_range**: the group fingerprint is computed in the configured sort order. Reordering positions only marks the homepage dirty when `sort='manual'`; with `sort='date_range'` the order is derived from the slug so position changes are ignored.
+
+---
+
+# Sprint 4 addendum — 12–13 June 2026 (autonomous)
+
+Plan: `docs/PLAN_narrative_blocks.md` (M1–M8). Branch: `claude/zealous-hoover-19851d`.
+
+## What shipped
+
+1. **M1 — `forgeNarrative` block schema + renderer** — new block type `forgeNarrative` (content: inline, props: {}) registered in `blocks.py`. Renderer merges consecutive blocks into one `div.narrative` panel (warm tinted, 3 px amber border), split by forgeFootnote. Label system (workspace Setting + per-doc `meta` key-presence tri-state, D9). `effective_content_hash` folds `__narrative_label__` iff doc has narrative blocks (D11). Template CSS committed. 22 backend tests.
+
+2. **M2 — Contrast fixture** — `test_narrative_footnote_contrast` writes `reports/narrative_contrast.html` on every `make check` run; asserts narrative vs footnote differ on tint, border, and marker. Committed to `reports/`.
+
+3. **M3 — Parser round-trip** — `parse_page` / `parse_fragment` recognise `div.narrative` → one `forgeNarrative` block per `<p>` inside the merged panel (D7: merged in HTML, split back on parse). `test_renderer.test_fragment_round_trip_is_idempotent` extended to cover the narrative fixture.
+
+4. **M4 — Ingest post-pass (Rule B)** — `narrative.convert_full_italic_paragraphs` called from `ingestion._extract_blocks` (DOCX/PDF/re-ingest) and `importer.import_document` (house-style HTML). Conversions flagged when < 12 words (D3). Coverage notes include flag line for short passages. 4 ingestion + 2 importer tests.
+
+5. **M5 — Editor block, slash menu, SideMenu convert item** — `forgeNarrativeView.tsx`, `narrative.ts` (`stripItalic`/`addItalic`), `schema.tsx` registration + `narrativeSlashItem`, `Editor.tsx` `ConvertNarrativeItem` side-menu, CSS tokens `--narrative-bg`/`--narrative-border`. Verified live in preview browser: block inserts, warm tinted panel renders, autosave fires, zero console errors. 3 frontend test files, 16 tests.
+
+6. **M6 — Safe edition, homepage, index template, polish** — `safe_edition.py` renders narrative as unmarked `>` blockquote; consecutive blocks merged with `>` separator (D8). `homepage.py` emits narrative `body_entries` merged by `_merge_narrative`. `index.html.j2` renders `div.narrative` panels. `textmap.py` `POLISHABLE` includes `forgeNarrative` (D16). 5 new backend tests.
+
+7. **M7 — Migration CLI** — `narrative_migration.py`: `scan()`, `already_applied()`, `apply()` (snapshot-first, marker-guarded), `write_report()`. CLI `narrative-migrate` subcommand with `--dry-run` / `--apply` / `--force` / `--workspace` / `--reports`. Dry-run + apply verified against a **copy** of the workspace (real workspace untouched — applying is the operator's call). 11 backend tests.
+
+8. **M8 — Round-trip harness, edge cases, docs** — `test_narrative_roundtrip_idempotent` (D15 self-idempotence gate). `DocRoundtrip.narrative_count` field; per-doc note in roundtrip report when published page predates migration. Edge-case sweep: empty italic parse-fragment, list-item end-to-end, italic paragraph reversibility, narrative-first-block lead drop-cap, fnRef + panel split, FTS `plain_text`. README "Narrative blocks" section. SPRINT_REPORT addendum (this entry).
+
+## Gate results
+
+| Gate | Tests | Status |
+|---|---|---|
+| M1 | 22 backend | ✅ |
+| M2 | contrast fixture written | ✅ |
+| M3 | fragment round-trip extended | ✅ |
+| M4 | 6 backend | ✅ |
+| M5 | 16 frontend, manual preview verified | ✅ |
+| M6 | 5 backend | ✅ |
+| M7 | 11 backend, CLI dry-run + apply verified | ✅ |
+| M8 | 262 backend / 62 frontend total | ✅ |
+
+## Operator notes
+
+1. **Migration (when ready):** run `narrative-migrate --dry-run` first (safe, no writes) and review `reports/narrative_migration.md`. Expect ~12 conversions in `1934-1945_junior` and ~1 in `1940-1955_the-year-between`. Flagged entries (< 12 words) are likely short pseudo-headings or introductory lines — check the editor, then either keep as narrative or use the drag-handle "Convert to paragraph" remedy.
+
+2. **Apply:** `uv run python -m notebook_forge.cli narrative-migrate --apply --reports reports/`. The two affected memoirs will show dirty for github-pages and drive targets — that is the feature working; push at your discretion.
+
+3. **Re-run guard:** `--apply` is blocked after a first apply. Use `--force` only if you want to re-migrate after deliberate rollbacks. The marker is the Setting row `narrative_migration` in the DB.
+
+4. **Workspace narrative label:** Settings → Narrative label. Optional. Set "From the author" (or similar) to prefix every narrative panel in rendered HTML. Change marks only narrative-bearing docs dirty (D11).
+
+5. **Round-trip report after migration:** once applied, `roundtrip_document` will note "contains N narrative panel(s) — published page predates the feature; divergence on those paragraphs is intentional until republished." This is expected — the gate stays at ≥99% on the non-narrative text; the divergence disappears once the memoirs are republished.
+

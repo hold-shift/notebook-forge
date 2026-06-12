@@ -281,3 +281,99 @@ def test_label_doc_meta_override() -> None:
     session = _mock_session("From the author")
     doc = _mock_doc({"narrative_label": "Reflection"})
     assert effective_narrative_label(session, doc) == "Reflection"
+
+
+# ── M8 edge-case sweep ──
+
+def test_empty_italic_paragraph_parse_fragment_no_convert() -> None:
+    """Empty italic paragraph from HTML: parses to paragraph, never converts."""
+    from notebook_forge.parser import parse_fragment
+
+    blocks, _ = parse_fragment("<p><em> </em></p>")
+    converted, conversions = convert_full_italic_paragraphs(blocks)
+    assert len(conversions) == 0
+    assert all(b["type"] != FORGE_NARRATIVE for b in converted)
+
+
+def test_italic_list_item_not_converted_end_to_end() -> None:
+    """Italic text inside list item: convert pass is a no-op end-to-end."""
+    from notebook_forge.parser import parse_fragment
+
+    blocks, _ = parse_fragment("<ul><li><em>An italic list item passage.</em></li></ul>")
+    converted, conversions = convert_full_italic_paragraphs(blocks)
+    assert len(conversions) == 0
+    assert all(b["type"] != FORGE_NARRATIVE for b in converted)
+
+
+def test_italic_paragraph_converts_and_add_italic_restores() -> None:
+    """Italic paragraph converts to narrative; add_italic restores italic on all word runs."""
+    content = [_italic("A reflective italic passage long enough to convert easily.")]
+    block = _para(content)
+    new_blocks, conversions = convert_full_italic_paragraphs([block])
+    assert len(conversions) == 1
+    assert new_blocks[0]["type"] == FORGE_NARRATIVE
+
+    restored_content = add_italic(new_blocks[0]["content"])
+    for run in restored_content:
+        if run["type"] == "text" and not run["styles"].get("fnRef"):
+            assert run["styles"].get("italic") is True
+
+
+def test_narrative_first_block_no_lead_first_para_gets_lead() -> None:
+    """Narrative as first block: no lead drop-cap on the panel; first paragraph gets lead."""
+    from bs4 import BeautifulSoup
+
+    from notebook_forge.renderer import render_document
+
+    blocks = [
+        _narrative([text_run("A reflective opening passage.")]),
+        _para([text_run("The ordinary prose begins here after the narrative.")]),
+    ]
+    html = render_document({"title": "T", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+
+    # Narrative panel has no class 'lead'
+    narrative_div = soup.find("div", class_="narrative")
+    assert narrative_div is not None
+    assert "lead" not in (narrative_div.get("class") or [])
+
+    # First paragraph gets the lead class
+    lead_p = soup.find("p", class_="lead")
+    assert lead_p is not None
+    assert "ordinary prose" in lead_p.get_text()
+
+
+def test_fnref_in_narrative_renders_sup_and_splits_panel() -> None:
+    """fnRef inside narrative paragraph: sup.fn-ref inside panel; adjacent footnote splits panel."""
+    from bs4 import BeautifulSoup
+
+    from notebook_forge.blocks import FORGE_FOOTNOTE
+    from notebook_forge.renderer import render_document
+
+    blocks = [
+        _narrative([text_run("Before the note."), _fnref("1"), text_run(" After.")]),
+        make_block(FORGE_FOOTNOTE, {"marker": "1", "text": "The footnote text."}),
+        _narrative([text_run("Second narrative paragraph after the footnote.")]),
+    ]
+    html = render_document({"title": "T", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+
+    # Two panels (footnote splits them)
+    panels = soup.find_all("div", class_="narrative")
+    assert len(panels) == 2
+
+    # fn-ref sup inside the first panel
+    sup = panels[0].find("sup", class_="fn-ref")
+    assert sup is not None
+
+
+def test_narrative_plain_text_indexed_for_fts() -> None:
+    """Narrative text appears in plain_text() output (FTS generic branch)."""
+    from notebook_forge.blocks import plain_text
+
+    blocks = [
+        _narrative([text_run("A unique reflective canticle appearing in narrative.")]),
+        _para([text_run("Ordinary prose paragraph.")]),
+    ]
+    result = plain_text(blocks)
+    assert "unique reflective canticle" in result
