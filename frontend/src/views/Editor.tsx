@@ -297,8 +297,8 @@ function MetaBar({
         Standfirst
         <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
       </label>
-      <label title="Contents nav on the published HTML page. Auto = on when the document has more than 15 headings. Always rebuilt from current headings at publish.">
-        Contents
+      <label className="meta-toc" title="Table of contents on the published HTML page. Auto = on when the document has more than 15 headings. Always rebuilt from current headings at publish.">
+        ToC
         <select value={toc} onChange={(e) => setToc(e.target.value)}>
           <option value="auto">Auto</option>
           <option value="on">On</option>
