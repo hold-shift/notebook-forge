@@ -169,6 +169,19 @@ pending-changes panel with per-target behind-counts and push-all;
 expand/collapse, click-to-scroll with flash, scrollspy, level-skip lint
 mirroring the generated ToC, hide-to-rail toggle).
 
+7. **LLM polish** — Gemini Flash mechanical cleanup (typography, whitespace,
+   obvious spelling typos). Backend: `polish/` package with textmap
+   round-trip, heading-aware chunker, tagged-text serializer, per-block
+   fidelity guard (word-diff + footnote-marker hard check), Gemini REST
+   runner (4-worker ThreadPoolExecutor, 1 retry). Service takes a snapshot
+   before every run; auto-applies typography-only fixes; quarantines
+   word-level changes for per-block Apply/Skip review in the editor side
+   panel. 38 new backend tests (all via MockRunner/AlwaysFailRunner — no
+   real Gemini calls). Frontend: `PolishReview` component, `✨ Polish text`
+   button in the editor MetaBar, polish settings section (model +
+   extra-rules) in Settings. `make check` = 109 backend + 20 frontend tests.
+   Out of scope: caption/footnote-body polish, Anthropic provider, async
+   streaming, heading-nesting validators.
+
 Open items: add the six remaining Drive Docs as NotebookLM sources
-(manual); LLM polish port (decision pending); themes, first-run wizard,
-repo scan/sync remain unbuilt.
+(manual); themes, first-run wizard, repo scan/sync remain unbuilt.

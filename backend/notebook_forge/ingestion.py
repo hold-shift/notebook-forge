@@ -13,7 +13,6 @@ editor before first publish (the hard-gate spirit of CP1, minus the modal).
 
 from __future__ import annotations
 
-import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -23,47 +22,14 @@ from sqlalchemy.orm import Session
 
 from . import services
 from .assets import ingest_file
-from .blocks import FORGE_IMAGE, make_block, text_run
+from .blocks import FORGE_IMAGE, make_block
 from .ingest_vendor import detect_year_range, extract_docx, extract_pdf, normalise
-from .ingest_vendor.footnotes import MARKER_RE, referenced_numbers
+from .ingest_vendor.footnotes import referenced_numbers
+from .polish.textmap import _md_inline_runs  # shared parser (canonical home)
 
 DEFAULT_AUTHOR = "R.F. Skitch"
 DEFAULT_OVERLINE = "The Skitch Family Archive · Family History"
 PAGES_BASE = "https://chris-skitch.github.io/family-history"
-
-_EMPH_RE = re.compile(r"(\*\*\*|\*\*|\*)(.+?)\1")
-
-
-def _md_inline_runs(text: str) -> list[dict[str, Any]]:
-    """Pandoc-flavoured inline text → runs: ***both*** / **bold** / *italic*
-    and canonical `[^N]` footnote markers → fnRef runs."""
-    runs: list[dict[str, Any]] = []
-
-    def append_text(segment: str) -> None:
-        pos = 0
-        for m in _EMPH_RE.finditer(segment):
-            if m.start() > pos:
-                runs.append(text_run(segment[pos : m.start()]))
-            marks = m.group(1)
-            styles: dict[str, Any] = {}
-            if "**" in marks:
-                styles["bold"] = True
-            if marks in ("*", "***"):
-                styles["italic"] = True
-            runs.append(text_run(m.group(2), styles))
-            pos = m.end()
-        if pos < len(segment):
-            runs.append(text_run(segment[pos:]))
-
-    pos = 0
-    for m in MARKER_RE.finditer(text):
-        if m.start() > pos:
-            append_text(text[pos : m.start()])
-        runs.append(text_run(m.group(1), {"fnRef": True}))
-        pos = m.end()
-    if pos < len(text):
-        append_text(text[pos:])
-    return [r for r in runs if r["text"]]
 
 
 def draft_to_blocks(

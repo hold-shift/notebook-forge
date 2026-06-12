@@ -292,6 +292,24 @@ def generate_sketch(
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 
 
+@app.post("/api/documents/{slug}/polish")
+def polish(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Run the mechanical LLM polish pass and return the report.
+
+    Typography-only fixes are applied automatically; word-level changes are
+    returned as flagged blocks for per-block review in the editor.
+    A snapshot is taken first so Restore can undo the whole pass.
+    """
+    from .polish.service import polish_document
+
+    doc = _get_doc(session, slug)
+    try:
+        detail = polish_document(session, _state()["workspace"], doc)
+    except RuntimeError as exc:  # no key configured
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, **detail, "targets": _target_states(session, doc)}
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)
@@ -326,6 +344,7 @@ class HomepageBody(BaseModel):
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .models import Setting
+    from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
     from .secrets_store import get_secret
     from .sketch_service import sketch_settings
@@ -334,6 +353,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     return {
         "homepage": homepage.value if homepage else {},
         "sketch": sketch_settings(session),
+        "polish": polish_settings(session),
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -385,6 +405,26 @@ def save_sketch_settings(
     else:
         setting.value = value
     return {"ok": True, "sketch": value}
+
+
+class PolishSettingsBody(BaseModel):
+    model: str
+    extra_rules: str = ""
+
+
+@app.put("/api/settings/polish")
+def save_polish_settings(
+    body: PolishSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    value = {"model": body.model.strip(), "extra_rules": body.extra_rules}
+    setting = session.get(Setting, "polish")
+    if setting is None:
+        session.add(Setting(key="polish", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "polish": value}
 
 
 @app.post("/api/rebuild-index/{target_name}")

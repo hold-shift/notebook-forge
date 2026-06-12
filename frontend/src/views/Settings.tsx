@@ -13,6 +13,9 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [prompt, setPrompt] = useState('')
   const [faceGate, setFaceGate] = useState('block')
   const [sketchState, setSketchState] = useState('')
+  const [polishModel, setPolishModel] = useState('')
+  const [polishRules, setPolishRules] = useState('')
+  const [polishState, setPolishState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -24,8 +27,18 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setModel(s.sketch.model)
       setPrompt(s.sketch.default_prompt)
       setFaceGate(s.sketch.face_gate)
+      setPolishModel(s.polish.model)
+      setPolishRules(s.polish.extra_rules)
     })
   }, [])
+
+  const savePolish = () => {
+    setPolishState('saving')
+    api.savePolishSettings({ model: polishModel, extra_rules: polishRules }).then(
+      () => setPolishState('saved'),
+      (e) => setPolishState(`save failed: ${e}`),
+    )
+  }
 
   const saveSketch = () => {
     setSketchState('saving')
@@ -129,6 +142,27 @@ export function Settings({ onBack }: { onBack: () => void }) {
           Save sketch settings
         </button>
         <span className="muted">{sketchState}</span>
+      </div>
+
+      <h3>Text polish</h3>
+      <p className="muted">
+        Gemini Flash mechanical cleanup — typography, whitespace, and obvious spelling typos. Run
+        via ✨ Polish text in the editor. Flags any word-level change for review; never auto-applies
+        prose edits.
+      </p>
+      <label>
+        Gemini text model (default: <code>gemini-2.5-flash</code>)
+        <input value={polishModel} onChange={(e) => setPolishModel(e.target.value)} />
+      </label>
+      <label>
+        Extra rules (appended after the built-in scope rules; blank = defaults only)
+        <textarea rows={4} value={polishRules} onChange={(e) => setPolishRules(e.target.value)} />
+      </label>
+      <div className="settings-actions">
+        <button type="button" onClick={savePolish}>
+          Save polish settings
+        </button>
+        <span className="muted">{polishState}</span>
       </div>
 
       <h3>Connections</h3>

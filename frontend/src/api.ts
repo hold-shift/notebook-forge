@@ -31,6 +31,23 @@ export interface DocDetail {
   targets: TargetState[]
 }
 
+export interface FlaggedBlock {
+  block_id: string
+  original: string
+  polished: string
+  summary: string
+  polished_content: unknown[]
+}
+
+export interface PolishReport {
+  blocks_polished: number
+  blocks_unchanged: number
+  flagged: FlaggedBlock[]
+  failed_chunks: string[]
+  model: string
+  targets: TargetState[]
+}
+
 export interface ChangeEntry {
   id: number
   kind: string
@@ -96,11 +113,22 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ snapshot_id: snapshotId }),
     }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  polish: (slug: string) =>
+    fetch(`/api/documents/${slug}/polish`, { method: 'POST' }).then((r) =>
+      json<PolishReport>(r),
+    ),
+  savePolishSettings: (polish: { model: string; extra_rules: string }) =>
+    fetch('/api/settings/polish', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(polish),
+    }).then((r) => json<{ ok: boolean }>(r)),
   settings: () =>
     fetch('/api/settings').then((r) =>
       json<{
         homepage: { title?: string; welcome?: string; dedication?: string }
         sketch: { model: string; default_prompt: string; face_gate: string }
+        polish: { model: string; extra_rules: string }
         secrets: Record<string, boolean>
         targets: { name: string; kind: string }[]
       }>(r),

@@ -5,11 +5,12 @@ import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
-import { api, type DocDetail, type TargetState } from '../api'
+import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
 import { forgeSchema } from '../forge/schema'
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
 import { timeAgo } from './Library'
+import { PolishReview } from './PolishReview'
 
 const AUTOSAVE_MS = 1200
 
@@ -128,10 +129,14 @@ function MetaBar({
   doc,
   onSaved,
   editorDoc,
+  onPolish,
+  polishing,
 }: {
   doc: DocDetail
   onSaved: (targets: TargetState[]) => void
   editorDoc: () => unknown[]
+  onPolish: () => void
+  polishing: boolean
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
@@ -230,6 +235,14 @@ function MetaBar({
           ⟳ Re-ingest from source
         </button>
       )}
+      <button
+        type="button"
+        disabled={polishing || state === 'saving'}
+        title="Run Gemini mechanical cleanup (typography, whitespace, obvious typos). A snapshot is taken first."
+        onClick={onPolish}
+      >
+        {polishing ? 'Polishing…' : '✨ Polish text'}
+      </button>
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.
@@ -284,6 +297,9 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pushing, setPushing] = useState<string | null>(null)
+  const [polishing, setPolishing] = useState(false)
+  const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
+  const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [outlineVersion, setOutlineVersion] = useState(0)
   const [activeHeading, setActiveHeading] = useState<string | null>(null)
@@ -379,6 +395,39 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     [doc.slug, targets],
   )
 
+  const onPolish = useCallback(() => {
+    if (
+      !confirm(
+        'Polish text with Gemini?\n\n' +
+          'Runs a mechanical Gemini cleanup — typography, whitespace, and obvious spelling typos. ' +
+          'Fixes that only change punctuation/spacing are applied automatically. ' +
+          'Anything that changes words is held for your review.\n\n' +
+          'A snapshot is taken first so Restore can undo the whole pass.',
+      )
+    )
+      return
+    setPolishing(true)
+    api.polish(doc.slug).then(
+      (report) => {
+        setPolishing(false)
+        setTargets(report.targets)
+        if (report.flagged.length === 0) {
+          alert(
+            `Polish complete: ${report.blocks_polished} block${report.blocks_polished !== 1 ? 's' : ''} cleaned, nothing to review.`,
+          )
+          window.location.reload()
+        } else {
+          setPolishReport(report)
+          setPolishRemaining(new Set(report.flagged.map((f) => f.block_id)))
+        }
+      },
+      (e) => {
+        setPolishing(false)
+        alert(`Polish failed: ${e}`)
+      },
+    )
+  }, [doc.slug])
+
   return (
     <div className="shell">
       <header className="editor-header">
@@ -412,7 +461,13 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         </span>
       </header>
       <div className="editor-wrap">
-        <MetaBar doc={doc} onSaved={setTargets} editorDoc={() => editor.document} />
+        <MetaBar
+          doc={doc}
+          onSaved={setTargets}
+          editorDoc={() => editor.document}
+          onPolish={onPolish}
+          polishing={polishing}
+        />
         <div className="editor-body with-outline">
           {outlineOpen ? (
             <OutlineNavigator nodes={outline} activeId={activeHeading} onSelect={selectHeading} />
@@ -432,8 +487,37 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             <BlockNoteView editor={editor} onChange={onChange} theme="light" />
           </div>
           <div className="editor-side">
-            <PendingPanel slug={doc.slug} targets={targets} onPush={onPush} pushing={pushing} />
-            <SnapshotsPanel slug={doc.slug} />
+            {polishReport ? (
+              <PolishReview
+                report={polishReport}
+                remaining={polishRemaining}
+                onApply={(blockId, content) => {
+                  editor.updateBlock(blockId, { content: content as PartialBlock['content'] })
+                  setPolishRemaining((prev) => {
+                    const next = new Set(prev)
+                    next.delete(blockId)
+                    return next
+                  })
+                }}
+                onSkip={(blockId) =>
+                  setPolishRemaining((prev) => {
+                    const next = new Set(prev)
+                    next.delete(blockId)
+                    return next
+                  })
+                }
+                onDone={() => {
+                  setPolishReport(null)
+                  setPolishRemaining(new Set())
+                  window.location.reload()
+                }}
+              />
+            ) : (
+              <>
+                <PendingPanel slug={doc.slug} targets={targets} onPush={onPush} pushing={pushing} />
+                <SnapshotsPanel slug={doc.slug} />
+              </>
+            )}
           </div>
         </div>
       </div>
