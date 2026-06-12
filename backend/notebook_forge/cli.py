@@ -91,7 +91,7 @@ def _cmd_reimport(args: argparse.Namespace) -> int:
     from .reimport import (
         EXCLUDED_STEMS,
         dry_run,
-        find_memoir_manifest,
+        find_manifest_for_doc,
         list_manifest_slugs,
         reimport_document,
     )
@@ -146,8 +146,7 @@ def _cmd_reimport(args: argparse.Namespace) -> int:
 
     with factory() as session:
         if args.all:
-            manifest_slugs = set(list_manifest_slugs())
-            docs = [d for d in services.list_documents(session) if d.slug in manifest_slugs]
+            docs = services.list_documents(session)
         else:
             if not args.slugs:
                 print("ERROR: specify slug(s) or --all", file=sys.stderr)
@@ -163,7 +162,7 @@ def _cmd_reimport(args: argparse.Namespace) -> int:
         any_error = False
         for doc in docs:
             try:
-                manifest = find_memoir_manifest(doc.slug)
+                manifest = find_manifest_for_doc(doc)
                 result = reimport_document(session, ws, doc, manifest=manifest)
                 session.commit()
                 print(

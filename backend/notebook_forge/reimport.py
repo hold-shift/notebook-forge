@@ -139,6 +139,39 @@ def find_memoir_manifest(
     )
 
 
+def find_manifest_for_doc(
+    doc: Document,
+    *,
+    mf_root: Path = MF_ROOT,
+) -> ManifestInfo:
+    """Find a manifest for a library doc: slug match first, source_file fallback.
+
+    Handles docs ingested via '+ Add document' whose auto-detected slug
+    differs from the MemoirForge stem (e.g. date detection chose a different
+    start year).
+    """
+    try:
+        return find_memoir_manifest(doc.slug, mf_root=mf_root)
+    except LookupError:
+        pass
+
+    source_file = (doc.meta or {}).get("source_file", "")
+    if source_file:
+        out_dir = mf_root / "out"
+        for p in sorted(out_dir.glob("*.manifest.json")):
+            data = json.loads(p.read_text(encoding="utf-8"))
+            stem = data.get("stem", p.stem)
+            if stem in EXCLUDED_STEMS:
+                continue
+            if data.get("source_file", "") == source_file:
+                return _parse_manifest(p, mf_root=mf_root)
+
+    raise LookupError(
+        f"'{doc.slug}': no MemoirForge manifest found — "
+        f"tried slug match and source_file='{source_file}'"
+    )
+
+
 def list_manifest_slugs(*, mf_root: Path = MF_ROOT) -> list[str]:
     """All keeper stems from MemoirForge/out/ (excluded stems omitted)."""
     out_dir = mf_root / "out"
