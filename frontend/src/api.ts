@@ -16,6 +16,10 @@ export interface DocSummary {
   year_display: string
   standfirst: string
   updated_at: string | null
+  source_type: string
+  figures: number
+  sketched: number
+  pending_review: number
   targets: TargetState[]
 }
 

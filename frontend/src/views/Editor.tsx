@@ -244,11 +244,12 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   )
 
   return (
-    <div className="editor-screen">
+    <div className="shell">
       <header className="editor-header">
-        <button type="button" onClick={onBack}>
-          ← Library
+        <button type="button" className="crumb" onClick={onBack}>
+          Library
         </button>
+        <i className="ti ti-chevron-right crumb-sep" aria-hidden />
         <div className="editor-titles">
           <h2>{doc.title}</h2>
           <span className="muted">{String(doc.meta.year_display ?? '')}</span>
@@ -263,14 +264,16 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 : ''}
         </span>
       </header>
-      <MetaBar doc={doc} onSaved={setTargets} editorDoc={() => editor.document} />
-      <div className="editor-body">
-        <div className="editor-canvas">
-          <BlockNoteView editor={editor} onChange={onChange} theme="light" />
-        </div>
-        <div className="editor-side">
-          <PendingPanel targets={targets} onPush={onPush} pushing={pushing} />
-          <SnapshotsPanel slug={doc.slug} />
+      <div className="editor-wrap">
+        <MetaBar doc={doc} onSaved={setTargets} editorDoc={() => editor.document} />
+        <div className="editor-body">
+          <div className="editor-canvas">
+            <BlockNoteView editor={editor} onChange={onChange} theme="light" />
+          </div>
+          <div className="editor-side">
+            <PendingPanel targets={targets} onPush={onPush} pushing={pushing} />
+            <SnapshotsPanel slug={doc.slug} />
+          </div>
         </div>
       </div>
     </div>

@@ -108,17 +108,30 @@ def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN0
 @app.get("/api/documents")
 def list_documents(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     docs = services.list_documents(session)
-    return [
-        {
-            "slug": d.slug,
-            "title": d.title,
-            "year_display": d.meta.get("year_display", ""),
-            "standfirst": d.meta.get("standfirst", ""),
-            "updated_at": d.updated_at.isoformat() if d.updated_at else None,
-            "targets": _target_states(session, d),
-        }
-        for d in docs
-    ]
+    out = []
+    for d in docs:
+        figs = [b for b in d.blocks if b.get("type") == "forgeImage"]
+        source_file = d.meta.get("source_file", "")
+        source_type = Path(source_file).suffix.lstrip(".").upper() if source_file else "HTML"
+        out.append(
+            {
+                "slug": d.slug,
+                "title": d.title,
+                "year_display": d.meta.get("year_display", ""),
+                "standfirst": d.meta.get("standfirst", ""),
+                "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+                "source_type": source_type or "HTML",
+                "figures": len(figs),
+                "sketched": sum(
+                    1 for b in figs if b.get("props", {}).get("sketchAssetId")
+                ),
+                "pending_review": sum(
+                    1 for b in figs if b.get("props", {}).get("approval") == "pending"
+                ),
+                "targets": _target_states(session, d),
+            }
+        )
+    return out
 
 
 def _get_doc(session: Session, slug: str):  # noqa: ANN202
