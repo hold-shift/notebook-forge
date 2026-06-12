@@ -1026,21 +1026,40 @@ mark.diff-ins {
 .group-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 10px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--color-border-tertiary);
 }
-.group-row.confirm-row { flex-wrap: wrap; gap: 8px; }
+.group-row.confirm-row { flex-wrap: wrap; gap: 8px; align-items: center; }
+.group-row-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.group-name-label {
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .group-name-input {
   flex: 1;
   border: 1px solid var(--color-border-secondary);
   border-radius: var(--border-radius-sm);
-  padding: 3px 6px;
-  font-size: 13px;
+  padding: 3px 7px;
+  font-size: 14px;
   background: var(--color-background-primary);
   color: var(--color-text-primary);
+  min-width: 0;
 }
-.group-member-count { font-size: 12px; }
+.group-name-input:focus { outline: none; border-color: var(--color-accent, #5a7d5a); box-shadow: 0 0 0 2px rgba(90,125,90,0.15); }
+.group-member-count { font-size: 12px; white-space: nowrap; }
+.group-row-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .icon-btn {
   background: none;
   border: none;
