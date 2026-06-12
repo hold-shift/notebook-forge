@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
-import { SuggestionMenuController, useCreateBlockNote } from '@blocknote/react'
+import {
+  SuggestionMenuController,
+  SideMenuController,
+  SideMenu,
+  DragHandleMenu,
+  RemoveBlockItem,
+  BlockColorsItem,
+  useComponentsContext,
+  useCreateBlockNote,
+} from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
-import { forgeSchema, docGroupSlashItem, dedicationSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { stripItalic, addItalic } from '../forge/narrative'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -476,6 +486,35 @@ function SnapshotsPanel({ slug }: { slug: string }) {
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
+  const Components = useComponentsContext()
+  if (!Components) return null
+  if (block.type === 'paragraph') {
+    return (
+      <Components.Generic.Menu.Item
+        onClick={() =>
+          editor.updateBlock(block, { type: 'forgeNarrative', content: stripItalic(block.content) })
+        }
+      >
+        Convert to narrative
+      </Components.Generic.Menu.Item>
+    )
+  }
+  if (block.type === 'forgeNarrative') {
+    return (
+      <Components.Generic.Menu.Item
+        onClick={() =>
+          editor.updateBlock(block, { type: 'paragraph', content: addItalic(block.content) })
+        }
+      >
+        Convert to paragraph
+      </Components.Generic.Menu.Item>
+    )
+  }
+  return null
+}
+
 function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const isHomepage = doc.kind === 'homepage'
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
@@ -841,7 +880,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   triggerCharacter="/"
                   getItems={async (q) =>
                     filterSuggestionItems(
-                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor)],
+                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor), narrativeSlashItem(editor)],
                       q,
                     )
                   }
@@ -866,7 +905,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                         )
                       },
                     }
-                    const all = [...defaults, photoItem]
+                    const all = [...defaults, photoItem, narrativeSlashItem(editor)]
                     const q = query.toLowerCase()
                     return q
                       ? all.filter(
@@ -878,6 +917,20 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   }}
                 />
               )}
+              <SideMenuController
+                sideMenu={(props) => (
+                  <SideMenu
+                    {...props}
+                    dragHandleMenu={(menuProps: any) => (
+                      <DragHandleMenu>
+                        <RemoveBlockItem>Delete</RemoveBlockItem>
+                        <BlockColorsItem>Colors</BlockColorsItem>
+                        <ConvertNarrativeItem block={menuProps.block} editor={editor} />
+                      </DragHandleMenu>
+                    )}
+                  />
+                )}
+              />
             </BlockNoteView>
           </div>
           <button
