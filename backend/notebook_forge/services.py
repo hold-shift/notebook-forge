@@ -128,6 +128,14 @@ def mark_published(
     return state
 
 
+def mark_unpublished(session: Session, doc: Document, target: Target) -> SyncState:
+    state = get_or_create_sync_state(session, doc, target)
+    state.status = "UNPUBLISHED"
+    state.published_at = None
+    state.snapshot_id = None
+    return state
+
+
 def rollback_to_snapshot(session: Session, doc: Document, snap: Snapshot) -> Document:
     if snap.document_id != doc.id:
         raise ValueError("snapshot does not belong to this document")

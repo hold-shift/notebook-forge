@@ -141,3 +141,25 @@ class GitPagesTarget(PublishTarget):
             assets_written=written,
             assets_skipped=skipped,
         )
+
+    def remove(self, slug: str) -> None:
+        clone = self._working_clone()
+        dest = clone / self.subdir if self.subdir else clone
+        html_rel = (Path(self.subdir) if self.subdir else Path()) / f"{slug}.html"
+        assets_rel = (Path(self.subdir) if self.subdir else Path()) / f"{slug}_assets"
+        removed = []
+        if (clone / html_rel).exists():
+            self._git("rm", "-rf", "--", str(html_rel), cwd=clone)
+            removed.append(str(html_rel))
+        if (dest / f"{slug}_assets").exists():
+            self._git("rm", "-rf", "--", str(assets_rel), cwd=clone)
+            removed.append(str(assets_rel))
+        if not removed:
+            return
+        self._git(
+            "-c", f"user.name={self.author_name}", "-c", f"user.email={self.author_email}",
+            "commit", "-m", f"Remove {slug}",
+            cwd=clone,
+        )
+        current = self._git("rev-parse", "--abbrev-ref", "HEAD", cwd=clone)
+        self._git("push", "origin", f"{current}:{self.branch}", cwd=clone)

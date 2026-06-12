@@ -37,3 +37,13 @@ class LocalFolderTarget(PublishTarget):
             assets_written=written,
             assets_skipped=skipped,
         )
+
+    def remove(self, slug: str) -> None:
+        import shutil
+
+        html = self.folder / f"{slug}.html"
+        if html.exists():
+            html.unlink()
+        assets_dir = self.folder / f"{slug}_assets"
+        if assets_dir.exists():
+            shutil.rmtree(assets_dir)

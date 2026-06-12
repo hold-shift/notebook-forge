@@ -174,6 +174,26 @@ def publish_document(
     return {"snapshot_id": snap.id, **result.detail}
 
 
+def unpublish_document(
+    session: Session,
+    workspace: Path,
+    doc: Document,
+    target: Target,
+    adapter: PublishTarget | None = None,
+) -> dict[str, Any]:
+    adapter = adapter or make_adapter(target, workspace)
+    adapter.remove(doc.meta.get("slug", doc.slug))
+    services.mark_unpublished(session, doc, target)
+    services.record_change(
+        session,
+        doc,
+        "unpublish",
+        f"unpublished from {target.name}",
+        detail={"target": target.name},
+    )
+    return {"target": target.name}
+
+
 def rebuild_index(
     session: Session,
     workspace: Path,

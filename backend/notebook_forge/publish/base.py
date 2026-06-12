@@ -54,6 +54,10 @@ class PublishTarget(ABC):
     @abstractmethod
     def publish(self, bundle: PublishBundle) -> PublishResult: ...
 
+    def remove(self, slug: str) -> None:
+        """Delete a published document from this target. Override in adapters
+        that support removal; the default is a no-op (e.g. Drive may lack it)."""
+
 
 def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
