@@ -188,9 +188,17 @@ def import_document(
     mf_work: Path | None = None,
     subdir: str = "rfs",
 ) -> tuple[Any, DocCoverage]:
+    from .narrative import convert_full_italic_paragraphs
+
     cov = coverage_for(repo_root, slug, mf_out, mf_work, subdir)
     html = (repo_root / subdir / f"{slug}.html").read_text()
     page = parse_page(html)
+    page.blocks, conversions = convert_full_italic_paragraphs(page.blocks)
+    for c in conversions:
+        if c["flagged"]:
+            cov.notes.append(f"narrative <12 words, review: \"{c['preview']}\"")
+    if conversions:
+        cov.notes.append(f"{len(conversions)} full-italic paragraph(s) → forgeNarrative")
     assets_dir = repo_root / subdir / f"{slug}_assets"
 
     # Resolve each forgeImage to content-addressed assets. The published n

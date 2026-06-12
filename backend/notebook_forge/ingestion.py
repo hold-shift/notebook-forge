@@ -25,6 +25,7 @@ from .assets import ingest_file
 from .blocks import FORGE_IMAGE, make_block
 from .ingest_vendor import detect_year_range, extract_docx, extract_pdf, normalise
 from .ingest_vendor.footnotes import referenced_numbers
+from .narrative import convert_full_italic_paragraphs
 from .polish.textmap import _md_inline_runs  # shared parser (canonical home)
 
 DEFAULT_AUTHOR = "R.F. Skitch"
@@ -114,14 +115,15 @@ def _run_extraction(file_path: Path, name: str, media: Path) -> tuple[Any, str, 
 
 def _extract_blocks(
     session: Session, workspace: Path, file_path: Path, name: str
-) -> tuple[Any, list[dict[str, Any]], str, str]:
-    """Shared extraction: source file → (draft, blocks, date_stem, display)."""
+) -> tuple[Any, list[dict[str, Any]], str, str, list[dict[str, Any]]]:
+    """Shared extraction: source file → (draft, blocks, date_stem, display, conversions)."""
     with tempfile.TemporaryDirectory() as tmp:
         media = Path(tmp) / "media"
         media.mkdir()
         draft, date_stem, date_display = _run_extraction(file_path, name, media)
         blocks = draft_to_blocks(draft, session, workspace, media)
-    return draft, blocks, date_stem, date_display
+        blocks, conversions = convert_full_italic_paragraphs(blocks)
+    return draft, blocks, date_stem, date_display, conversions
 
 
 def reingest_document(session: Session, workspace: Path, doc) -> dict[str, Any]:  # noqa: ANN001
@@ -149,7 +151,7 @@ def reingest_document(session: Session, workspace: Path, doc) -> dict[str, Any]:
             if asset_id:
                 old_props_by_asset.setdefault(asset_id, dict(block["props"]))
 
-    _, blocks, _, _ = _extract_blocks(session, workspace, source_path, name)
+    _, blocks, _, _, conversions = _extract_blocks(session, workspace, source_path, name)
 
     matched = 0
     for block in blocks:
@@ -161,10 +163,10 @@ def reingest_document(session: Session, workspace: Path, doc) -> dict[str, Any]:
             matched += 1
 
     services.snapshot_document(session, doc, note="before re-ingest from source")
-    services.save_blocks(
-        session, doc, blocks,
-        summary=f"re-ingested from {name} (figure work carried over)",
-    )
+    summary = f"re-ingested from {name} (figure work carried over)"
+    if conversions:
+        summary += f", {len(conversions)} narrative passage(s) converted"
+    services.save_blocks(session, doc, blocks, summary=summary)
     figures = sum(1 for b in blocks if b.get("type") == FORGE_IMAGE)
     return {
         "slug": doc.slug,
@@ -172,6 +174,8 @@ def reingest_document(session: Session, workspace: Path, doc) -> dict[str, Any]:
         "figures": figures,
         "figures_matched": matched,
         "figures_new": figures - matched,
+        "narrative_conversions": len(conversions),
+        "narrative_flagged": [c["preview"] for c in conversions if c["flagged"]],
     }
 
 
@@ -184,7 +188,7 @@ def ingest_document(
     """Extract, adapt and create the document. Returns slug + detection
     info for the operator to confirm."""
     name = original_filename or file_path.name
-    draft, blocks, date_stem, date_display = _extract_blocks(
+    draft, blocks, date_stem, date_display, conversions = _extract_blocks(
         session, workspace, file_path, name
     )
 
@@ -229,4 +233,6 @@ def ingest_document(
         "figures": figures,
         "footnotes": len(draft.footnotes),
         "blocks": len(doc.blocks),
+        "narrative_conversions": len(conversions),
+        "narrative_flagged": [c["preview"] for c in conversions if c["flagged"]],
     }
