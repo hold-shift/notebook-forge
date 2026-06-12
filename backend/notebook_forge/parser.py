@@ -198,6 +198,11 @@ def parse_article(article: Tag) -> tuple[list[dict[str, Any]], dict[str, str]]:
             blocks.append(make_block("divider"))
         elif name == "table":
             blocks.append(_parse_table(el))
+        elif name == "div" and "narrative" in classes:
+            for p in el.find_all("p", recursive=False):
+                if "narrative-label" in (p.get("class") or []):
+                    continue
+                blocks.append(make_block("forgeNarrative", content=parse_inline(p)))
         elif name in ("div", "section", "article"):
             inner, inner_imgs = parse_article(el)
             blocks.extend(inner)

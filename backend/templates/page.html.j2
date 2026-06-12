@@ -32,6 +32,8 @@
     --accent:#9c5a3c;       /* sepia terracotta */
     --accent-deep:#7d4226;
     --rule:#e4ddd0;
+    --narr-bg:#f1eada;
+    --narr-border:#b8a580;
     --measure:640px;
   }
   *{box-sizing:border-box;}
@@ -376,6 +378,29 @@
   }
   aside.footnote p{margin:0;}
 
+  /* ---- Narrative (author's reflective voice) ---- */
+  /* Body-size upright serif in a warm tinted panel. Deliberately distinct
+     from aside.footnote on all three axes: SIZE (1em vs .86rem), TINT
+     (warm --narr-bg panel vs untinted), MARKER (none vs numbered fn-num). */
+  div.narrative{
+    background:var(--narr-bg);
+    border-left:3px solid var(--narr-border);
+    border-radius:0 10px 10px 0;
+    padding:1.05rem 1.25rem;
+    margin:1.6rem 0;
+  }
+  div.narrative p{margin:0 0 1.05rem;}
+  div.narrative p:last-child{margin-bottom:0;}
+  div.narrative .narrative-label{
+    font-family:ui-sans-serif,system-ui,"Helvetica Neue",Arial,sans-serif;
+    font-variant-caps:all-small-caps;
+    letter-spacing:.14em;
+    font-size:.78rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin:0 0 .55rem;
+  }
+
   @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;}}
 
@@ -635,6 +660,13 @@
         <aside class="footnote" role="note">
           <span class="fn-num">{{ block.n }}</span>{{ block.text_html|safe if block.text_html else block.text }}
         </aside>
+      {% elif block.kind == 'narrative' %}
+        <div class="narrative">
+          {% if narrative_label %}<p class="narrative-label">{{ narrative_label }}</p>{% endif %}
+          {% for para in block.paragraphs %}
+          <p>{{ para }}</p>
+          {% endfor %}
+        </div>
       {% elif block.kind == 'blockquote' %}
         <blockquote><p>{{ block.text_html|safe if block.text_html else block.text }}</p></blockquote>
       {% elif block.kind == 'hr' %}
