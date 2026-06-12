@@ -215,6 +215,7 @@ function MetaBar({
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
+  const [author, setAuthor] = useState(String(meta.author ?? ''))
   const [years, setYears] = useState(String(meta.year_display ?? ''))
   const [standfirst, setStandfirst] = useState(String(meta.standfirst ?? ''))
   const tocInitial =
@@ -250,6 +251,7 @@ function MetaBar({
 
   const dirty =
     title !== String(meta.title ?? '') ||
+    author !== String(meta.author ?? '') ||
     years !== String(meta.year_display ?? '') ||
     standfirst !== String(meta.standfirst ?? '') ||
     toc !== tocInitial
@@ -259,6 +261,7 @@ function MetaBar({
     const updated: Record<string, unknown> = {
       ...doc.meta,
       title,
+      author,
       year_display: years,
       standfirst,
       meta_description: standfirst,
@@ -281,6 +284,10 @@ function MetaBar({
       <label>
         Title
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label>
+        Author
+        <input value={author} onChange={(e) => setAuthor(e.target.value)} />
       </label>
       <label>
         Years
@@ -809,9 +816,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             type="button"
             className="scroll-top-btn"
             title="Scroll to top"
-            onClick={() =>
-              document.querySelector('.editor-canvas')?.scrollTo({ top: 0, behavior: 'smooth' })
-            }
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
             ↑
           </button>
