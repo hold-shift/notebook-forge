@@ -92,23 +92,34 @@ def draft_to_blocks(
     return blocks
 
 
+def _run_extraction(file_path: Path, name: str, media: Path) -> tuple[Any, str, str]:
+    """Extract and normalise a source file into a DocumentDraft.
+
+    Caller owns `media` dir and its temp lifecycle. Used by both
+    `_extract_blocks` (real ingest with DB writes) and
+    `reimport.dry_run` (hash-only, no DB writes).
+    """
+    suffix = Path(name).suffix.lower()
+    if suffix == ".docx":
+        draft = extract_docx(file_path, media)
+    elif suffix == ".pdf":
+        draft = extract_pdf(file_path, media)
+    else:
+        raise ValueError(f"unsupported source type '{suffix}' (use .pdf or .docx)")
+    draft.source_file = name
+    draft = normalise(draft)
+    date_stem, date_display = detect_year_range(draft)
+    return draft, date_stem, date_display
+
+
 def _extract_blocks(
     session: Session, workspace: Path, file_path: Path, name: str
 ) -> tuple[Any, list[dict[str, Any]], str, str]:
     """Shared extraction: source file → (draft, blocks, date_stem, display)."""
-    suffix = Path(name).suffix.lower()
     with tempfile.TemporaryDirectory() as tmp:
         media = Path(tmp) / "media"
         media.mkdir()
-        if suffix == ".docx":
-            draft = extract_docx(file_path, media)
-        elif suffix == ".pdf":
-            draft = extract_pdf(file_path, media)
-        else:
-            raise ValueError(f"unsupported source type '{suffix}' (use .pdf or .docx)")
-        draft.source_file = name
-        draft = normalise(draft)
-        date_stem, date_display = detect_year_range(draft)
+        draft, date_stem, date_display = _run_extraction(file_path, name, media)
         blocks = draft_to_blocks(draft, session, workspace, media)
     return draft, blocks, date_stem, date_display
 
