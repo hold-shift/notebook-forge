@@ -34,12 +34,16 @@ function PendingPanel({
   slug,
   targets,
   onPush,
+  onUnpublish,
   pushing,
+  unpublishing,
 }: {
   slug: string
   targets: TargetState[]
   onPush: (target: string) => void
+  onUnpublish: (target: string) => void
   pushing: string | null
+  unpublishing: string | null
 }) {
   const [changes, setChanges] = useState<ChangeRow[]>([])
 
@@ -107,6 +111,17 @@ function PendingPanel({
               >
                 {pushing === t.target ? 'Pushing…' : 'Push'}
               </button>
+              {t.status === 'PUBLISHED' && (
+                <button
+                  type="button"
+                  className="btn-danger-sm"
+                  disabled={!!pushing || unpublishing === t.target}
+                  title={`Remove this document from ${t.target}`}
+                  onClick={() => onUnpublish(t.target)}
+                >
+                  {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
+                </button>
+              )}
             </div>
           )
         })}
@@ -147,6 +162,31 @@ function MetaBar({
   const [toc, setToc] = useState(tocInitial)
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const needsConfirm = meta.date_confirmed === false
+
+  const [slug, setSlug] = useState(doc.slug)
+  const [slugState, setSlugState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [slugError, setSlugError] = useState('')
+  const slugDirty = slug !== doc.slug
+
+  const saveSlug = () => {
+    const trimmed = slug.trim()
+    if (!trimmed || trimmed === doc.slug) return
+    if (!/^[a-z0-9][a-z0-9\-_]*$/.test(trimmed)) {
+      setSlugError('Lowercase letters, digits, hyphens and underscores only')
+      return
+    }
+    setSlugError('')
+    setSlugState('saving')
+    api.renameSlug(doc.slug, trimmed).then(
+      (r) => {
+        window.location.hash = `#/doc/${encodeURIComponent(r.slug)}`
+      },
+      (e: Error) => {
+        setSlugState('error')
+        setSlugError(e.message.includes('409') ? 'Slug already in use' : e.message)
+      },
+    )
+  }
 
   const dirty =
     title !== String(meta.title ?? '') ||
@@ -197,6 +237,25 @@ function MetaBar({
           <option value="on">On</option>
           <option value="off">Off</option>
         </select>
+      </label>
+      <label className="meta-slug" title="Internal library ID and URL path segment. Changing it makes the old URL a dead link until re-published.">
+        Slug
+        <span className="meta-slug-row">
+          <input
+            value={slug}
+            onChange={(e) => { setSlug(e.target.value); setSlugError('') }}
+            onKeyDown={(e) => e.key === 'Enter' && saveSlug()}
+            className="meta-slug-input"
+          />
+          <button
+            type="button"
+            disabled={!slugDirty || slugState === 'saving'}
+            onClick={saveSlug}
+          >
+            {slugState === 'saving' ? 'Renaming…' : 'Rename'}
+          </button>
+        </span>
+        {slugError && <span className="error meta-slug-error">{slugError}</span>}
       </label>
       <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
         {state === 'saving' ? 'Saving…' : needsConfirm ? 'Confirm details' : 'Save details'}
@@ -297,6 +356,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [targets, setTargets] = useState<TargetState[]>(doc.targets)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [pushing, setPushing] = useState<string | null>(null)
+  const [unpublishing, setUnpublishing] = useState<string | null>(null)
   const [polishing, setPolishing] = useState(false)
   const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
   const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
@@ -394,6 +454,42 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     },
     [doc.slug, targets],
   )
+
+  const onUnpublish = useCallback(
+    async (target: string) => {
+      if (
+        !confirm(
+          `Unpublish from ${target}?\n\nThe document will be removed from this target. ` +
+            'You can republish at any time.',
+        )
+      )
+        return
+      setUnpublishing(target)
+      try {
+        const resp = await api.unpublish(doc.slug, target)
+        setTargets(resp.targets)
+      } catch (e) {
+        alert(`Unpublish failed: ${e}`)
+      } finally {
+        setUnpublishing(null)
+      }
+    },
+    [doc.slug],
+  )
+
+  const onDelete = useCallback(() => {
+    if (
+      !confirm(
+        `Delete "${doc.title}"?\n\nThis removes the document and all its history from the ` +
+          'library. Published copies on targets are not removed. This cannot be undone.',
+      )
+    )
+      return
+    api.deleteDocument(doc.slug).then(
+      () => onBack(),
+      (e) => alert(`Delete failed: ${e}`),
+    )
+  }, [doc.slug, doc.title, onBack])
 
   const onPolish = useCallback(() => {
     if (
@@ -514,8 +610,20 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
               />
             ) : (
               <>
-                <PendingPanel slug={doc.slug} targets={targets} onPush={onPush} pushing={pushing} />
+                <PendingPanel
+                  slug={doc.slug}
+                  targets={targets}
+                  onPush={onPush}
+                  onUnpublish={onUnpublish}
+                  pushing={pushing}
+                  unpublishing={unpublishing}
+                />
                 <SnapshotsPanel slug={doc.slug} />
+                <div className="danger-panel">
+                  <button type="button" className="btn-danger" onClick={onDelete}>
+                    <i className="ti ti-trash" aria-hidden /> Delete document
+                  </button>
+                </div>
               </>
             )}
           </div>

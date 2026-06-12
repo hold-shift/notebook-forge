@@ -211,6 +211,45 @@ def rollback(
     return {"ok": True, "targets": _target_states(session, doc)}
 
 
+class RenameBody(BaseModel):
+    new_slug: str
+
+
+@app.post("/api/documents/{slug}/rename")
+def rename_document(
+    slug: str, body: RenameBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Rename the document slug. Updates canonical_url in meta to match.
+    The old URL becomes a dead link until the operator re-publishes."""
+    from re import fullmatch
+
+    new_slug = body.new_slug.strip()
+    if not new_slug:
+        raise HTTPException(400, "new_slug must not be empty")
+    if not fullmatch(r"[a-z0-9][a-z0-9\-_]*", new_slug):
+        raise HTTPException(
+            400, "slug may only contain lowercase letters, digits, hyphens and underscores"
+        )
+    if services.get_document(session, new_slug) is not None:
+        raise HTTPException(409, f"slug '{new_slug}' is already in use")
+
+    doc = _get_doc(session, slug)
+    old_slug = doc.slug
+    doc.slug = new_slug
+
+    meta = dict(doc.meta)
+    meta["slug"] = new_slug
+    if meta.get("canonical_url"):
+        meta["canonical_url"] = str(meta["canonical_url"]).replace(
+            f"/{old_slug}.", f"/{new_slug}."
+        )
+    doc.meta = meta
+
+    services.record_change(session, doc, "edit", f"renamed slug from {old_slug} to {new_slug}")
+    services.reindex(session, doc)
+    return {"ok": True, "slug": new_slug}
+
+
 @app.delete("/api/documents/{slug}")
 def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
     """Remove a document and its snapshots/sync/changes (cascade). Assets
@@ -323,6 +362,23 @@ def publish(
     try:
         detail = publish_document(session, _state()["workspace"], doc, target)
     except PermissionError as exc:  # live publishing disabled this sprint
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
+
+
+@app.delete("/api/documents/{slug}/publish/{target_name}")
+def unpublish(
+    slug: str, target_name: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .publish.service import unpublish_document
+
+    doc = _get_doc(session, slug)
+    target = session.scalar(select(Target).where(Target.name == target_name))
+    if target is None:
+        raise HTTPException(404, f"no target '{target_name}'")
+    try:
+        detail = unpublish_document(session, _state()["workspace"], doc, target)
+    except PermissionError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 

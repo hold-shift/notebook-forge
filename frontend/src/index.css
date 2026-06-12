@@ -305,6 +305,10 @@ button:disabled { opacity: 0.55; cursor: default; }
 .meta-bar > label { flex: none; }
 .meta-bar .meta-standfirst { flex: 1; }
 .meta-bar .meta-standfirst input { width: 100%; }
+.meta-bar .meta-slug { flex-basis: 100%; }
+.meta-slug-row { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.meta-slug-row input.meta-slug-input { flex: 1; font-family: var(--font-mono, monospace); font-size: 12px; min-width: 0; }
+.meta-slug-error { font-size: 11px; color: var(--color-error, #c0392b); display: block; margin-top: 3px; }
 .confirm-hint { color: var(--pill-warn-fg); font-size: 12px; flex-basis: 100%; }
 
 /* ---- forgeImage block ---- */
@@ -474,6 +478,34 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 .change-when { color: var(--color-text-tertiary); font-size: 11px; flex: none; white-space: nowrap; }
 .target-rows { border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; }
 .push-all { width: 100%; margin-top: 4px; }
+.btn-danger-sm {
+  font-size: 12px !important;
+  padding: 3px 8px !important;
+  color: var(--color-text-error, #c0392b) !important;
+  border-color: var(--color-border-error, #e8b4b4) !important;
+}
+.btn-danger-sm:hover:not(:disabled) {
+  background: var(--color-background-error, #fdf0f0) !important;
+}
+.danger-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--color-border-tertiary);
+}
+.btn-danger {
+  font-size: 12px;
+  padding: 4px 10px;
+  color: var(--color-text-error, #c0392b);
+  border: 0.5px solid var(--color-border-error, #e8b4b4);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.12s;
+}
+.btn-danger:hover:not(:disabled) { background: var(--color-background-error, #fdf0f0); }
 
 /* ---- forgeImage safe-mode select ---- */
 .forge-safemode {

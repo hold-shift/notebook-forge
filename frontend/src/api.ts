@@ -77,6 +77,14 @@ export const api = {
     fetch(`/api/documents/${slug}/publish/${target}`, { method: 'POST' }).then((r) =>
       json<{ ok: boolean; targets: TargetState[] }>(r),
     ),
+  unpublish: (slug: string, target: string) =>
+    fetch(`/api/documents/${slug}/publish/${target}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean; targets: TargetState[] }>(r),
+    ),
+  deleteDocument: (slug: string) =>
+    fetch(`/api/documents/${slug}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean; deleted: string }>(r),
+    ),
   generateSketch: (slug: string, blockId: string, prompt?: string, force = false) =>
     fetch(`/api/documents/${slug}/figures/${blockId}/generate-sketch`, {
       method: 'POST',
@@ -92,6 +100,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ blocks, meta, summary }),
     }).then((r) => json<{ ok: boolean; targets: TargetState[] }>(r)),
+  renameSlug: (slug: string, newSlug: string) =>
+    fetch(`/api/documents/${slug}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_slug: newSlug }),
+    }).then((r) => json<{ ok: boolean; slug: string }>(r)),
   reingest: (slug: string) =>
     fetch(`/api/documents/${slug}/reingest`, { method: 'POST' }).then((r) =>
       json<{
