@@ -23,6 +23,7 @@ from xml.sax.saxutils import escape as xml_escape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .groups import _start_year  # noqa: F401 (re-exported; used by publish/service indirectly)
 from .models import Document, Setting, SyncState, Target
 from .renderer import inline_html, render_index
 
@@ -74,12 +75,6 @@ def _iso_utc(value: dt.datetime) -> str:
     return value.isoformat()
 
 
-def _start_year(slug: str) -> int:
-    try:
-        return int(slug.split("-", 1)[0])
-    except ValueError:
-        return 9999
-
 
 def build_entries(
     session: Session,
@@ -94,7 +89,7 @@ def build_entries(
     imported = {
         e.get("stem"): e for e in _setting(session, "catalogue").get("entries", [])
     }
-    docs = list(session.scalars(select(Document)))
+    docs = list(session.scalars(select(Document).where(Document.kind == "memoir")))
     docs.sort(key=lambda d: (_start_year(d.slug), d.slug))
 
     entries: list[dict[str, Any]] = []

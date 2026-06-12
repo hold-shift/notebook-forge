@@ -12,13 +12,25 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import services
 from .assets import asset_path
 from .config import bootstrap_workspace, workspace_path
 from .db import fts_search, make_engine, make_session_factory
-from .models import Asset, Change, Snapshot, SyncState, Target
+from .groups import (
+    assign_document,
+    catalogue_descriptions,
+    create_group,
+    delete_group,
+    group_member_dict,
+    list_groups,
+    reorder_groups,
+    set_positions,
+    update_group,
+)
+from .models import Asset, Change, Group, Snapshot, SyncState, Target
 
 
 @lru_cache(maxsize=1)
@@ -84,6 +96,29 @@ class RollbackBody(BaseModel):
     snapshot_id: int
 
 
+class GroupBody(BaseModel):
+    name: str
+    color: str = "#9c5a3c"
+
+
+class GroupPatchBody(BaseModel):
+    name: str | None = None
+    color: str | None = None
+
+
+class GroupOrderBody(BaseModel):
+    ids: list[int]
+
+
+class DocGroupBody(BaseModel):
+    group_id: int | None
+
+
+class PositionsBody(BaseModel):
+    group_id: int | None
+    slugs: list[str]
+
+
 def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN001
     out = []
     for target in session.scalars(select(Target)):
@@ -110,9 +145,85 @@ def _target_states(session: Session, doc) -> list[dict[str, Any]]:  # noqa: ANN0
     return out
 
 
+@app.get("/api/groups")
+def list_groups_route(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    descs = catalogue_descriptions(session)
+    return [group_member_dict(session, g, descs) for g in list_groups(session)]
+
+
+@app.post("/api/groups")
+def create_group_route(
+    body: GroupBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        group = create_group(session, body.name, body.color)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(409, f"group name '{body.name}' already in use") from None
+    return {
+        "id": group.id, "name": group.name,
+        "color": group.color, "sort_order": group.sort_order,
+    }
+
+
+@app.put("/api/groups/order")
+def reorder_groups_route(
+    body: GroupOrderBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        reorder_groups(session, body.ids)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True}
+
+
+@app.put("/api/groups/{group_id}")
+def update_group_route(
+    group_id: int, body: GroupPatchBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    group = session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, f"no group {group_id}")
+    try:
+        group = update_group(session, group, name=body.name, color=body.color)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(409, "group name already in use") from None
+    return {
+        "id": group.id, "name": group.name,
+        "color": group.color, "sort_order": group.sort_order,
+    }
+
+
+@app.delete("/api/groups/{group_id}")
+def delete_group_route(
+    group_id: int, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    group = session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, f"no group {group_id}")
+    moved = delete_group(session, group)
+    return {"ok": True, "moved": moved}
+
+
+@app.put("/api/documents/positions")
+def set_positions_route(
+    body: PositionsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    try:
+        set_positions(session, body.group_id, body.slugs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True}
+
+
 @app.get("/api/documents")
 def list_documents(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
-    docs = services.list_documents(session)
+    docs = [d for d in services.list_documents(session) if d.kind == "memoir"]
     out = []
     for d in docs:
         figs = [b for b in d.blocks if b.get("type") == "forgeImage"]
@@ -133,6 +244,9 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict[str, An
                 "pending_review": sum(
                     1 for b in figs if b.get("props", {}).get("approval") == "pending"
                 ),
+                "group_id": d.group_id,
+                "group_position": d.group_position,
+                "date_confirmed": d.meta.get("date_confirmed", True) is not False,
                 "targets": _target_states(session, d),
             }
         )
@@ -253,6 +367,22 @@ def rename_document(
     services.record_change(session, doc, "edit", f"renamed slug from {old_slug} to {new_slug}")
     services.reindex(session, doc)
     return {"ok": True, "slug": new_slug}
+
+
+@app.put("/api/documents/{slug}/group")
+def set_document_group(
+    slug: str, body: DocGroupBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage cannot be grouped")
+    group = None
+    if body.group_id is not None:
+        group = session.get(Group, body.group_id)
+        if group is None:
+            raise HTTPException(404, f"no group {body.group_id}")
+    assign_document(session, doc, group)
+    return {"ok": True, "group_id": doc.group_id, "group_position": doc.group_position}
 
 
 @app.delete("/api/documents/{slug}")
