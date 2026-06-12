@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type DocSummary, type TargetState } from '../api'
+import { api, type DocSummary, type GroupInfo, type TargetState } from '../api'
+import {
+  bucketDocs,
+  effectiveSort,
+  sortDocs,
+  type Bucket,
+  type GroupBy,
+  type SortMode,
+} from '../lib/librarySort'
+import { ManageGroupsModal } from './ManageGroupsModal'
+
+const LS_GROUPBY = 'nf-library-groupby'
+const LS_SORT = 'nf-library-sort'
 
 export function timeAgo(iso: string | null): string {
   if (!iso) return ''
@@ -51,55 +63,254 @@ function fileIcon(sourceType: string): string {
   return 'ti-file-text'
 }
 
+function KebabMenu({
+  doc,
+  groups,
+  onMove,
+}: {
+  doc: DocSummary
+  groups: GroupInfo[]
+  onMove: (groupId: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [open])
+  useEffect(() => {
+    if (!open) return
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
+  }, [open])
+
+  return (
+    <div className="kebab-wrap" ref={ref}>
+      <button
+        type="button"
+        className="kebab-btn"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
+        title="Move to group…"
+      >
+        <i className="ti ti-dots-vertical" />
+      </button>
+      {open && (
+        <div className="kebab-menu" onClick={(e) => e.stopPropagation()}>
+          {groups.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              className="kebab-item"
+              onClick={() => { onMove(g.id); setOpen(false) }}
+            >
+              <span className="group-dot" style={{ background: g.color }} />
+              Move to {g.name}
+            </button>
+          ))}
+          {doc.group_id != null && (
+            <button
+              type="button"
+              className="kebab-item"
+              onClick={() => { onMove(null); setOpen(false) }}
+            >
+              Remove from group
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DocCard({
+  doc,
+  groups,
+  showHandle,
+  onOpen,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onMove,
+}: {
+  doc: DocSummary
+  groups: GroupInfo[]
+  showHandle: boolean
+  onOpen: (slug: string) => void
+  onDragStart: (slug: string) => void
+  onDragOver: (e: React.DragEvent, slug: string) => void
+  onDrop: (e: React.DragEvent, targetSlug: string, bucket: Bucket) => void
+  onMove: (slug: string, groupId: number | null) => void
+  bucket: Bucket
+}) {
+  const [dropBefore, setDropBefore] = useState(false)
+
+  return (
+    <div
+      className={`doc-card-wrap${dropBefore ? ' drop-before' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setDropBefore(true); onDragOver(e, doc.slug) }}
+      onDragLeave={() => setDropBefore(false)}
+      onDrop={(e) => { setDropBefore(false); onDrop(e, doc.slug, (window as unknown as { _nfBucket: Bucket })._nfBucket) }}
+    >
+      {showHandle && (
+        <span
+          className="drag-handle"
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/nf-slug', doc.slug)
+            onDragStart(doc.slug)
+          }}
+        >
+          <i className="ti ti-grip-vertical" />
+        </span>
+      )}
+      <button className="doc-card" onClick={() => onOpen(doc.slug)}>
+        <div className="doc-thumb">
+          <i className={`ti ${fileIcon(doc.source_type)}`} aria-hidden />
+        </div>
+        <div className="doc-main">
+          <p className="doc-title">
+            {doc.title}
+            {doc.year_display ? ` · ${doc.year_display}` : ''}
+          </p>
+          <p className="doc-meta">
+            {doc.source_type} · {doc.figures} images · {doc.sketched} sketched
+            {doc.pending_review > 0 ? ` · ${doc.pending_review} awaiting review` : ''}
+            {doc.updated_at ? ` · updated ${timeAgo(doc.updated_at)}` : ''}
+          </p>
+        </div>
+        <span className="badges">
+          {doc.targets
+            .filter((t) => t.target !== 'local-folder')
+            .map((t) => (
+              <TargetPill key={t.target} t={t} />
+            ))}
+        </span>
+      </button>
+      <KebabMenu doc={doc} groups={groups} onMove={(gid) => onMove(doc.slug, gid)} />
+    </div>
+  )
+}
+
 export function Library({
   onOpen,
   onSettings,
+  onHomepage,
 }: {
   onOpen: (slug: string) => void
   onSettings?: () => void
+  onHomepage?: () => void
 }) {
   const [docs, setDocs] = useState<DocSummary[] | null>(null)
+  const [groups, setGroups] = useState<GroupInfo[]>([])
   const [error, setError] = useState('')
   const [ingesting, setIngesting] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [hits, setHits] = useState<{ slug: string; title: string; snip: string }[] | null>(null)
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    () => (localStorage.getItem(LS_GROUPBY) as GroupBy | null) ?? 'group',
+  )
+  const [sort, setSort] = useState<SortMode>(
+    () => (localStorage.getItem(LS_SORT) as SortMode | null) ?? 'manual',
+  )
+  const [showManageGroups, setShowManageGroups] = useState(false)
+  const [dragOver, setDragOver] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const reload = () => {
     api.listDocuments().then(setDocs, (e) => setError(String(e)))
-  }, [])
+    api.groups().then(setGroups)
+  }
+
+  useEffect(() => { reload() }, [])
 
   useEffect(() => {
-    if (!query.trim()) {
-      setHits(null)
-      return
-    }
+    if (!query.trim()) { setHits(null); return }
     const t = setTimeout(() => {
       api.search(query).then(setHits, () => setHits([]))
     }, 300)
     return () => clearTimeout(t)
   }, [query])
 
+  const onGroupByChange = (v: GroupBy) => {
+    setGroupBy(v)
+    localStorage.setItem(LS_GROUPBY, v)
+  }
+  const onSortChange = (v: SortMode) => {
+    setSort(v)
+    localStorage.setItem(LS_SORT, v)
+  }
+
   const onFile = (file: File | undefined) => {
     if (!file) return
     setIngesting(true)
     api.ingest(file).then(
-      (resp) => {
-        setIngesting(false)
-        onOpen(resp.slug)
-      },
-      (e) => {
-        setIngesting(false)
-        alert(`Ingest failed: ${e}`)
-      },
+      (resp) => { setIngesting(false); onOpen(resp.slug) },
+      (e) => { setIngesting(false); alert(`Ingest failed: ${e}`) },
     )
   }
 
   if (error) return <p className="error">Backend unreachable: {error}</p>
   if (!docs) return <p className="muted">Loading library…</p>
 
+  const eSort = effectiveSort(groupBy, sort)
   const visible = docs.filter((d) => matchesFilter(d, filter))
+  const buckets = bucketDocs(visible, groupBy, groups)
+
+  const handleDrop = (
+    e: React.DragEvent,
+    targetSlug: string | null,
+    bucket: Bucket,
+  ) => {
+    e.preventDefault()
+    const draggedSlug = e.dataTransfer.getData('text/nf-slug')
+    if (!draggedSlug) return
+    const draggedDoc = docs.find((d) => d.slug === draggedSlug)
+    if (!draggedDoc) return
+    const destGroupId = bucket.groupId !== undefined ? bucket.groupId : null
+
+    const moveAndReorder = (newBucketDocs: DocSummary[]) => {
+      const newSlugs = newBucketDocs.map((d) => d.slug)
+      api.setPositions(destGroupId, newSlugs).then(reload)
+    }
+
+    if (draggedDoc.group_id !== destGroupId) {
+      api.setDocumentGroup(draggedSlug, destGroupId).then(() => {
+        if (targetSlug) {
+          const bucketAfterMove = bucket.docs.filter((d) => d.slug !== draggedSlug)
+          const idx = bucketAfterMove.findIndex((d) => d.slug === targetSlug)
+          const newBucketDocs = [...bucketAfterMove]
+          newBucketDocs.splice(idx === -1 ? newBucketDocs.length : idx, 0, { ...draggedDoc, group_id: destGroupId })
+          moveAndReorder(newBucketDocs)
+        } else {
+          reload()
+        }
+      })
+    } else if (targetSlug) {
+      const sorted = sortDocs(bucket.docs, eSort)
+      const withoutDragged = sorted.filter((d) => d.slug !== draggedSlug)
+      const idx = withoutDragged.findIndex((d) => d.slug === targetSlug)
+      withoutDragged.splice(idx === -1 ? withoutDragged.length : idx, 0, draggedDoc)
+      moveAndReorder(withoutDragged)
+    }
+  }
+
+  const handleHeaderDrop = (e: React.DragEvent, bucket: Bucket) => {
+    e.preventDefault()
+    const draggedSlug = e.dataTransfer.getData('text/nf-slug')
+    if (!draggedSlug) return
+    const destGroupId = bucket.groupId !== undefined ? bucket.groupId : null
+    api.setDocumentGroup(draggedSlug, destGroupId).then(reload)
+  }
+
+  const handleMove = (slug: string, groupId: number | null) => {
+    api.setDocumentGroup(slug, groupId).then(reload)
+  }
 
   return (
     <div className="shell">
@@ -109,6 +320,9 @@ export function Library({
         </span>
         <button type="button" className="navlink active">
           Library
+        </button>
+        <button type="button" className="navlink" onClick={onHomepage}>
+          Homepage
         </button>
         <button type="button" className="navlink" onClick={onSettings}>
           Settings
@@ -142,6 +356,22 @@ export function Library({
           <option value="clean">Published · clean</option>
           <option value="unpublished">Never published</option>
         </select>
+        <select value={groupBy} onChange={(e) => onGroupByChange(e.target.value as GroupBy)}>
+          <option value="group">Group</option>
+          <option value="none">None</option>
+          <option value="status">Status</option>
+          <option value="format">Format</option>
+        </select>
+        <select value={sort} onChange={(e) => onSortChange(e.target.value as SortMode)}>
+          <option value="manual" disabled={groupBy !== 'group'}>Manual order</option>
+          <option value="date_range">Date range</option>
+          <option value="title_az">Title A–Z</option>
+          <option value="last_updated">Last updated</option>
+          <option value="attention">Needs attention first</option>
+        </select>
+        <button type="button" className="btn-secondary" onClick={() => setShowManageGroups(true)}>
+          Manage groups
+        </button>
       </div>
       {hits !== null && (
         <div className="search-hits" style={{ paddingTop: 12 }}>
@@ -155,33 +385,53 @@ export function Library({
         </div>
       )}
       <div className="doc-list">
-        {visible.map((d) => (
-          <button key={d.slug} className="doc-card" onClick={() => onOpen(d.slug)}>
-            <div className="doc-thumb">
-              <i className={`ti ${fileIcon(d.source_type)}`} aria-hidden />
-            </div>
-            <div className="doc-main">
-              <p className="doc-title">
-                {d.title}
-                {d.year_display ? ` · ${d.year_display}` : ''}
+        {buckets.map((bucket) => (
+          <div key={bucket.key}>
+            {groupBy !== 'none' && (
+              <div
+                className={`group-header${dragOver === bucket.key ? ' dragover' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(bucket.key) }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={(e) => { setDragOver(null); handleHeaderDrop(e, bucket) }}
+              >
+                {bucket.color && (
+                  <span className="group-dot" style={{ background: bucket.color }} />
+                )}
+                <span>{bucket.label}</span>
+                <span className="muted" style={{ marginLeft: 6 }}>({bucket.docs.length})</span>
+              </div>
+            )}
+            {sortDocs(bucket.docs, eSort).map((d) => (
+              <DocCard
+                key={d.slug}
+                doc={d}
+                groups={groups}
+                bucket={bucket}
+                showHandle={eSort === 'manual'}
+                onOpen={onOpen}
+                onDragStart={() => {
+                  ;(window as unknown as { _nfBucket: Bucket })._nfBucket = bucket
+                }}
+                onDragOver={() => {}}
+                onDrop={(e, targetSlug) => handleDrop(e, targetSlug, bucket)}
+                onMove={handleMove}
+              />
+            ))}
+            {bucket.docs.length === 0 && groupBy === 'group' && (
+              <p className="muted" style={{ paddingLeft: 16, fontSize: '0.85rem' }}>
+                No documents in this group.
               </p>
-              <p className="doc-meta">
-                {d.source_type} · {d.figures} images · {d.sketched} sketched
-                {d.pending_review > 0 ? ` · ${d.pending_review} awaiting review` : ''}
-                {d.updated_at ? ` · updated ${timeAgo(d.updated_at)}` : ''}
-              </p>
-            </div>
-            <span className="badges">
-              {d.targets
-                .filter((t) => t.target !== 'local-folder')
-                .map((t) => (
-                  <TargetPill key={t.target} t={t} />
-                ))}
-            </span>
-          </button>
+            )}
+          </div>
         ))}
         {visible.length === 0 && <p className="muted">No documents match this filter.</p>}
       </div>
+      {showManageGroups && (
+        <ManageGroupsModal
+          onClose={() => setShowManageGroups(false)}
+          onChanged={reload}
+        />
+      )}
     </div>
   )
 }
