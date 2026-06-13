@@ -262,18 +262,20 @@ button:disabled { opacity: 0.55; cursor: default; }
   letter-spacing: 0.04em;
 }
 .pending-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
   align-items: center;
-  gap: 8px;
+  column-gap: 10px;
   margin-bottom: 6px;
   font-size: 13px;
 }
-.pending-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.pending-identity { display: flex; align-items: center; gap: 6px; }
+.pending-row .dot { width: 8px; height: 8px; border-radius: 50%; }
 .pending-row .dot.dirty { background: #d99a2b; }
 .pending-row .dot.clean { background: #1f9d6b; }
-.pending-name { font-weight: 500; flex: none; }
-.pending-state { color: var(--color-text-tertiary); flex: 1; min-width: 0; font-size: 12px; }
-.target-btns { display: flex; gap: 4px; flex: none; }
+.pending-name { font-weight: 500; }
+.pending-state { color: var(--color-text-tertiary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.target-btns { display: flex; gap: 4px; justify-content: flex-end; }
 .pending-row button { font-size: 12px; padding: 3px 10px; }
 .target-link {
   text-decoration: none;

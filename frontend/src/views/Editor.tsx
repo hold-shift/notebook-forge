@@ -150,19 +150,21 @@ function PendingPanel({
           const behind = behindCount(t)
           return (
             <div key={t.target} className="pending-row">
-              <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
-              <span className="pending-name">{t.target}</span>
-              {t.url && (
-                <a
-                  className="target-link"
-                  href={t.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`Open the published ${t.kind} output`}
-                >
-                  ↗
-                </a>
-              )}
+              <span className="pending-identity">
+                <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
+                <span className="pending-name">{t.target}</span>
+                {t.url && (
+                  <a
+                    className="target-link"
+                    href={t.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Open the published ${t.kind} output`}
+                  >
+                    ↗
+                  </a>
+                )}
+              </span>
               <span className="pending-state">
                 {t.status !== 'PUBLISHED'
                   ? 'never published'
