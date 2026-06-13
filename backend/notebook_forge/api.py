@@ -91,6 +91,10 @@ app.mount("/site", StaticFiles(directory=_site_dir, html=True), name="site")
 # GIL-safe dict mutations; not persisted — purely for the live chunk counter.
 _polish_progress: dict[str, dict] = {}
 
+# In-process job registry for bulk sketch generation.
+# Key: "{slug}:{job_id}" — GIL-safe dict mutations; not persisted.
+_sketch_jobs: dict[str, dict] = {}
+
 
 class SaveBlocksBody(BaseModel):
     blocks: list[dict[str, Any]]
@@ -521,6 +525,106 @@ def generate_caption(
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"caption": caption}
+
+
+class GenerateAllSketchesBody(BaseModel):
+    batch_face_gate: str = "warn"  # warn | block; overrides global setting for this run
+
+
+@app.post("/api/documents/{slug}/figures/generate-all-sketches")
+def generate_all_sketches(
+    slug: str,
+    body: GenerateAllSketchesBody | None = None,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Start a sequential bulk-sketch job for all eligible figures.
+
+    Returns immediately with a job_id.  Poll
+    GET /api/documents/{slug}/figures/generate-all-sketches/status?job_id=…
+    for progress.  Eligibility: has an original photo AND sketch not yet
+    approved (guards against clobbering approved work).
+    """
+    import threading
+    import uuid
+
+    from .sketch_service import eligible_figure_block_ids, generate_sketch_for_block
+
+    if body is None:
+        body = GenerateAllSketchesBody()
+    if body.batch_face_gate not in ("warn", "block"):
+        raise HTTPException(422, "batch_face_gate must be 'warn' or 'block'")
+
+    doc = _get_doc(session, slug)
+    block_ids = eligible_figure_block_ids(list(doc.blocks))
+    job_id = uuid.uuid4().hex[:12]
+    key = f"{slug}:{job_id}"
+    job: dict[str, Any] = {
+        "status": "running",
+        "done": 0,
+        "total": len(block_ids),
+        "failed": 0,
+        "results": [],
+    }
+    _sketch_jobs[key] = job
+
+    workspace = _state()["workspace"]
+    factory = _state()["factory"]
+    face_gate = body.batch_face_gate
+
+    def _run() -> None:
+        for bid in block_ids:
+            if job.get("status") == "cancelled":
+                break
+            try:
+                with factory() as s:
+                    fresh_doc = s.get(type(doc), doc.id)
+                    if fresh_doc is None:
+                        raise LookupError("document deleted")
+                    result = generate_sketch_for_block(
+                        s, workspace, fresh_doc, bid,
+                        generator=_make_batch_generator(workspace, s, face_gate),
+                    )
+                    s.commit()
+                job["results"].append({
+                    "block_id": bid,
+                    "ok": True,
+                    "face_gate": result.get("face_gate", "n/a"),
+                })
+            except Exception as exc:  # noqa: BLE001
+                job["failed"] += 1
+                job["results"].append({"block_id": bid, "ok": False, "error": str(exc)})
+            finally:
+                job["done"] += 1
+        job["status"] = "done"
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id, "eligible": len(block_ids)}
+
+
+def _make_batch_generator(workspace: Path, session: Session, face_gate: str):  # noqa: ANN202
+    """Return a sketch generator with the batch face-gate override applied."""
+    from .sketch_gen import make_generator
+    from .sketch_service import sketch_settings
+
+    cfg = sketch_settings(session)
+    return make_generator(
+        workspace / "sketch-cache",
+        model=cfg["model"],
+        face_gate=face_gate,
+    )
+
+
+@app.get("/api/documents/{slug}/figures/generate-all-sketches/status")
+def generate_all_sketches_status(
+    slug: str,
+    job_id: str,
+) -> dict[str, Any]:
+    """Poll for bulk-sketch job progress."""
+    key = f"{slug}:{job_id}"
+    job = _sketch_jobs.get(key)
+    if job is None:
+        raise HTTPException(404, f"no job '{job_id}' for document '{slug}'")
+    return dict(job)
 
 
 @app.post("/api/documents/{slug}/polish")

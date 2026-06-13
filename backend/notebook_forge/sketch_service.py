@@ -30,6 +30,25 @@ CAPTION_PROMPT = (
 )
 
 
+def eligible_figure_block_ids(blocks: list[dict]) -> list[str]:
+    """Block IDs eligible for batch sketch generation.
+
+    A figure is eligible if it has an original photo AND its sketch has not
+    yet been approved. This guards against clobbering approved sketches.
+    """
+    out = []
+    for b in blocks:
+        if b.get("type") != "forgeImage":
+            continue
+        props = b.get("props", {})
+        if not props.get("assetId"):
+            continue
+        if props.get("sketchAssetId") and props.get("approval") == "approved":
+            continue
+        out.append(b["id"])
+    return out
+
+
 def sketch_settings(session: Session) -> dict:
     """Operator-controlled generation settings, with the production values
     as defaults (Settings screen edits these; stored in the settings table)."""
