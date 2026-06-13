@@ -1,11 +1,14 @@
 """Block-tree helpers: canonical hashing and plain-text extraction.
 
-The canonical document format is BlockNote block JSON plus two custom blocks:
+The canonical document format is BlockNote block JSON plus custom blocks:
 
-  forgeImage    props: { assetId, sketchAssetId?, caption, altText,
-                         approval: "pending"|"approved", peopleCount?,
-                         displayWidth: "full"|"portrait" }
-  forgeFootnote props: { marker, text }
+  forgeImage     props: { assetId, sketchAssetId?, caption, altText,
+                          approval: "pending"|"approved", peopleCount?,
+                          displayWidth: "full"|"portrait" }
+  forgeFootnote  props: { marker, text }
+  forgeNarrative content: inline runs; props: {}
+  forgeDedication props: { text }
+  forgeDocGroup  props: { groupId, sort, showBlurbs, showWordCounts, layout }
 
 A block is { id, type, props, content, children }. Inline content items are
 { type: "text", text, styles } or { type: "link", href, content: [...] }.
@@ -22,6 +25,7 @@ FORGE_IMAGE = "forgeImage"
 FORGE_FOOTNOTE = "forgeFootnote"
 FORGE_DOC_GROUP = "forgeDocGroup"
 FORGE_DEDICATION = "forgeDedication"
+FORGE_NARRATIVE = "forgeNarrative"
 HOMEPAGE_SLUG = "homepage"
 
 

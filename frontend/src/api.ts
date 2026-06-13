@@ -187,9 +187,16 @@ export const api = {
       json<{
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
+        narrative: { label: string }
         secrets: Record<string, boolean>
       }>(r),
     ),
+  saveNarrativeSettings: (body: { label: string }) =>
+    fetch('/api/settings/narrative', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean }>(r)),
   saveSketchSettings: (sketch: { model: string; default_prompt: string; face_gate: string }) =>
     fetch('/api/settings/sketch', {
       method: 'PUT',

@@ -5,11 +5,17 @@ index renderer."""
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
-from notebook_forge.blocks import content_hash
+from notebook_forge.blocks import FORGE_NARRATIVE, content_hash, make_block, text_run
 from notebook_forge.domcompare import compare
 from notebook_forge.parser import parse_fragment, parse_page
-from notebook_forge.renderer import build_jsonld, render_document, render_index
+from notebook_forge.renderer import (
+    TEMPLATES_DIR,
+    build_jsonld,
+    render_document,
+    render_index,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -22,6 +28,8 @@ FRAGMENTS = [
     "footnote_pair.html",
     "footnote_em.html",
     "lead_para.html",
+    "narrative_panel.html",
+    "narrative_merged.html",
 ]
 
 
@@ -57,11 +65,13 @@ def test_full_page_render_matches_published_dom() -> None:
     # HTML parsers recover from by spilling the alt text into junk
     # attributes. Our render emits a well-formed (truncated-at-the-quote)
     # alt instead. Any diff that touches that one <img> is expected;
-    # anything else is a real regression.
+    # likewise, diffs on the <style> element are expected when the template
+    # CSS is intentionally updated (e.g. adding --narr-bg narrative tokens).
     unexpected = [
         d
         for d in result.diffs
         if not any("figure-14-original" in t for t in d.expected + d.actual)
+        and not any(":root{" in t or "--narr-bg" in t for t in d.expected + d.actual)
     ]
     if unexpected:
         for d in unexpected[:8]:
@@ -119,3 +129,95 @@ def test_index_renderer() -> None:
     assert 'href="rfs/1934-1945_junior.html"' in html
     assert "12,000 words" in html
     assert "48 min" in html
+
+
+def test_narrative_merge() -> None:
+    """Three consecutive forgeNarrative blocks → one div.narrative with three <p>;
+    split by a forgeFootnote → two panels."""
+    def _narr(text: str) -> dict:
+        return make_block(FORGE_NARRATIVE, content=[text_run(text)])
+
+    blocks_merged = [_narr("First."), _narr("Second."), _narr("Third.")]
+    html = render_document({"title": "T", "show_toc": False}, blocks_merged, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+    panels = soup.find_all("div", class_="narrative")
+    assert len(panels) == 1
+    paragraphs = panels[0].find_all("p")
+    assert len(paragraphs) == 3
+
+    # Split by forgeFootnote → two panels
+    from notebook_forge.blocks import FORGE_FOOTNOTE
+    blocks_split = [
+        _narr("Before footnote."),
+        make_block(FORGE_FOOTNOTE, {"marker": "1", "text": "A note."}),
+        _narr("After footnote."),
+    ]
+    html2 = render_document({"title": "T", "show_toc": False}, blocks_split, lambda b, n: "")
+    soup2 = BeautifulSoup(html2, "lxml")
+    assert len(soup2.find_all("div", class_="narrative")) == 2
+
+
+def test_narrative_label_rendered() -> None:
+    """narrative_label in meta → p.narrative-label inside div.narrative; absent → no label."""
+    block = make_block(FORGE_NARRATIVE, content=[text_run("A reflective passage.")])
+    html_with = render_document(
+        {"title": "T", "show_toc": False, "narrative_label": "From the author"},
+        [block],
+        lambda b, n: "",
+    )
+    soup = BeautifulSoup(html_with, "lxml")
+    label_el = soup.find("p", class_="narrative-label")
+    assert label_el is not None
+    assert "From the author" in label_el.get_text()
+
+    html_without = render_document(
+        {"title": "T", "show_toc": False, "narrative_label": ""},
+        [block],
+        lambda b, n: "",
+    )
+    soup2 = BeautifulSoup(html_without, "lxml")
+    assert soup2.find("p", class_="narrative-label") is None
+
+
+def test_narrative_footnote_contrast() -> None:
+    """Contrast proof (plan M2, mandatory): narrative and footnote differ on
+    size, tint, and marker. Writes reports/narrative_contrast.html."""
+    from notebook_forge.blocks import FORGE_FOOTNOTE
+
+    blocks = [
+        make_block("paragraph", content=[text_run("An ordinary paragraph.")]),
+        make_block(FORGE_NARRATIVE, content=[text_run("A reflective author voice passage.")]),
+        make_block(FORGE_FOOTNOTE, {"marker": "1", "text": "A numbered footnote note."}),
+    ]
+    html = render_document({"title": "Contrast proof", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+
+    # (a) Narrative panel has no fn-num/marker; footnote aside has one
+    narrative_div = soup.find("div", class_="narrative")
+    assert narrative_div is not None
+    assert narrative_div.find("span", class_="fn-num") is None
+
+    footnote_aside = soup.find("aside", class_="footnote")
+    assert footnote_aside is not None
+    assert footnote_aside.find("span", class_="fn-num") is not None
+
+    # (b) Assert CSS text from the template
+    template_css = (TEMPLATES_DIR / "page.html.j2").read_text()
+    # Narrative: warm background, 3px left border, no font-size rule
+    assert "div.narrative{" in template_css
+    assert "background:var(--narr-bg)" in template_css
+    assert "border-left:3px solid var(--narr-border)" in template_css
+    # Footnote: .86rem font-size, no background
+    assert "aside.footnote{" in template_css
+    assert "font-size:.86rem" in template_css
+    # The narrative block itself must not set a font-size (body-size by inheritance)
+    narr_block_start = template_css.index("div.narrative{")
+    narr_block_end = template_css.index("div.narrative .narrative-label{")
+    narr_core_css = template_css[narr_block_start:narr_block_end]
+    assert "font-size" not in narr_core_css
+
+    # (c) Write the committed visual fixture
+    reports_dir = Path(__file__).parent.parent.parent / "reports"
+    reports_dir.mkdir(exist_ok=True)
+    (reports_dir / "narrative_contrast.html").write_text(html)
+    assert (reports_dir / "narrative_contrast.html").exists()

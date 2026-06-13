@@ -22,6 +22,8 @@
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --narrative-bg: #f1eada;
+  --narrative-border: #b8a580;
 }
 
 body {
@@ -475,6 +477,20 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   outline: 1px solid var(--color-border-tertiary);
   border-radius: 4px;
 }
+
+/* ---- forgeNarrative block ---- */
+/* Warm tinted panel, full editor body size, no marker — the in-editor
+   twin of div.narrative on the published page (contrast with
+   .forge-footnote: 13px, grey, marker input). */
+.forge-narrative {
+  background: var(--narrative-bg);
+  border-left: 3px solid var(--narrative-border);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+  margin: 6px 0;
+  width: 100%;
+}
+.forge-narrative-text { margin: 0; }
 
 /* ---- Settings ---- */
 /* ---- Settings page ---- */

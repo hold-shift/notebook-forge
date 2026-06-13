@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
-import { SuggestionMenuController, useCreateBlockNote } from '@blocknote/react'
+import {
+  SuggestionMenuController,
+  SideMenuController,
+  SideMenu,
+  DragHandleMenu,
+  RemoveBlockItem,
+  BlockColorsItem,
+  useComponentsContext,
+  useCreateBlockNote,
+} from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
-import { forgeSchema, docGroupSlashItem, dedicationSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { stripItalic, addItalic } from '../forge/narrative'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -223,6 +233,13 @@ function MetaBar({
   const tocInitial =
     meta.show_toc === undefined || meta.show_toc === null ? 'auto' : meta.show_toc ? 'on' : 'off'
   const [toc, setToc] = useState(tocInitial)
+  const hasNarrativeBlocks = doc.blocks.some(
+    (b) => (b as { type: string }).type === 'forgeNarrative',
+  )
+  const narrativeLabelInitial = 'narrative_label' in meta
+  const narrativeLabelValueInitial = String(meta.narrative_label ?? '')
+  const [narrativeOverride, setNarrativeOverride] = useState(narrativeLabelInitial)
+  const [narrativeLabelValue, setNarrativeLabelValue] = useState(narrativeLabelValueInitial)
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const needsConfirm = meta.date_confirmed === false
 
@@ -256,7 +273,9 @@ function MetaBar({
     author !== String(meta.author ?? '') ||
     years !== String(meta.year_display ?? '') ||
     standfirst !== String(meta.standfirst ?? '') ||
-    toc !== tocInitial
+    toc !== tocInitial ||
+    narrativeOverride !== narrativeLabelInitial ||
+    (narrativeOverride && narrativeLabelValue !== narrativeLabelValueInitial)
 
   const save = () => {
     setState('saving')
@@ -271,6 +290,8 @@ function MetaBar({
     }
     if (toc === 'auto') delete updated.show_toc
     else updated.show_toc = toc === 'on'
+    if (narrativeOverride) updated.narrative_label = narrativeLabelValue
+    else delete updated.narrative_label
     api.saveMeta(doc.slug, editorDoc(), updated as Record<string, unknown>, 'edited document metadata').then(
       (resp) => {
         doc.meta = updated as DocDetail['meta']
@@ -307,6 +328,24 @@ function MetaBar({
           <option value="off">Off</option>
         </select>
       </label>
+      {hasNarrativeBlocks && (
+        <label className="meta-narrative" title="Override the workspace narrative panel label for this document. Unchecked = inherit workspace default.">
+          Narrative label
+          <span className="meta-narrative-row">
+            <input
+              type="checkbox"
+              checked={narrativeOverride}
+              onChange={(e) => setNarrativeOverride(e.target.checked)}
+            />
+            <input
+              value={narrativeLabelValue}
+              disabled={!narrativeOverride}
+              onChange={(e) => setNarrativeLabelValue(e.target.value)}
+              placeholder="e.g. From the author"
+            />
+          </span>
+        </label>
+      )}
       <label className="meta-slug" title="Internal library ID and URL path segment. Changing it makes the old URL a dead link until re-published.">
         Slug
         <span className="meta-slug-row">
@@ -445,6 +484,35 @@ function SnapshotsPanel({ slug }: { slug: string }) {
       ))}
     </div>
   )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
+  const Components = useComponentsContext()
+  if (!Components) return null
+  if (block.type === 'paragraph') {
+    return (
+      <Components.Generic.Menu.Item
+        onClick={() =>
+          editor.updateBlock(block, { type: 'forgeNarrative', content: stripItalic(block.content) })
+        }
+      >
+        Convert to narrative
+      </Components.Generic.Menu.Item>
+    )
+  }
+  if (block.type === 'forgeNarrative') {
+    return (
+      <Components.Generic.Menu.Item
+        onClick={() =>
+          editor.updateBlock(block, { type: 'paragraph', content: addItalic(block.content) })
+        }
+      >
+        Convert to paragraph
+      </Components.Generic.Menu.Item>
+    )
+  }
+  return null
 }
 
 function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
@@ -812,7 +880,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   triggerCharacter="/"
                   getItems={async (q) =>
                     filterSuggestionItems(
-                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor)],
+                      [...getDefaultReactSlashMenuItems(editor), dedicationSlashItem(editor), docGroupSlashItem(editor), narrativeSlashItem(editor)],
                       q,
                     )
                   }
@@ -837,7 +905,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                         )
                       },
                     }
-                    const all = [...defaults, photoItem]
+                    const all = [...defaults, photoItem, narrativeSlashItem(editor)]
                     const q = query.toLowerCase()
                     return q
                       ? all.filter(
@@ -849,6 +917,20 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   }}
                 />
               )}
+              <SideMenuController
+                sideMenu={(props) => (
+                  <SideMenu
+                    {...props}
+                    dragHandleMenu={(menuProps: any) => (
+                      <DragHandleMenu>
+                        <RemoveBlockItem>Delete</RemoveBlockItem>
+                        <BlockColorsItem>Colors</BlockColorsItem>
+                        <ConvertNarrativeItem block={menuProps.block} editor={editor} />
+                      </DragHandleMenu>
+                    )}
+                  />
+                )}
+              />
             </BlockNoteView>
           </div>
           <button

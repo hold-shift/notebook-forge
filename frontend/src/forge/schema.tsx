@@ -9,6 +9,7 @@ import { ForgeImageView, type ForgeImageProps } from './ForgeImageView'
 import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
 import { ForgeDedicationView } from './ForgeDedicationView'
 import { ForgeDocGroupView, type ForgeDocGroupProps } from './ForgeDocGroupView'
+import { ForgeNarrativeView } from './ForgeNarrativeView'
 
 export const forgeImageSpec = createReactBlockSpec(
   {
@@ -122,6 +123,13 @@ export const forgeDedicationSpec = createReactBlockSpec(
   },
 )
 
+export const forgeNarrativeSpec = createReactBlockSpec(
+  { type: 'forgeNarrative', propSchema: {}, content: 'inline' },
+  {
+    render: ({ contentRef }) => <ForgeNarrativeView contentRef={contentRef} />,
+  },
+)
+
 export const forgeDocGroupSpec = createReactBlockSpec(
   {
     type: 'forgeDocGroup',
@@ -151,12 +159,26 @@ export const forgeSchema = BlockNoteSchema.create({
     forgeFootnote: forgeFootnoteSpec(),
     forgeDedication: forgeDedicationSpec(),
     forgeDocGroup: forgeDocGroupSpec(),
+    forgeNarrative: forgeNarrativeSpec(),
   },
   styleSpecs: {
     ...defaultStyleSpecs,
     fnRef: fnRefStyleSpec,
   },
 })
+
+/** Slash menu item for inserting a forgeNarrative block (both editors). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function narrativeSlashItem(editor: any) {
+  return {
+    title: 'Narrative',
+    aliases: ['narrative', 'reflection', 'voice'],
+    group: 'Forge',
+    subtext: "Author's reflective voice — tinted panel",
+    icon: <i className="ti ti-feather" />,
+    onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeNarrative' }),
+  }
+}
 
 /** Slash menu item for inserting a forgeDocGroup block (homepage only). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

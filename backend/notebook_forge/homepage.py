@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from .blocks import FORGE_DEDICATION, FORGE_DOC_GROUP
+from .blocks import FORGE_DEDICATION, FORGE_DOC_GROUP, FORGE_NARRATIVE
 from .collection import count_words, reading_time
 from .groups import resolve_members
 from .models import Document, Group
@@ -137,6 +137,11 @@ def homepage_body(
             if not first_group_seen:
                 intro_paras_before_group.append(_inline_text_of(block))
 
+        elif btype == FORGE_NARRATIVE:
+            rendered = inline_html(block.get("content") or [])
+            if rendered.strip():
+                body_entries.append({"kind": "narrative", "paragraphs": [rendered]})
+
         elif btype == FORGE_DEDICATION:
             text = props.get("text", "")
             if text:
@@ -187,6 +192,8 @@ def homepage_body(
             if btype and btype not in ("heading",):
                 warnings.append(f"homepage: skipped unsupported block type '{btype}'")
 
+    from .renderer import _merge_narrative
+    body_entries = _merge_narrative(body_entries)
     derived.setdefault("title", "The Family Archive")
     derived["welcome"] = "\n\n".join(intro_paras_before_group)
     return body_entries, warnings, derived

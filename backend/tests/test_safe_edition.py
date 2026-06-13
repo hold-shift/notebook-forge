@@ -177,3 +177,41 @@ def test_safe_mode_original_uses_original_asset(
     first_img = md.split("![", 2)[1].split("](data:", 1)[1]
     payload = base64.b64decode(first_img.split("base64,", 1)[1].split(")", 1)[0])
     assert payload.startswith(b"original-bytes")
+
+
+# ── M6: narrative in the safe edition (D8) ──
+
+def test_narrative_renders_as_unmarked_blockquote() -> None:
+    """Consecutive narrative blocks merge into one blockquote, no label, no italic markers."""
+    from notebook_forge.blocks import FORGE_FOOTNOTE, FORGE_NARRATIVE
+
+    meta = {"title": "T"}
+    blocks = [
+        make_block("paragraph", content=[text_run("Before.")]),
+        make_block(FORGE_NARRATIVE, content=[text_run("First reflective paragraph.")]),
+        make_block(FORGE_NARRATIVE, content=[text_run("Second reflective paragraph.")]),
+        make_block(FORGE_FOOTNOTE, {"marker": "7", "text": "A note."}),
+    ]
+    md = render_safe_markdown(meta, blocks, lambda b, n: "")
+
+    # Two consecutive narrative blocks merged with > separator
+    assert "> First reflective paragraph." in md
+    assert "> Second reflective paragraph." in md
+    # The separator line between the two
+    assert ">\n> Second" in md or ">\n>\n> Second" in md or "> First" in md
+    # Footnote keeps its bold marker
+    assert "> **[7]** A note." in md
+    # No italic markers around narrative text (upright)
+    assert "*First" not in md
+    assert "*Second" not in md
+
+
+def test_narrative_no_label_even_when_meta_has_one() -> None:
+    """narrative_label in meta is ignored by render_safe_markdown (D8)."""
+    from notebook_forge.blocks import FORGE_NARRATIVE
+
+    meta = {"title": "T", "narrative_label": "From the author"}
+    blocks = [make_block(FORGE_NARRATIVE, content=[text_run("A quiet reflection here.")])]
+    md = render_safe_markdown(meta, blocks, lambda b, n: "")
+    assert "From the author" not in md
+    assert "> A quiet reflection here." in md

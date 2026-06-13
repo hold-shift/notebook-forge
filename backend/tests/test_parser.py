@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from notebook_forge.blocks import inline_text
+from notebook_forge.blocks import FORGE_NARRATIVE, inline_text
 from notebook_forge.parser import parse_fragment, parse_page
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -154,3 +154,40 @@ def test_parse_full_page_metadata_and_content() -> None:
     assert "Filter sections" not in all_text
     assert "← Previous" not in all_text
     assert "The Skitch Family Archive" not in all_text
+
+
+def test_parse_narrative_panel() -> None:
+    """Single div.narrative → one forgeNarrative between two paragraphs."""
+    blocks, _ = parse_fragment(fixture("narrative_panel.html"))
+    assert len(blocks) == 3
+    assert blocks[0]["type"] == "paragraph"
+    assert blocks[1]["type"] == FORGE_NARRATIVE
+    expected = "Looking back on those years I wonder how we managed at all."
+    assert inline_text(blocks[1]["content"]) == expected
+    assert blocks[2]["type"] == "paragraph"
+
+
+def test_parse_narrative_merged_and_footnote() -> None:
+    """Three-paragraph panel → three consecutive forgeNarrative blocks, then forgeFootnote."""
+    blocks, _ = parse_fragment(fixture("narrative_merged.html"))
+    narrative_blocks = [b for b in blocks if b["type"] == FORGE_NARRATIVE]
+    assert len(narrative_blocks) == 3
+    # All three narrative blocks are consecutive (blocks 1, 2, 3)
+    types = [b["type"] for b in blocks]
+    assert types.index(FORGE_NARRATIVE) == 1  # first narrative after first paragraph
+    assert types[1] == types[2] == types[3] == FORGE_NARRATIVE
+    assert types[4] == "forgeFootnote"
+
+
+def test_parse_narrative_label_stripped() -> None:
+    """Label <p class='narrative-label'> inside div.narrative is skipped."""
+    html = (
+        '<div class="narrative">'
+        '<p class="narrative-label">From the author</p>'
+        "<p>A reflective passage here.</p>"
+        "</div>"
+    )
+    blocks, _ = parse_fragment(html)
+    assert len(blocks) == 1
+    assert blocks[0]["type"] == FORGE_NARRATIVE
+    assert inline_text(blocks[0]["content"]) == "A reflective passage here."

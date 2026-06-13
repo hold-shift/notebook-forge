@@ -77,6 +77,9 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
         meta["nav_prev"] = nav_prev
         meta["nav_next"] = nav_next
 
+    from ..narrative import effective_narrative_label
+    meta["narrative_label"] = effective_narrative_label(session, doc)
+
     html = render_document(meta, doc.blocks, image_src)
     return PublishBundle(slug=slug, html=html, assets=assets)
 

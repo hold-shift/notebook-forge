@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from slugify import slugify
 
-from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE, inline_text
+from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE, FORGE_NARRATIVE, inline_text
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -195,6 +195,17 @@ def build_body(
                 entry["lead"] = True
                 first_para_done = True
             body.append(entry)
+        elif btype == FORGE_NARRATIVE:
+            text = inline_text(block.get("content"))
+            if not text.strip():
+                continue
+            body.append(
+                {
+                    "kind": "narrative",
+                    "text": text,
+                    "paragraphs": [Markup(inline_html(block.get("content")))],
+                }
+            )
         elif btype == "quote":
             body.append(
                 {
@@ -211,6 +222,7 @@ def build_body(
             body.append({"kind": "table", "html": Markup(_table_html(block))})
 
     body = _group_list_items(body)
+    body = _merge_narrative(body)
     toc = _assign_heading_anchors(body)
     return body, toc
 
@@ -256,6 +268,17 @@ def _group_list_items(body: list[dict[str, Any]]) -> list[dict[str, Any]]:
             flush()
             out.append(entry)
     flush()
+    return out
+
+
+def _merge_narrative(body: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Consecutive narrative entries collapse into ONE panel (locked decision A)."""
+    out: list[dict[str, Any]] = []
+    for entry in body:
+        if entry["kind"] == "narrative" and out and out[-1]["kind"] == "narrative":
+            out[-1]["paragraphs"].extend(entry["paragraphs"])
+        else:
+            out.append(entry)
     return out
 
 
@@ -328,6 +351,7 @@ def render_document(
         jsonld_script=build_jsonld(meta),
         nav_prev=meta.get("nav_prev"),
         nav_next=meta.get("nav_next"),
+        narrative_label=meta.get("narrative_label", ""),
     )
 
 

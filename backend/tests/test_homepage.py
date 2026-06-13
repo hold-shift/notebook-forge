@@ -502,3 +502,30 @@ def test_integration_full_loop(tmp_path: Path, workspace: Path, session: Session
     assert "index.html" in files
     # intro paras survive even if group block is skipped
     assert "index.html" in files
+
+
+# ── M6: forgeNarrative on the homepage ──
+
+def test_narrative_blocks_appear_in_homepage_body(session: Session) -> None:
+    """Two consecutive narrative blocks → one merged entry; rendered index has div.narrative."""
+    from notebook_forge.blocks import FORGE_NARRATIVE
+    from notebook_forge.collection import root_files
+
+    hp = _hp(session, [
+        make_block("paragraph", content=[text_run("Welcome to the archive.")]),
+        make_block(FORGE_NARRATIVE, content=[text_run("A quiet reflection on those years.")]),
+        make_block(FORGE_NARRATIVE, content=[text_run("And what came after that time.")]),
+        make_block("paragraph", content=[text_run("Browse the documents below.")]),
+    ])
+    entries, _, _ = homepage_body(session, hp)
+    narrative_entries = [e for e in entries if e["kind"] == "narrative"]
+    # The two consecutive blocks merge into ONE entry with two paragraphs
+    assert len(narrative_entries) == 1
+    assert len(narrative_entries[0]["paragraphs"]) == 2
+
+    # Rendered index HTML contains one div.narrative
+    files, _ = root_files(session, base_url="https://example.org")
+    html = files.get("index.html", "")
+    assert html.count('<div class="narrative">') == 1
+    assert "A quiet reflection" in html
+    assert "And what came after" in html

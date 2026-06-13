@@ -67,6 +67,45 @@ the editor canvas. Choose a group from the dropdown, pick a sort mode
 display. The block shows a live preview of the first five members; the
 member list updates whenever a document's metadata changes.
 
+## Narrative blocks
+
+A **forgeNarrative** block renders as a warm-tinted panel (background
+`#F1EADA`, 3 px amber left border) for the author's reflective voice.
+
+**Rule B — what converts automatically on import/ingest:** a paragraph
+block whose entire text is italic (ignoring punctuation-only and `fnRef`
+runs) is converted to `forgeNarrative`. Passages under 12 words are
+flagged for review in the import coverage notes.
+
+**Editor actions:**
+- Slash menu → `/Narrative` (or `/reflection`, `/voice`) to insert a new block.
+- Drag-handle → "Convert to narrative" on any paragraph (or "Convert to
+  paragraph" on a narrative block) to toggle manually.
+
+**Workspace label:** Settings → Narrative label. Set a label (e.g.
+"From the author") to prepend a styled `<p class="narrative-label">` to
+every narrative panel in the rendered HTML. Leave blank for no label.
+Per-document override: `doc.meta["narrative_label"]` — key-presence
+tri-state (key absent = inherit workspace, key present = use it, even
+`""`).
+
+**One-time migration** — converts full-italic paragraphs already in the
+database to `forgeNarrative`:
+```sh
+uv run python -m notebook_forge.cli narrative-migrate --dry-run \
+  --reports reports/        # scan only; writes reports/narrative_migration.md
+uv run python -m notebook_forge.cli narrative-migrate --apply \
+  --reports reports/        # snapshot + convert; writes marker to block re-runs
+```
+Use `--force` to re-apply after a previous `--apply` (e.g. after a
+manual rollback). Homepage documents are always excluded from migration.
+Every converted document receives a snapshot "before narrative migration"
+for recovery from the editor's Snapshots panel.
+
+**Contrast fixture:** `reports/narrative_contrast.html` — a side-by-side
+of ordinary paragraph / narrative panel / footnote, committed on every
+`make check` run.
+
 ## Secrets (macOS keychain, service `notebook-forge`)
 
 | name | purpose | how to set |

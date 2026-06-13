@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from sqlalchemy.orm import Session
 
 from .assets import asset_path
-from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE
+from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE, FORGE_NARRATIVE
 from .models import Asset, Document
 
 _INLINE_IMG_MAX_PX = 1024
@@ -138,10 +138,20 @@ def render_safe_markdown(
     lines += ["---", ""]
 
     fig_n = 0
+    prev_narrative = False
     seen_assets: dict[str, tuple[int, str]] = {}
     for block in blocks:
         btype = block.get("type")
         props = block.get("props", {})
+        if btype == FORGE_NARRATIVE:
+            text = inline_md(block.get("content")).strip()
+            if text:
+                if prev_narrative and lines and lines[-1] == "":
+                    lines[-1] = ">"
+                lines += [f"> {text}", ""]
+                prev_narrative = True
+            continue
+        prev_narrative = False
         if btype == FORGE_IMAGE:
             asset_key = props.get("assetId") or ""
             if asset_key and asset_key in seen_assets:

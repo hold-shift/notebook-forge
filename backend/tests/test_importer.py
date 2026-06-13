@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from notebook_forge import services
-from notebook_forge.blocks import FORGE_IMAGE
+from notebook_forge.blocks import FORGE_IMAGE, FORGE_NARRATIVE
+from notebook_forge.domcompare import compare
 from notebook_forge.importer import (
     coverage_for,
     discover_slugs,
@@ -18,6 +19,7 @@ from notebook_forge.importer import (
     roundtrip_document,
 )
 from notebook_forge.models import Change, SyncState
+from notebook_forge.renderer import render_document
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SLUG = "1953-1954_in-the-navy"
@@ -102,3 +104,65 @@ def test_asset_rows_deduplicate_across_imports(
     session.commit()
     # identical bytes → same content addresses → no new asset rows
     assert len(list(session.scalars(select(Asset)))) == 30
+
+
+# ── M4: narrative post-pass in house-style import ──
+
+NARRATIVE_SLUG = "1960_narrative-test"
+
+
+def make_narrative_repo(tmp_path: Path) -> Path:
+    """Repo with a minimal full-page fixture containing italic paragraphs."""
+    repo = tmp_path / "repo"
+    rfs = repo / "rfs"
+    rfs.mkdir(parents=True)
+    shutil.copy(FIXTURES / "full_page_narrative.html", rfs / f"{NARRATIVE_SLUG}.html")
+    return repo
+
+
+def test_import_narrative_converts_paragraphs(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """House-style import: full-italic paragraphs → forgeNarrative; coverage notes present."""
+    repo = make_narrative_repo(tmp_path)
+    target = get_or_create_pages_target(session, repo)
+    doc, cov = import_document(session, workspace, repo, NARRATIVE_SLUG, target)
+    session.commit()
+
+    narrative_blocks = [b for b in doc.blocks if b["type"] == FORGE_NARRATIVE]
+    assert len(narrative_blocks) == 2  # one ≥12-word + one <12-word italic paragraph
+
+    # coverage notes contain the flag line for the short one
+    notes_text = " ".join(cov.notes)
+    assert "forgeNarrative" in notes_text  # conversion count note
+    assert "narrative <12 words" in notes_text  # flag note for short passage
+
+
+def test_narrative_roundtrip_idempotent(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """Self-idempotence gate (D15): parse+convert → render → parse must round-trip perfectly."""
+    from notebook_forge.parser import parse_page
+
+    src = (FIXTURES / "full_page_narrative.html").read_text()
+    from notebook_forge.narrative import convert_full_italic_paragraphs
+
+    page = parse_page(src)
+    page.blocks, _ = convert_full_italic_paragraphs(page.blocks)
+
+    # r1 = render from converted blocks
+    r1 = render_document({"title": "T", "show_toc": False}, page.blocks, lambda b, n: "")
+
+    # parse r1 → should produce same narrative blocks (panel splits back to consecutive blocks)
+    page2 = parse_page(r1)
+    narrative1 = [b for b in page.blocks if b["type"] == FORGE_NARRATIVE]
+    narrative2 = [b for b in page2.blocks if b["type"] == FORGE_NARRATIVE]
+    assert len(narrative2) == len(narrative1)
+    # content matches (ignoring ids)
+    from notebook_forge.blocks import content_hash
+    assert content_hash(narrative2) == content_hash(narrative1)
+
+    # r2 = render from re-parsed blocks → DOM-equal to r1 at 100%
+    r2 = render_document({"title": "T", "show_toc": False}, page2.blocks, lambda b, n: "")
+    result = compare(r1, r2)
+    assert result.equal, [d.expected for d in result.diffs]

@@ -25,6 +25,17 @@ def main(argv: list[str] | None = None) -> int:
     auth = sub.add_parser("drive-auth", help="one-time Drive OAuth consent (opens a browser)")
     auth.add_argument("--secrets", required=True, type=Path, help="OAuth client-secrets JSON")
 
+    nm = sub.add_parser(
+        "narrative-migrate",
+        help="migrate full-italic paragraphs to forgeNarrative blocks",
+    )
+    nm_mode = nm.add_mutually_exclusive_group(required=True)
+    nm_mode.add_argument("--dry-run", action="store_true", help="scan only; no DB writes")
+    nm_mode.add_argument("--apply", action="store_true", help="snapshot + convert affected docs")
+    nm.add_argument("--force", action="store_true", help="re-apply even if already applied")
+    nm.add_argument("--workspace", type=Path, default=None)
+    nm.add_argument("--reports", type=Path, default=Path("reports"))
+
     ri = sub.add_parser(
         "reimport",
         help="re-import docs from archived MemoirForge sources, reusing existing sketches",
@@ -81,10 +92,60 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{r.slug}: similarity={r.similarity * 100:.3f}% diffs={len(r.result.diffs)}")
         return 1 if failed else 0
 
+    if args.command == "narrative-migrate":
+        return _cmd_narrative_migrate(args)
+
     if args.command == "reimport":
         return _cmd_reimport(args)
 
     return 2
+
+
+def _cmd_narrative_migrate(args: argparse.Namespace) -> int:
+    from .narrative_migration import already_applied, apply, scan, write_report
+
+    ws = bootstrap_workspace(args.workspace or workspace_path())
+    engine = make_engine(ws)
+    factory = make_session_factory(engine)
+
+    with factory() as session:
+        if args.apply and not args.force:
+            marker = already_applied(session)
+            if marker is not None:
+                applied_at = marker.get("applied_at", "unknown")
+                print(
+                    f"ERROR: migration already applied at {applied_at}. "
+                    "Use --force to re-apply.",
+                    file=sys.stderr,
+                )
+                return 1
+
+        rows = scan(session)
+        affected = [r for r in rows if r["count"] > 0]
+        print(
+            f"Scanned {len(rows)} document(s); "
+            f"{len(affected)} affected; "
+            f"{sum(r['count'] for r in rows)} conversion(s) total."
+        )
+        for row in rows:
+            if row["count"] == 0:
+                continue
+            flagged = sum(1 for c in row["conversions"] if c.get("flagged"))
+            print(
+                f"  {row['slug']}: {row['count']} conversion(s)"
+                + (f", {flagged} flagged" if flagged else "")
+            )
+
+        mode = "dry-run" if args.dry_run else "apply"
+        write_report(args.reports.resolve(), rows, mode)
+        print(f"\nReport written to {args.reports.resolve() / 'narrative_migration.md'}")
+
+        if args.apply:
+            apply(session)
+            session.commit()
+            print(f"Applied: {len(affected)} document(s) converted.")
+
+    return 0
 
 
 def _cmd_reimport(args: argparse.Namespace) -> int:
