@@ -328,11 +328,16 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 13px;
 }
 .meta-bar > label { flex: none; }
-.meta-bar .meta-standfirst { flex: 1; }
-.meta-bar .meta-standfirst input { width: 100%; }
 .meta-bar .meta-slug { flex-basis: 100%; }
+.meta-second-row { display: flex; align-items: flex-start; gap: 14px; flex-basis: 100%; }
+.meta-second-row .meta-narrative { flex: none; }
+.meta-second-row .meta-standfirst { flex: 1; min-width: 0; overflow: hidden; }
+.meta-second-row .meta-standfirst input { width: 100%; min-width: 0; }
 .meta-slug-row { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
 .meta-slug-row input.meta-slug-input { flex: 1; font-family: var(--font-mono, monospace); font-size: 12px; min-width: 0; }
+.meta-narrative-row { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+.meta-narrative-row input[type="checkbox"] { flex: none; width: 16px; min-width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.meta-narrative-row input[type="text"] { flex: 1; min-width: 0; }
 .meta-slug-error { font-size: 11px; color: var(--color-error, #c0392b); display: block; margin-top: 3px; }
 .confirm-hint { color: var(--pill-warn-fg); font-size: 12px; flex-basis: 100%; }
 

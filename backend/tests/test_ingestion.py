@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from notebook_forge import services
 from notebook_forge.blocks import FORGE_IMAGE, FORGE_NARRATIVE
+from notebook_forge.ingest_vendor.extract_docx import _strip_inline_emph
 from notebook_forge.ingestion import _md_inline_runs, draft_to_blocks, ingest_document
 from notebook_forge.models import Asset
 from notebook_forge.narrative import convert_full_italic_paragraphs
@@ -16,6 +17,15 @@ from notebook_forge.narrative import convert_full_italic_paragraphs
 SAMPLES = Path("/Users/cs/ClaudeCode/MemoirForge/samples")
 
 needs_samples = pytest.mark.skipif(not SAMPLES.exists(), reason="MemoirForge samples not present")
+
+
+def test_strip_inline_emph_strips_sup_sub() -> None:
+    """Pandoc emits <sup>st</sup> for ordinal superscripts in GFM; strip tags, keep text."""
+    assert _strip_inline_emph("1<sup>st</sup> January") == "1st January"
+    assert _strip_inline_emph("22<sup>nd</sup> of October") == "22nd of October"
+    assert _strip_inline_emph("H<sub>2</sub>O") == "H2O"
+    assert _strip_inline_emph("no tags here") == "no tags here"
+    assert _strip_inline_emph("<SUP>X</SUP>") == "X"
 
 
 def test_md_inline_runs() -> None:

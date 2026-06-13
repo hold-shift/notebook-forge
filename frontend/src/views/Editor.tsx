@@ -10,6 +10,7 @@ import {
   useComponentsContext,
   useCreateBlockNote,
 } from '@blocknote/react'
+import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
 import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
@@ -316,10 +317,6 @@ function MetaBar({
         Years
         <input value={years} onChange={(e) => setYears(e.target.value)} className="meta-years" />
       </label>
-      <label className="meta-standfirst">
-        Standfirst
-        <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
-      </label>
       <label className="meta-toc" title="Table of contents on the published HTML page. Auto = on when the document has more than 15 headings. Always rebuilt from current headings at publish.">
         ToC
         <select value={toc} onChange={(e) => setToc(e.target.value)}>
@@ -328,24 +325,30 @@ function MetaBar({
           <option value="off">Off</option>
         </select>
       </label>
-      {hasNarrativeBlocks && (
-        <label className="meta-narrative" title="Override the workspace narrative panel label for this document. Unchecked = inherit workspace default.">
-          Narrative label
-          <span className="meta-narrative-row">
-            <input
-              type="checkbox"
-              checked={narrativeOverride}
-              onChange={(e) => setNarrativeOverride(e.target.checked)}
-            />
-            <input
-              value={narrativeLabelValue}
-              disabled={!narrativeOverride}
-              onChange={(e) => setNarrativeLabelValue(e.target.value)}
-              placeholder="e.g. From the author"
-            />
-          </span>
+      <div className="meta-second-row">
+        {hasNarrativeBlocks && (
+          <label className="meta-narrative" title="Override the workspace narrative panel label for this document. Unchecked = inherit workspace default.">
+            Narrative label
+            <span className="meta-narrative-row">
+              <input
+                type="checkbox"
+                checked={narrativeOverride}
+                onChange={(e) => setNarrativeOverride(e.target.checked)}
+              />
+              <input
+                value={narrativeLabelValue}
+                disabled={!narrativeOverride}
+                onChange={(e) => setNarrativeLabelValue(e.target.value)}
+                placeholder="e.g. From the author"
+              />
+            </span>
+          </label>
+        )}
+        <label className="meta-standfirst">
+          Standfirst
+          <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
         </label>
-      )}
+      </div>
       <label className="meta-slug" title="Internal library ID and URL path segment. Changing it makes the old URL a dead link until re-published.">
         Slug
         <span className="meta-slug-row">
@@ -357,10 +360,31 @@ function MetaBar({
           />
           <button
             type="button"
+            title="Regenerate slug from current title and years"
+            onClick={() => {
+              const toSlug = (s: string) =>
+                s.toLowerCase()
+                  .replace(/[–—]/g, '-')
+                  .replace(/[^a-z0-9\s-]/g, '')
+                  .trim()
+                  .replace(/\s+/g, '-')
+                  .replace(/-+/g, '-')
+                  .replace(/^-|-$/g, '')
+              const yearPart = toSlug(years)
+              const titlePart = toSlug(title)
+              const suggested = yearPart ? `${yearPart}_${titlePart}` : titlePart
+              setSlug(suggested)
+              setSlugError('')
+            }}
+          >
+            Update
+          </button>
+          <button
+            type="button"
             disabled={!slugDirty || slugState === 'saving'}
             onClick={saveSlug}
           >
-            {slugState === 'saving' ? 'Renaming…' : 'Rename'}
+            {slugState === 'saving' ? 'Renaming…' : '💾 Slug'}
           </button>
         </span>
         {slugError && <span className="error meta-slug-error">{slugError}</span>}
@@ -419,19 +443,19 @@ function MetaBar({
           <>
             <button
               type="button"
-              disabled={pendingCount === 0}
-              title="Mark all pending images as approved"
-              onClick={onApproveAll}
-            >
-              {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
-            </button>
-            <button
-              type="button"
               disabled={missingCount === 0 || generatingCaptions}
               title="Generate AI captions for images without one"
               onClick={() => void onGenerateCaptions()}
             >
               {generatingCaptions ? '✨ Captioning…' : missingCount > 0 ? `✨ Caption images (${missingCount})` : '✨ Caption images'}
+            </button>
+            <button
+              type="button"
+              disabled={pendingCount === 0}
+              title="Mark all pending images as approved"
+              onClick={onApproveAll}
+            >
+              {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
             </button>
           </>
         )
@@ -874,7 +898,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             </div>
           ))}
           <div className="editor-canvas">
-            <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={!isHomepage ? undefined : false}>
+            <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={false}>
               {isHomepage ? (
                 <SuggestionMenuController
                   triggerCharacter="/"
@@ -897,13 +921,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                       subtext: 'Insert a photo or illustration',
                       aliases: ['im', 'image', 'photo', 'figure', 'fig'],
                       group: 'Media',
-                      onItemClick: () => {
-                        editor.insertBlocks(
-                          [{ type: 'forgeImage', props: {} }],
-                          editor.getTextCursorPosition().block,
-                          'after',
-                        )
-                      },
+                      onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeImage' }),
                     }
                     const all = [...defaults, photoItem, narrativeSlashItem(editor)]
                     const q = query.toLowerCase()

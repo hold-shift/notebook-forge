@@ -472,6 +472,9 @@ def _heading_kind(line: str) -> tuple[str, str] | None:
 _HEADING_MAX_CHARS = 100
 _BOLD_ONLY_RE = re.compile(r"^\*\*(.+?)\*\*$", re.DOTALL)
 _ITALIC_ONLY_RE = re.compile(r"^\*(?!\*)(.+?)\*$", re.DOTALL)
+# Pandoc emits raw HTML for inline styles GFM can't express natively.
+# Strip the tags, keeping their text content (e.g. 1<sup>st</sup> → 1st).
+_RAW_SUP_SUB_RE = re.compile(r"</?su[pb][^>]*>", re.IGNORECASE)
 
 
 def _strip_emphasis(text: str) -> str:
@@ -591,7 +594,9 @@ def _promote_bold_paragraph_headings(body: list[dict]) -> list[dict]:
 
 
 def _strip_inline_emph(text: str) -> str:
-    """Light cleanup for paragraph display in the gallery / debug — preserve text."""
+    """Strip raw HTML tags pandoc emits for inline styles GFM can't express
+    (e.g. <sup>st</sup> for Word ordinal superscripts). Keep inner text."""
+    text = _RAW_SUP_SUB_RE.sub("", text)
     return text.strip()
 
 
