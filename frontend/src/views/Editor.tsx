@@ -170,24 +170,26 @@ function PendingPanel({
                     ? `${behind || 'some'} change${behind === 1 ? '' : 's'} behind`
                     : 'up to date'}
               </span>
-              <button
-                type="button"
-                disabled={!t.dirty || pushing === t.target}
-                onClick={() => onPush(t.target)}
-              >
-                {pushing === t.target ? 'Pushing…' : 'Push'}
-              </button>
-              {t.status === 'PUBLISHED' && !hideUnpublish && (
+              <span className="target-btns">
                 <button
                   type="button"
-                  className="btn-danger-sm"
-                  disabled={!!pushing || unpublishing === t.target}
-                  title={`Remove this document from ${t.target}`}
-                  onClick={() => onUnpublish(t.target)}
+                  disabled={!t.dirty || pushing === t.target}
+                  onClick={() => onPush(t.target)}
                 >
-                  {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
+                  {pushing === t.target ? 'Pushing…' : 'Push'}
                 </button>
-              )}
+                {t.status === 'PUBLISHED' && !hideUnpublish && (
+                  <button
+                    type="button"
+                    className="btn-danger-sm"
+                    disabled={!!pushing || unpublishing === t.target}
+                    title={`Remove this document from ${t.target}`}
+                    onClick={() => onUnpublish(t.target)}
+                  >
+                    {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
+                  </button>
+                )}
+              </span>
             </div>
           )
         })}
