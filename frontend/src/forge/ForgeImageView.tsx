@@ -21,6 +21,8 @@ export interface ForgeImageProps {
 export interface ForgeImageViewProps {
   props: ForgeImageProps
   assetUrl: (sha: string) => string
+  /** Stable block id — sets id="figure-{blockId}" for sidebar nav stepper. */
+  blockId?: string
   onCaptionChange?: (caption: string) => void
   onApprovalToggle?: () => void
   /** Generate (or regenerate) the sketch via Gemini. An optional prompt
@@ -35,6 +37,7 @@ export interface ForgeImageViewProps {
 export function ForgeImageView({
   props,
   assetUrl,
+  blockId,
   onCaptionChange,
   onApprovalToggle,
   onGenerateSketch,
@@ -115,6 +118,7 @@ export function ForgeImageView({
 
   return (
     <figure
+      id={blockId ? `figure-${blockId}` : undefined}
       className={`forge-image ${displayWidth === 'portrait' ? 'portrait' : 'full'}`}
       data-testid="forge-image"
     >

@@ -203,6 +203,25 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sketch),
     }).then((r) => json<{ ok: boolean }>(r)),
+  generateAllSketches: (slug: string, batchFaceGate: 'warn' | 'block' = 'warn') =>
+    fetch(`/api/documents/${slug}/figures/generate-all-sketches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_face_gate: batchFaceGate }),
+    }).then((r) => json<{ job_id: string; eligible: number }>(r)),
+  sketchJobStatus: (slug: string, jobId: string) =>
+    fetch(
+      `/api/documents/${slug}/figures/generate-all-sketches/status?job_id=${encodeURIComponent(jobId)}`,
+      { cache: 'no-store' },
+    ).then((r) =>
+      json<{
+        status: 'running' | 'done' | 'failed'
+        done: number
+        total: number
+        failed: number
+        results: { block_id: string; ok: boolean; face_gate: string; error?: string }[]
+      }>(r),
+    ),
   ingest: (file: File) => {
     const form = new FormData()
     form.append('file', file)

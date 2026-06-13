@@ -35,6 +35,7 @@ export const forgeImageSpec = createReactBlockSpec(
       <ForgeImageView
         props={block.props as ForgeImageProps}
         assetUrl={api.assetUrl}
+        blockId={block.id}
         onCaptionChange={(caption) =>
           editor.updateBlock(block, { props: { ...block.props, caption } })
         }

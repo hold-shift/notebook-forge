@@ -83,6 +83,275 @@ function ChangesModal({
   )
 }
 
+type ImageBlock = { id: string; type: string; props: Record<string, unknown>; children: unknown[] }
+
+function figureBlocks(doc: unknown[]): ImageBlock[] {
+  return (doc as ImageBlock[]).filter((b) => b.type === 'forgeImage')
+}
+
+function ImagesPanel({
+  slug,
+  editorDoc,
+  onApproveAll,
+  onGenerateCaptions,
+  generatingCaptions,
+}: {
+  slug: string
+  editorDoc: () => unknown[]
+  onApproveAll: () => void
+  onGenerateCaptions: () => Promise<void>
+  generatingCaptions: boolean
+}) {
+  const [stepIndex, setStepIndex] = useState(0)
+  const [batchFaceGate, setBatchFaceGate] = useState<'warn' | 'block'>('warn')
+  const [jobStatus, setJobStatus] = useState<{
+    status: 'running' | 'done' | 'failed'
+    done: number
+    total: number
+    failed: number
+    results: { block_id: string; ok: boolean; face_gate: string; error?: string }[]
+  } | null>(null)
+  const [flaggedStep, setFlaggedStep] = useState(0)
+  const [showFlaggedStepper, setShowFlaggedStepper] = useState(false)
+  const pollTimer = useRef<ReturnType<typeof setInterval>>(null)
+
+  const figs = figureBlocks(editorDoc())
+  const total = figs.length
+  const sketched = figs.filter((b) => b.props.sketchAssetId).length
+  const pendingCount = figs.filter((b) => b.props.approval === 'pending' && b.props.sketchAssetId).length
+  const missingCaption = figs.filter((b) => !b.props.caption).length
+  const eligible = figs.filter(
+    (b) =>
+      b.props.assetId &&
+      !(b.props.sketchAssetId && b.props.approval === 'approved'),
+  ).length
+
+  const scrollToFigure = (idx: number, ids?: string[]) => {
+    const list = ids ?? figs.map((b) => b.id)
+    const id = list[idx]
+    if (!id) return
+    const el = document.getElementById(`figure-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('nf-flash')
+    setTimeout(() => el.classList.remove('nf-flash'), 900)
+  }
+
+  const startPoll = (id: string) => {
+    if (pollTimer.current) clearInterval(pollTimer.current)
+    pollTimer.current = setInterval(async () => {
+      try {
+        const s = await api.sketchJobStatus(slug, id)
+        setJobStatus(s)
+        if (s.status !== 'running') {
+          clearInterval(pollTimer.current!)
+          pollTimer.current = null
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    }, 800)
+  }
+
+  useEffect(() => () => { if (pollTimer.current) clearInterval(pollTimer.current) }, [])
+
+  const startGenerate = async () => {
+    setJobStatus(null)
+    setShowFlaggedStepper(false)
+    try {
+      const resp = await api.generateAllSketches(slug, batchFaceGate)
+      setJobStatus({ status: 'running', done: 0, total: resp.eligible, failed: 0, results: [] })
+      startPoll(resp.job_id)
+    } catch (e) {
+      alert(`Failed to start batch: ${e}`)
+    }
+  }
+
+  if (total === 0) return null
+
+  const flaggedIds = jobStatus?.results.filter((r) => r.face_gate === 'flagged').map((r) => r.block_id) ?? []
+  const running = jobStatus?.status === 'running'
+  const done = jobStatus?.status === 'done'
+
+  return (
+    <div className="pending-panel images-panel">
+      <div className="pending-panel-header">
+        <h3>Images</h3>
+      </div>
+
+      <div className="images-summary">
+        <span>{total} figure{total !== 1 ? 's' : ''}</span>
+        <span className="sep">·</span>
+        <span>{sketched} sketched</span>
+        {pendingCount > 0 && (
+          <>
+            <span className="sep">·</span>
+            <span className="pending-badge">{pendingCount} pending review</span>
+          </>
+        )}
+      </div>
+
+      {total > 0 && (
+        <div className="images-stepper">
+          <button
+            type="button"
+            className="stepper-prev"
+            aria-label="Previous figure"
+            onClick={() => {
+              const next = (stepIndex - 1 + total) % total
+              setStepIndex(next)
+              scrollToFigure(next)
+            }}
+          >
+            ‹
+          </button>
+          <span className="stepper-label">Figure {stepIndex + 1} of {total}</span>
+          <button
+            type="button"
+            className="stepper-next"
+            aria-label="Next figure"
+            onClick={() => {
+              const next = (stepIndex + 1) % total
+              setStepIndex(next)
+              scrollToFigure(next)
+            }}
+          >
+            ›
+          </button>
+        </div>
+      )}
+
+      {running ? (
+        <div className="images-job-card">
+          <span className="images-job-label">
+            Generating sketches… ({jobStatus!.done} / {jobStatus!.total})
+          </span>
+          <div className="images-job-bar">
+            <div
+              className="images-job-fill"
+              style={{ width: `${jobStatus!.total > 0 ? Math.round((jobStatus!.done / jobStatus!.total) * 100) : 0}%` }}
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="images-generate-row">
+            <button
+              type="button"
+              className="btn-primary images-gen-btn"
+              disabled={eligible === 0}
+              onClick={() => void startGenerate()}
+            >
+              ✏ Generate all sketches
+            </button>
+            <span className="eligible-badge">{eligible} eligible</span>
+          </div>
+
+          {eligible > 0 && (
+            <div className="images-gate-row">
+              <label>
+                <input
+                  type="radio"
+                  name={`batchFaceGate-${slug}`}
+                  value="warn"
+                  checked={batchFaceGate === 'warn'}
+                  onChange={() => setBatchFaceGate('warn')}
+                />
+                {' '}warn
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name={`batchFaceGate-${slug}`}
+                  value="block"
+                  checked={batchFaceGate === 'block'}
+                  onChange={() => setBatchFaceGate('block')}
+                />
+                {' '}block
+              </label>
+              <span className="images-gate-label">face gate</span>
+            </div>
+          )}
+
+          {done && (
+            <div className="images-result">
+              Generated {(jobStatus?.results ?? []).filter((r) => r.ok).length} sketches
+              {flaggedIds.length > 0 && (
+                <>
+                  {' '}— {flaggedIds.length} face flag{flaggedIds.length !== 1 ? 's' : ''}
+                  <button
+                    type="button"
+                    className="images-review-link"
+                    onClick={() => { setShowFlaggedStepper((s) => !s); setFlaggedStep(0) }}
+                  >
+                    {showFlaggedStepper ? 'hide' : 'review ›'}
+                  </button>
+                </>
+              )}
+              {jobStatus!.failed > 0 && (
+                <span className="images-gen-error"> ({jobStatus!.failed} failed)</span>
+              )}
+            </div>
+          )}
+
+          {showFlaggedStepper && flaggedIds.length > 0 && (
+            <div className="images-stepper images-flagged-stepper">
+              <button
+                type="button"
+                className="stepper-prev"
+                aria-label="Previous flagged figure"
+                onClick={() => {
+                  const next = (flaggedStep - 1 + flaggedIds.length) % flaggedIds.length
+                  setFlaggedStep(next)
+                  scrollToFigure(next, flaggedIds)
+                }}
+              >
+                ‹
+              </button>
+              <span className="stepper-label">
+                Flagged {flaggedStep + 1} of {flaggedIds.length}
+              </span>
+              <button
+                type="button"
+                className="stepper-next"
+                aria-label="Next flagged figure"
+                onClick={() => {
+                  const next = (flaggedStep + 1) % flaggedIds.length
+                  setFlaggedStep(next)
+                  scrollToFigure(next, flaggedIds)
+                }}
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="images-actions-row">
+        <button
+          type="button"
+          disabled={missingCaption === 0 || generatingCaptions}
+          title="Generate AI captions for images without one"
+          onClick={() => void onGenerateCaptions()}
+        >
+          {generatingCaptions ? '✨ Captioning…' : missingCaption > 0 ? `✨ Caption (${missingCaption})` : '✨ Caption images'}
+        </button>
+        <button
+          type="button"
+          disabled={pendingCount === 0}
+          title="Mark all pending images as approved"
+          onClick={onApproveAll}
+        >
+          {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
+        </button>
+      </div>
+
+      <p className="images-helper">Approved sketches are skipped.</p>
+    </div>
+  )
+}
+
 function PendingPanel({
   slug,
   targets,
@@ -217,18 +486,12 @@ function MetaBar({
   editorDoc,
   onPolish,
   polishing,
-  onApproveAll,
-  onGenerateCaptions,
-  generatingCaptions,
 }: {
   doc: DocDetail
   onSaved: (targets: TargetState[]) => void
   editorDoc: () => unknown[]
   onPolish: () => void
   polishing: boolean
-  onApproveAll: () => void
-  onGenerateCaptions: () => Promise<void>
-  generatingCaptions: boolean
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
@@ -438,32 +701,6 @@ function MetaBar({
       >
         {polishing ? 'Polishing…' : '✨ Polish text'}
       </button>
-      {(() => {
-        const blocks = editorDoc() as { type: string; props?: Record<string, unknown> }[]
-        const images = blocks.filter((b) => b.type === 'forgeImage')
-        const pendingCount = images.filter((b) => b.props?.approval === 'pending').length
-        const missingCount = images.filter((b) => !b.props?.caption).length
-        return (
-          <>
-            <button
-              type="button"
-              disabled={missingCount === 0 || generatingCaptions}
-              title="Generate AI captions for images without one"
-              onClick={() => void onGenerateCaptions()}
-            >
-              {generatingCaptions ? '✨ Captioning…' : missingCount > 0 ? `✨ Caption images (${missingCount})` : '✨ Caption images'}
-            </button>
-            <button
-              type="button"
-              disabled={pendingCount === 0}
-              title="Mark all pending images as approved"
-              onClick={onApproveAll}
-            >
-              {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
-            </button>
-          </>
-        )
-      })()}
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.
@@ -881,9 +1118,6 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             editorDoc={() => editor.document}
             onPolish={onPolish}
             polishing={polishing}
-            onApproveAll={onApproveAll}
-            onGenerateCaptions={onGenerateMissingCaptions}
-            generatingCaptions={generatingCaptions}
           />
         )}
         <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
@@ -982,6 +1216,15 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   </button>
                 </div>
               </div>
+            )}
+            {!isHomepage && (
+              <ImagesPanel
+                slug={doc.slug}
+                editorDoc={() => editor.document}
+                onApproveAll={onApproveAll}
+                onGenerateCaptions={onGenerateMissingCaptions}
+                generatingCaptions={generatingCaptions}
+              />
             )}
             <PendingPanel
               slug={doc.slug}
