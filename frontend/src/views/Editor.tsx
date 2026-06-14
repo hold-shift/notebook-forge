@@ -839,9 +839,71 @@ function MetaBar({
   )
 }
 
+type Snap = { id: number; note: string; created_at: string | null }
+
+function SnapshotRow({
+  s,
+  restoring,
+  onRestore,
+}: {
+  s: Snap
+  restoring: number | null
+  onRestore: (id: number) => void
+}) {
+  return (
+    <div className="pending-row">
+      <span className="pending-name" style={{ fontVariantNumeric: 'tabular-nums' }}>#{s.id}</span>
+      <span className="pending-state">
+        {s.note || 'snapshot'}
+        {s.created_at ? ` · ${timeAgo(s.created_at)}` : ''}
+      </span>
+      <Button variant="secondary" size="sm" disabled={restoring === s.id} onClick={() => onRestore(s.id)}>
+        {restoring === s.id ? 'Restoring…' : 'Restore'}
+      </Button>
+    </div>
+  )
+}
+
+function SnapshotsModal({
+  snaps,
+  restoring,
+  onRestore,
+  onClose,
+}: {
+  snaps: Snap[]
+  restoring: number | null
+  onRestore: (id: number) => void
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>All snapshots</h3>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <i className="ti ti-x" aria-hidden />
+          </button>
+        </div>
+        <div className="changes-modal-list">
+          {snaps.map((s) => (
+            <SnapshotRow key={s.id} s={s} restoring={restoring} onRestore={onRestore} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SnapshotsPanel({ slug }: { slug: string }) {
-  const [snaps, setSnaps] = useState<{ id: number; note: string; created_at: string | null }[]>([])
+  const [snaps, setSnaps] = useState<Snap[]>([])
   const [restoring, setRestoring] = useState<number | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     api.snapshots(slug).then(setSnaps, () => setSnaps([]))
@@ -851,31 +913,36 @@ function SnapshotsPanel({ slug }: { slug: string }) {
     if (!confirm(`Restore snapshot #${id}? Current unpublished edits are replaced.`)) return
     setRestoring(id)
     api.rollback(slug, id).then(
-      () => window.location.reload(), // editor remounts with restored blocks
-      (e) => {
-        setRestoring(null)
-        alert(`Restore failed: ${e}`)
-      },
+      () => window.location.reload(),
+      (e) => { setRestoring(null); alert(`Restore failed: ${e}`) },
     )
   }
 
   if (!snaps.length) return null
   return (
-    <div className="pending-panel snapshots-panel">
-      <h3><SectionLabel>Snapshots</SectionLabel></h3>
-      {snaps.slice(0, 8).map((s) => (
-        <div key={s.id} className="pending-row">
-          <span className="pending-name">#{s.id}</span>
-          <span className="pending-state">
-            {s.note || 'snapshot'}
-            {s.created_at ? ` · ${s.created_at.slice(0, 16).replace('T', ' ')}` : ''}
-          </span>
-          <button type="button" disabled={restoring === s.id} onClick={() => restore(s.id)}>
-            {restoring === s.id ? 'Restoring…' : 'Restore'}
-          </button>
+    <>
+      {showAll && (
+        <SnapshotsModal
+          snaps={snaps}
+          restoring={restoring}
+          onRestore={restore}
+          onClose={() => setShowAll(false)}
+        />
+      )}
+      <div className="pending-panel snapshots-panel">
+        <div className="pending-panel-header">
+          <h3><SectionLabel>Snapshots</SectionLabel></h3>
+          {snaps.length > 3 && (
+            <button type="button" className="changes-history-btn" onClick={() => setShowAll(true)}>
+              All {snaps.length}
+            </button>
+          )}
         </div>
-      ))}
-    </div>
+        {snaps.slice(0, 3).map((s) => (
+          <SnapshotRow key={s.id} s={s} restoring={restoring} onRestore={restore} />
+        ))}
+      </div>
+    </>
   )
 }
 
