@@ -190,9 +190,9 @@ button:disabled { opacity: 0.55; cursor: default; }
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
   background: var(--color-background-primary);
   cursor: pointer;
   text-align: left;
@@ -1015,9 +1015,6 @@ mark.diff-ins {
   gap: 6px;
   padding: 8px 4px 4px;
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
   color: var(--color-text-secondary);
   border-bottom: 1px solid var(--color-border-tertiary);
   margin-bottom: 4px;
