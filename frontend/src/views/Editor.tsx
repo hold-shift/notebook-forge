@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, SectionLabel, SerifTitle } from '../ui'
 import { BlockNoteView } from '@blocknote/mantine'
 import {
@@ -601,12 +601,14 @@ function MetaBar({
   editorDoc,
   onPolish,
   polishing,
+  polishBadge,
 }: {
   doc: DocDetail
   onSaved: (targets: TargetState[]) => void
   editorDoc: () => unknown[]
   onPolish: () => void
   polishing: boolean
+  polishBadge?: React.ReactNode
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
@@ -816,6 +818,7 @@ function MetaBar({
       >
         {polishing ? '✨ Polishing…' : '✨ Polish text'}
       </button>
+      {polishBadge}
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.
@@ -1244,44 +1247,38 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
               editorDoc={() => editor.document}
               onPolish={onPolish}
               polishing={polishing}
-            />
-            {/* Polish status badge */}
-            {polishLast !== 'loading' && (
-              <div style={{ position: 'relative', display: 'inline-flex', marginBottom: 8 }}>
-                <span
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setPolishPopoverOpen((o) => !o)}
-                >
-                  <StatusBadge
-                    variant={(() => {
-                      const s = computePolishBadge(polishLast, doc.updated_at ?? null)
-                      return (s === 'loading' ? 'never-run' : s) as BadgeVariant
-                    })()}
-                  />
+              polishBadge={polishLast !== 'loading' ? (
+                <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => setPolishPopoverOpen((o) => !o)}>
+                    <StatusBadge
+                      variant={(() => {
+                        const s = computePolishBadge(polishLast, doc.updated_at ?? null)
+                        return (s === 'loading' ? 'never-run' : s) as BadgeVariant
+                      })()}
+                    />
+                  </span>
+                  {polishPopoverOpen && polishLast !== null && (
+                    <PolishPopover
+                      run={polishLast}
+                      onClose={() => setPolishPopoverOpen(false)}
+                      onRestore={() => {
+                        const confirmed = confirm('Restore to the pre-polish snapshot? Current edits will be replaced.')
+                        if (!confirmed) return
+                        api.snapshots(doc.slug).then((snaps) => {
+                          const prePolish = snaps.find((s) => s.note === 'before polish')
+                          if (!prePolish) { alert('No pre-polish snapshot found.'); return }
+                          api.rollback(doc.slug, prePolish.id).then(
+                            () => window.location.reload(),
+                            (e) => alert(`Restore failed: ${e}`),
+                          )
+                        })
+                      }}
+                      onReviewFlagged={() => setPolishReviewOpen(true)}
+                    />
+                  )}
                 </span>
-                {polishPopoverOpen && polishLast !== null && (
-                  <PolishPopover
-                    run={polishLast}
-                    onClose={() => setPolishPopoverOpen(false)}
-                    onRestore={() => {
-                      // Find the pre-polish snapshot and restore it using the rollback API
-                      // We trigger a page reload after rollback, consistent with SnapshotsPanel
-                      const confirmed = confirm('Restore to the pre-polish snapshot? Current edits will be replaced.')
-                      if (!confirmed) return
-                      api.snapshots(doc.slug).then((snaps) => {
-                        const prePolish = snaps.find((s) => s.note === 'before polish')
-                        if (!prePolish) { alert('No pre-polish snapshot found.'); return }
-                        api.rollback(doc.slug, prePolish.id).then(
-                          () => window.location.reload(),
-                          (e) => alert(`Restore failed: ${e}`),
-                        )
-                      })
-                    }}
-                    onReviewFlagged={() => setPolishReviewOpen(true)}
-                  />
-                )}
-              </div>
-            )}
+              ) : undefined}
+            />
           </>
         )}
         <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>

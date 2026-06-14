@@ -400,8 +400,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .forge-image-label {
   font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-text-tertiary);
 }
 .forge-image-missing {
