@@ -2,6 +2,14 @@
    mockups). The PUBLISHED document output keeps the archive serif house
    style; these tokens style only the tool itself. */
 
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/SourceSerif4-Regular.woff2') format('woff2');
+}
+
 :root {
   --color-background-primary: #ffffff;
   --color-background-secondary: #f5f6f7;
@@ -19,11 +27,47 @@
   --pill-warn-fg: #633806;
   --pill-danger-bg: #fcebeb;
   --pill-danger-fg: #791f1f;
+  --border-radius-sm: 6px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --narrative-bg: #f1eada;
   --narrative-border: #b8a580;
+
+  /* Warm accent palette */
+  --color-ink: #2C2C2A;
+  --color-umber: #633806;
+  --color-tan: #BA7517;
+  --color-amber: #EF9F27;
+  --color-cream: #FAEEDA;
+  --color-pine: #085041;
+  --color-mint: #E1F5EE;
+
+  /* Status badge token triplets */
+  --badge-live-bg: var(--pill-ok-bg);
+  --badge-live-fg: var(--pill-ok-fg);
+  --badge-live-border: transparent;
+
+  --badge-changes-bg: var(--pill-warn-bg);
+  --badge-changes-fg: var(--pill-warn-fg);
+  --badge-changes-border: transparent;
+
+  --badge-unpublished-bg: var(--color-background-secondary);
+  --badge-unpublished-fg: var(--color-text-secondary);
+  --badge-unpublished-border: var(--color-border-tertiary);
+
+  --badge-polished-bg: var(--pill-ok-bg);
+  --badge-polished-fg: var(--pill-ok-fg);
+  --badge-polished-border: transparent;
+
+  --badge-flagged-bg: var(--pill-warn-bg);
+  --badge-flagged-fg: var(--color-tan);
+  --badge-flagged-border: transparent;
+
+  --badge-never-bg: var(--color-background-secondary);
+  --badge-never-fg: var(--color-text-tertiary);
+  --badge-never-border: var(--color-border-tertiary);
 }
 
 body {
@@ -65,9 +109,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 button:disabled { opacity: 0.55; cursor: default; }
 .btn-primary {
-  background: var(--color-background-info) !important;
-  color: var(--color-text-info) !important;
-  border-color: var(--color-border-info) !important;
+  background: var(--color-text-primary) !important;
+  color: var(--color-background-primary) !important;
+  border-color: var(--color-text-primary) !important;
 }
 
 /* ---- Pills ---- */
