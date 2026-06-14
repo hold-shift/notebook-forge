@@ -64,7 +64,7 @@ def polish_document(
         services.record_change(
             session, doc, "edit", "polish: no polishable blocks",
             detail={"model": cfg["model"], "chunks": 0, "blocks_changed": 0,
-                    "flagged": 0, "failed_chunks": 0},
+                    "flagged": 0, "flagged_ids": [], "polishable": 0, "failed_chunks": 0},
         )
         return {
             "blocks_polished": 0,
@@ -140,6 +140,8 @@ def polish_document(
             "chunks": len(chunks),
             "blocks_changed": n_changed,
             "flagged": len(flagged),
+            "flagged_ids": [f["block_id"] for f in flagged],
+            "polishable": len(poly),
             "failed_chunks": len(failed_chunks),
         },
     )

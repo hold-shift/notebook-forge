@@ -663,6 +663,38 @@ def polish_progress(slug: str) -> dict[str, Any]:
     return dict(p)
 
 
+@app.get("/api/documents/{slug}/polish/last")
+def polish_last(slug: str, session: Session = Depends(get_session)) -> dict[str, Any] | None:
+    """Return metadata from the most recent polish run for this document, or null."""
+    doc = _get_doc(session, slug)
+    row = session.scalar(
+        select(Change)
+        .where(
+            Change.document_id == doc.id,
+            Change.kind == "edit",
+            Change.summary.startswith("polish"),
+        )
+        .order_by(Change.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    d = row.detail or {}
+    polishable = d.get("polishable", 0)
+    blocks_changed = d.get("blocks_changed", 0)
+    flagged_count = d.get("flagged", 0)
+    blocks_unchanged = max(0, polishable - blocks_changed - flagged_count)
+    return {
+        "at": row.created_at.isoformat() if row.created_at else None,
+        "model": d.get("model", ""),
+        "blocks_changed": blocks_changed,
+        "blocks_unchanged": blocks_unchanged,
+        "flagged_ids": d.get("flagged_ids", []),
+        "chunks": d.get("chunks", 0),
+        "failed_chunks": d.get("failed_chunks", 0),
+    }
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)

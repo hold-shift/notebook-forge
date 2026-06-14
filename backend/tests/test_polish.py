@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from notebook_forge import services
@@ -554,3 +555,114 @@ class TestFlaggedBlockDiff:
         report = polish_document(session, workspace, doc, runner=runner)
         assert report["blocks_polished"] == 1
         assert report["flagged"] == []
+
+
+# ------------------------------------------------------------------ M5: flagged_ids + polishable
+
+class TestFlaggedIds:
+    def _make_doc(self, session: Session, text: str = "sailers went home.") -> Any:
+        blocks = [make_block("paragraph", content=[text_run(text)])]
+        return services.create_document(session, "flagged-ids-doc", "FlaggedIds", blocks)
+
+    def test_service_writes_flagged_ids_in_detail(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._make_doc(session)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "sailors went home."}])
+        polish_document(session, workspace, doc, runner=runner)
+        from sqlalchemy import select as sa_select
+        change = session.scalar(
+            sa_select(Change)
+            .where(Change.document_id == doc.id, Change.kind == "edit",
+                   Change.summary.startswith("polish run"))
+            .order_by(Change.id.desc())
+        )
+        assert change is not None
+        detail = change.detail or {}
+        assert "flagged_ids" in detail
+        assert block_id in detail["flagged_ids"]
+
+    def test_service_writes_polishable_in_detail(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._make_doc(session)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "sailors went home."}])
+        polish_document(session, workspace, doc, runner=runner)
+        from sqlalchemy import select as sa_select
+        change = session.scalar(
+            sa_select(Change)
+            .where(Change.document_id == doc.id, Change.kind == "edit",
+                   Change.summary.startswith("polish run"))
+            .order_by(Change.id.desc())
+        )
+        assert change is not None
+        detail = change.detail or {}
+        assert "polishable" in detail
+        assert detail["polishable"] == 1
+
+    def test_early_exit_writes_flagged_ids_empty(
+        self, session: Session, workspace: Path
+    ) -> None:
+        # A doc with only forgeImage blocks has no polishable content
+        blocks = [make_block("forgeImage", {"assetId": "abc", "sketchAssetId": ""})]
+        doc = services.create_document(session, "no-poly-doc", "NoPoly", blocks)
+        runner = MockRunner([])
+        polish_document(session, workspace, doc, runner=runner)
+        from sqlalchemy import select as sa_select
+        change = session.scalar(
+            sa_select(Change)
+            .where(Change.document_id == doc.id, Change.kind == "edit")
+            .order_by(Change.id.desc())
+        )
+        assert change is not None
+        detail = change.detail or {}
+        assert detail.get("flagged_ids") == []
+        assert detail.get("polishable") == 0
+
+
+class TestPolishLastEndpoint:
+    """Integration tests for GET /api/documents/{slug}/polish/last."""
+
+    def _client(self, session: Session, workspace: Path) -> TestClient:
+        from notebook_forge.api import app, get_session
+        app.dependency_overrides[get_session] = lambda: session
+        return TestClient(app)
+
+    def test_returns_null_when_no_polish_run(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = services.create_document(
+            session, "no-polish-doc", "NoPo",
+            [make_block("paragraph", content=[text_run("Hello.")])]
+        )
+        client = self._client(session, workspace)
+        resp = client.get(f"/api/documents/{doc.slug}/polish/last")
+        assert resp.status_code == 200
+        assert resp.json() is None
+
+    def test_returns_last_run_data(
+        self, session: Session, workspace: Path
+    ) -> None:
+        blocks = [make_block("paragraph", content=[text_run("sailers went home.")])]
+        doc = services.create_document(session, "polish-last-doc", "Pol", blocks)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "sailors went home."}])
+        polish_document(session, workspace, doc, runner=runner)
+        session.flush()
+
+        client = self._client(session, workspace)
+        resp = client.get(f"/api/documents/{doc.slug}/polish/last")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data is not None
+        assert "at" in data
+        assert data["blocks_changed"] == 0   # flagged, not applied
+        assert block_id in data["flagged_ids"]
+        assert data["chunks"] >= 1
+
+    def test_404_for_unknown_slug(self, session: Session, workspace: Path) -> None:
+        client = self._client(session, workspace)
+        resp = client.get("/api/documents/nonexistent-slug/polish/last")
+        assert resp.status_code == 404
