@@ -346,14 +346,14 @@ function ImagesPanel({
       ) : (
         <>
           <div className="images-generate-row">
-            <button
-              type="button"
-              className="btn-primary images-gen-btn"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={eligible === 0}
               onClick={() => void startGenerate()}
             >
               ✏ Generate all sketches
-            </button>
+            </Button>
             <span className="eligible-badge">{eligible} eligible</span>
           </div>
 
@@ -443,22 +443,24 @@ function ImagesPanel({
       )}
 
       <div className="images-actions-row">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={missingCaption === 0 || generatingCaptions}
           title="Generate AI captions for images without one"
           onClick={() => void onGenerateCaptions()}
         >
           {generatingCaptions ? '✨ Captioning…' : missingCaption > 0 ? `✨ Caption (${missingCaption})` : '✨ Caption images'}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={pendingCount === 0}
           title="Mark all pending images as approved"
           onClick={onApproveAll}
         >
           {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
-        </button>
+        </Button>
       </div>
 
       <p className="images-helper">Approved sketches are skipped.</p>
