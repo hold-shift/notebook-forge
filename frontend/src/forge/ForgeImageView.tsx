@@ -16,6 +16,7 @@ export interface ForgeImageProps {
   displayWidth: 'full' | 'portrait'
   peopleCount?: number
   safeMode?: SafeMode
+  faceGate?: 'ok' | 'flagged' | 'n/a'
 }
 
 export interface ForgeImageViewProps {
@@ -44,7 +45,7 @@ export function ForgeImageView({
   onSafeModeChange,
   onImageUpload,
 }: ForgeImageViewProps) {
-  const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
+  const { assetId, sketchAssetId, caption, altText, approval, displayWidth, faceGate } = props
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
   const [showPrompt, setShowPrompt] = useState(false)
@@ -179,6 +180,11 @@ export function ForgeImageView({
               <option value="original">Safe: original</option>
               <option value="omit">Safe: omit</option>
             </select>
+          )}
+          {faceGate === 'flagged' && (
+            <span className="forge-face-flag" title="Face detected by gate — review before approving">
+              ⚠ face flag
+            </span>
           )}
           <button
             type="button"

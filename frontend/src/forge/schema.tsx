@@ -27,6 +27,8 @@ export const forgeImageSpec = createReactBlockSpec(
       // nothing at all (the figure number is still consumed so anchors
       // stay aligned with the HTML edition).
       safeMode: { default: 'sketch', values: ['sketch', 'original', 'omit'] },
+      // Persisted face-gate verdict from the last sketch generation.
+      faceGate: { default: 'n/a', values: ['ok', 'flagged', 'n/a'] },
     },
     content: 'none',
   },

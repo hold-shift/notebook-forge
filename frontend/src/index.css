@@ -1203,3 +1203,5 @@ mark.diff-ins {
 .images-result { font-size: 12px; color: var(--color-text-secondary); }
 .images-review-link { background: none; border: none; padding: 0 4px; font-size: 12px; color: var(--color-text-brand, #2563eb); cursor: pointer; text-decoration: underline; }
 .images-gen-error { color: var(--color-text-danger, #dc2626); }
+.images-face-flag-summary { color: #b45309; font-weight: 500; }
+.forge-face-flag { font-size: 11px; color: #b45309; font-weight: 500; padding: 1px 6px; background: #fef3c7; border-radius: 4px; border: 0.5px solid #f59e0b; }

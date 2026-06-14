@@ -169,7 +169,10 @@ function ImagesPanel({
 
   if (total === 0) return null
 
-  const flaggedIds = jobStatus?.results.filter((r) => r.face_gate === 'flagged').map((r) => r.block_id) ?? []
+  // Derive flagged figures from persisted block props — survives refresh.
+  const flaggedIds = figs
+    .filter((b) => b.props.faceGate === 'flagged' && b.props.approval !== 'approved')
+    .map((b) => b.id)
   const running = jobStatus?.status === 'running'
   const done = jobStatus?.status === 'done'
 
@@ -276,21 +279,25 @@ function ImagesPanel({
           {done && (
             <div className="images-result">
               Generated {(jobStatus?.results ?? []).filter((r) => r.ok).length} sketches
-              {flaggedIds.length > 0 && (
-                <>
-                  {' '}— {flaggedIds.length} face flag{flaggedIds.length !== 1 ? 's' : ''}
-                  <button
-                    type="button"
-                    className="images-review-link"
-                    onClick={() => { setShowFlaggedStepper((s) => !s); setFlaggedStep(0) }}
-                  >
-                    {showFlaggedStepper ? 'hide' : 'review ›'}
-                  </button>
-                </>
-              )}
               {jobStatus!.failed > 0 && (
                 <span className="images-gen-error"> ({jobStatus!.failed} failed)</span>
               )}
+            </div>
+          )}
+
+          {flaggedIds.length > 0 && (
+            <div className="images-result">
+              <span className="images-face-flag-summary">
+                ⚠ {flaggedIds.length} face flag{flaggedIds.length !== 1 ? 's' : ''} — review before approving
+              </span>
+              {' '}
+              <button
+                type="button"
+                className="images-review-link"
+                onClick={() => { setShowFlaggedStepper((s) => !s); setFlaggedStep(0) }}
+              >
+                {showFlaggedStepper ? 'hide' : 'step through ›'}
+              </button>
             </div>
           )}
 

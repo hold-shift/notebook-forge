@@ -101,13 +101,14 @@ def generate_sketch_for_block(
     finally:
         tmp_path.unlink(missing_ok=True)
 
+    gate = getattr(generator, "last_gate", None)
     props = dict(block.get("props", {}))
     props["sketchAssetId"] = sketch_asset.sha256
     props["approval"] = "pending"  # fresh generations always need review
+    props["faceGate"] = gate.status if gate else "n/a"
     block["props"] = props
     blocks[blocks.index(next(b for b in blocks if b.get("id") == block_id))] = block
 
-    gate = getattr(generator, "last_gate", None)
     services.save_blocks(
         session, doc, blocks,
         summary=f"generated sketch for figure block {block_id[:8]}",
