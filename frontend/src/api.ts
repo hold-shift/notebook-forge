@@ -203,11 +203,18 @@ export const api = {
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
         narrative: { label: string }
+        footer: { notice: string; license_label: string; license_url: string }
         secrets: Record<string, boolean>
       }>(r),
     ),
   saveNarrativeSettings: (body: { label: string }) =>
     fetch('/api/settings/narrative', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean }>(r)),
+  saveFooterSettings: (body: { notice: string; license_label: string; license_url: string }) =>
+    fetch('/api/settings/footer', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

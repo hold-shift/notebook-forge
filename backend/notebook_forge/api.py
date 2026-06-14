@@ -742,6 +742,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .footer import footer_setting
     from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
@@ -752,6 +753,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
+        "footer": footer_setting(session),
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -828,6 +830,34 @@ def save_narrative_settings(
     else:
         setting.value = value
     return {"ok": True, "narrative": value}
+
+
+class FooterSettingsBody(BaseModel):
+    notice: str = ""
+    license_label: str = ""
+    license_url: str = ""
+
+
+@app.put("/api/settings/footer")
+def save_footer_settings(
+    body: FooterSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    url = body.license_url.strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(422, "license_url must be an http(s) URL")
+    value = {
+        "notice": body.notice.strip(),
+        "license_label": body.license_label.strip(),
+        "license_url": url,
+    }
+    setting = session.get(Setting, "footer")
+    if setting is None:
+        session.add(Setting(key="footer", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "footer": value}
 
 
 @app.get("/api/search")

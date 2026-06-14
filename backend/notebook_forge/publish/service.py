@@ -80,6 +80,10 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..narrative import effective_narrative_label
     meta["narrative_label"] = effective_narrative_label(session, doc)
 
+    # Workspace-wide footer / licence notice, authoritative across all docs.
+    from ..footer import footer_html
+    meta["footer_html"] = footer_html(session)
+
     html = render_document(meta, doc.blocks, image_src)
     return PublishBundle(slug=slug, html=html, assets=assets)
 

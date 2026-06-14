@@ -297,13 +297,15 @@ def root_files(
         dict(e, reading_time=reading_time(int(e.get("word_count") or 0))) for e in entries
     ]
 
+    from .footer import footer_html as _footer_html
+
     hp = get_homepage(session)
     warnings: list[str] = []
     if hp is not None:
         body, warnings, derived = homepage_body(session, hp)
         title = derived.get("title", "The Family Archive")
         welcome = derived.get("welcome", "")
-        footer = hp.meta.get("footer_html", "")
+        footer = _footer_html(session)
         index_html = render_index(
             title=title,
             welcome=welcome,
@@ -320,7 +322,7 @@ def root_files(
         title = homepage_s.get("title", "The Family Archive")
         welcome = homepage_s.get("welcome", "")
         dedication = homepage_s.get("dedication", "")
-        footer = homepage_s.get("footer_html", "")
+        footer = _footer_html(session)
         index_html = render_index(
             title=title,
             welcome=welcome,
