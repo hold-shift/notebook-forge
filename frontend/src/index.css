@@ -313,9 +313,12 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 13px;
 }
 .pending-identity { display: flex; align-items: center; gap: 6px; }
-.pending-row .dot { width: 8px; height: 8px; border-radius: 50%; }
-.pending-row .dot.dirty { background: #d99a2b; }
-.pending-row .dot.clean { background: #1f9d6b; }
+.pending-row .dot,
+.target-card-head .dot { width: 8px; height: 8px; border-radius: 50%; }
+.pending-row .dot.dirty,
+.target-card-head .dot.dirty { background: #d99a2b; }
+.pending-row .dot.clean,
+.target-card-head .dot.clean { background: #1f9d6b; }
 .pending-name { font-weight: 500; }
 .pending-state { color: var(--color-text-tertiary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .target-btns { display: flex; gap: 4px; justify-content: flex-end; }
@@ -659,7 +662,41 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 .change-row i { color: var(--color-text-secondary); font-size: 13px; flex: none; }
 .change-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .change-when { color: var(--color-text-tertiary); font-size: 11px; flex: none; white-space: nowrap; }
-.target-rows { border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; }
+.target-rows { border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.target-card {
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.target-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.target-card-head .pending-name { flex: 1; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.target-card-head .dot { flex: none; }
+.target-link-icon {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  text-decoration: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.target-link-icon:hover { color: var(--color-text-primary); }
+.target-card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 15px;
+  font-size: 11px;
+}
+.target-card-status .pending-state { color: var(--color-text-tertiary); }
+.pending-behind { color: var(--pill-warn-fg); font-weight: 500; }
 .push-all { width: 100%; margin-top: 4px; }
 .btn-danger-sm {
   font-size: 12px !important;

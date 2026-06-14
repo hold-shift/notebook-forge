@@ -495,6 +495,9 @@ function PendingPanel({
     )
   }, [slug, targets])
 
+  const targetLabel = (id: string) =>
+    ({ 'github-pages': 'HTML', 'local-folder': 'Local', drive: 'Drive' }[id] ?? id)
+
   const behindCount = (t: TargetState): number =>
     changes.filter(
       (c) =>
@@ -531,56 +534,61 @@ function PendingPanel({
           </div>
         )}
         <div className="target-rows">
-        {targets.map((t) => {
-          const behind = behindCount(t)
-          return (
-            <div key={t.target} className="pending-row">
-              <span className="pending-identity">
-                <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
-                <span className="pending-name">{t.target}</span>
-                {t.url && (
-                  <a
-                    className="target-link"
-                    href={t.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={`Open the published ${t.kind} output`}
+          {targets.map((t) => {
+            const behind = behindCount(t)
+            const statusLine = t.status !== 'PUBLISHED'
+              ? <span className="pending-state">Never published</span>
+              : <>
+                  <span className="pending-state">
+                    Published{t.published_at ? ` · ${timeAgo(t.published_at)}` : ''}
+                  </span>
+                  {t.dirty && behind > 0 && (
+                    <span className="pending-behind">{behind} change{behind === 1 ? '' : 's'} behind</span>
+                  )}
+                </>
+            return (
+              <div key={t.target} className="target-card">
+                <div className="target-card-head">
+                  <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
+                  <span className="pending-name" title={t.target}>{targetLabel(t.target)}</span>
+                  {t.url && (
+                    <a
+                      className="target-link-icon"
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Open the published ${t.kind} output`}
+                    >
+                      <i className="ti ti-external-link" aria-hidden />
+                    </a>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!t.dirty || pushing === t.target}
+                    onClick={() => onPush(t.target)}
                   >
-                    ↗
-                  </a>
-                )}
-              </span>
-              <span className="pending-state">
-                {t.status !== 'PUBLISHED'
-                  ? 'never published'
-                  : t.dirty
-                    ? `${behind || 'some'} change${behind === 1 ? '' : 's'} behind`
-                    : 'up to date'}
-              </span>
-              <span className="target-btns">
-                <button
-                  type="button"
-                  disabled={!t.dirty || pushing === t.target}
-                  onClick={() => onPush(t.target)}
-                >
-                  {pushing === t.target ? 'Pushing…' : 'Push'}
-                </button>
-                {t.status === 'PUBLISHED' && !hideUnpublish && (
-                  <button
-                    type="button"
-                    className="btn-danger-sm"
-                    disabled={!!pushing || unpublishing === t.target}
-                    title={`Remove this document from ${t.target}`}
-                    onClick={() => onUnpublish(t.target)}
-                  >
-                    {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
-                  </button>
-                )}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+                    {pushing === t.target ? 'Pushing…' : 'Push'}
+                  </Button>
+                  {t.status === 'PUBLISHED' && !hideUnpublish && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={!!pushing || unpublishing === t.target}
+                      title={`Remove this document from ${t.target}`}
+                      onClick={() => onUnpublish(t.target)}
+                    >
+                      {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
+                    </Button>
+                  )}
+                </div>
+                <div className="target-card-status">
+                  {statusLine}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       {targets.filter((t) => t.dirty).length > 1 && (
         <Button
           variant="primary"
