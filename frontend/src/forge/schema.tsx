@@ -27,6 +27,8 @@ export const forgeImageSpec = createReactBlockSpec(
       // nothing at all (the figure number is still consumed so anchors
       // stay aligned with the HTML edition).
       safeMode: { default: 'sketch', values: ['sketch', 'original', 'omit'] },
+      // Persisted face-gate verdict from the last sketch generation.
+      faceGate: { default: 'n/a', values: ['ok', 'flagged', 'n/a'] },
     },
     content: 'none',
   },
@@ -35,6 +37,7 @@ export const forgeImageSpec = createReactBlockSpec(
       <ForgeImageView
         props={block.props as ForgeImageProps}
         assetUrl={api.assetUrl}
+        blockId={block.id}
         onCaptionChange={(caption) =>
           editor.updateBlock(block, { props: { ...block.props, caption } })
         }

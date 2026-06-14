@@ -1177,3 +1177,31 @@ mark.diff-ins {
 .forge-docgroup-hint, .forge-docgroup-more { color: var(--color-text-secondary); margin: 4px 0; }
 .forge-docgroup-warn { color: #b45309; }
 .forge-docgroup-footer { font-size: 12px; color: var(--color-text-secondary); margin-top: 6px; border-top: 1px solid var(--color-border-tertiary); padding-top: 4px; }
+
+/* ---- IMAGES sidebar card ---- */
+.images-panel { display: flex; flex-direction: column; gap: 8px; }
+.images-summary { font-size: 12px; color: var(--color-text-secondary); display: flex; gap: 4px; flex-wrap: wrap; }
+.images-summary .sep { color: var(--color-border-tertiary); }
+.images-summary .pending-badge { color: #d99a2b; font-weight: 500; }
+.images-stepper { display: flex; align-items: center; gap: 6px; }
+.stepper-prev, .stepper-next { background: none; border: 0.5px solid var(--color-border-tertiary); border-radius: 4px; padding: 1px 8px; font-size: 14px; cursor: pointer; color: var(--color-text-secondary); line-height: 1.4; }
+.stepper-prev:hover, .stepper-next:hover { border-color: var(--color-text-tertiary); color: var(--color-text-primary); }
+.stepper-label { font-size: 12px; color: var(--color-text-secondary); flex: 1; text-align: center; }
+.images-flagged-stepper { background: #fef9ec; border-radius: 4px; padding: 2px 4px; }
+.images-generate-row { display: flex; align-items: center; gap: 8px; }
+.images-gen-btn { font-size: 12px; padding: 4px 10px; flex-shrink: 0; }
+.eligible-badge { font-size: 11px; color: var(--color-text-tertiary); white-space: nowrap; }
+.images-gate-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--color-text-secondary); }
+.images-gate-label { font-size: 11px; color: var(--color-text-tertiary); }
+.images-actions-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.images-actions-row button { font-size: 12px; padding: 3px 10px; }
+.images-helper { margin: 0; font-size: 11px; color: var(--color-text-tertiary); }
+.images-job-card { display: flex; flex-direction: column; gap: 6px; }
+.images-job-label { font-size: 12px; color: var(--color-text-secondary); }
+.images-job-bar { height: 6px; background: var(--color-border-tertiary); border-radius: 3px; overflow: hidden; }
+.images-job-fill { height: 100%; background: var(--color-text-brand, #2563eb); border-radius: 3px; transition: width 0.3s; }
+.images-result { font-size: 12px; color: var(--color-text-secondary); }
+.images-review-link { background: none; border: none; padding: 0 4px; font-size: 12px; color: var(--color-text-brand, #2563eb); cursor: pointer; text-decoration: underline; }
+.images-gen-error { color: var(--color-text-danger, #dc2626); }
+.images-face-flag-summary { color: #b45309; font-weight: 500; }
+.forge-face-flag { font-size: 11px; color: #b45309; font-weight: 500; padding: 1px 6px; background: #fef3c7; border-radius: 4px; border: 0.5px solid #f59e0b; }

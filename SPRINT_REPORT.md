@@ -278,3 +278,75 @@ Plan: `docs/PLAN_narrative_blocks.md` (M1–M8). Branch: `claude/zealous-hoover-
 
 5. **Round-trip report after migration:** once applied, `roundtrip_document` will note "contains N narrative panel(s) — published page predates the feature; divergence on those paragraphs is intentional until republished." This is expected — the gate stays at ≥99% on the non-narrative text; the divergence disappears once the memoirs are republished.
 
+---
+
+# Sprint 5 addendum — 13 June 2026 (autonomous)
+
+Plan: `docs/PLAN_bulk_image_actions.md`. Branch: `feat/bulk-image-actions`.
+
+## What shipped
+
+1. **M0 — Discovery** — answered three discovery questions (safe mode in block
+   props JSON, sidebar/figure components located, figure state flow confirmed).
+   Created `docs/PLAN_bulk_image_actions.md` and `docs/screenshots/mockup-sidebar.md`
+   as the authoritative spec for this sprint.
+
+2. **M1 — Bulk generate endpoint + job registry** —
+   `eligible_figure_block_ids()` in `sketch_service.py` enforces the critical
+   guard (approved sketches skipped, no-asset blocks skipped). Two new API
+   endpoints:
+   - `POST /api/documents/{slug}/figures/generate-all-sketches` — starts a
+     sequential daemon thread; returns `{job_id, eligible}` immediately.
+     `batch_face_gate` param overrides the global setting per run (default `warn`).
+   - `GET /api/documents/{slug}/figures/generate-all-sketches/status` — polls
+     progress (same pattern as `/polish/progress`).
+   In-memory `_sketch_jobs` registry (no DB table). 11 new backend tests
+   (6 eligibility unit + 5 endpoint); 274 total green.
+
+3. **M2 — IMAGES sidebar card** — `ImagesPanel` component above `PendingPanel`
+   in `.editor-side`. Contains: summary counts (figures / sketched / pending
+   review), prev/next figure nav stepper (scrolls + flashes `figure-{id}`
+   cards), "Generate all sketches" button + eligible badge, batch face-gate
+   warn/block radio (default warn, per-run only), 800 ms polling loop against
+   the status endpoint, post-job result summary with flagged-face stepper, CSS
+   for all new classes. `ForgeImageView` gains a `blockId` prop that sets
+   `id="figure-{blockId}"` on the `<figure>` element; `schema.tsx` passes it.
+   `api.ts` adds `generateAllSketches` + `sketchJobStatus`.
+
+4. **M3 — Relocate Caption/Approve** — "Caption images" and "Approve all"
+   buttons removed from `MetaBar` and now live exclusively in `ImagesPanel`.
+   `MetaBar` interface trimmed accordingly.
+
+## Gate results
+
+| Gate | Tests | Status |
+|---|---|---|
+| M0 | discovery docs written | ✅ |
+| M1 | 11 backend, 274 total | ✅ |
+| M2+M3 | 62 frontend, `make check` green | ✅ |
+| M4 | deferred — see below | — |
+
+## M4 status
+
+M4 (pre-publish face scan of safe-edition originals) is **deferred** to a
+follow-up sprint. M1–M3 shipped and `make check` is green; M4 was fenced
+optional in the plan and time did not allow it.
+
+## Operator notes
+
+1. **IMAGES card** — visible in the editor sidebar for any document with figure
+   blocks. Approved sketches are always skipped by the batch generate, so it
+   is safe to click "Generate all sketches" at any time.
+
+2. **Batch face gate** — defaults to `warn` per run. Setting it to `block`
+   aborts generation for any figure where the face gate fires (same as the
+   per-figure block mode). The global sketch settings gate is not changed.
+
+3. **Nav stepper** — scrolls to and flashes the figure card. After a batch job
+   completes with flagged faces, a second "flagged" stepper appears to step
+   through only the flagged figures.
+
+4. **Job loss on restart** — jobs are in-memory only; a server restart loses
+   job state. The generated sketches are persisted in the DB; only the progress
+   display is lost. Restart and re-poll returns 404 (expected).
+

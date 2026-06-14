@@ -16,11 +16,14 @@ export interface ForgeImageProps {
   displayWidth: 'full' | 'portrait'
   peopleCount?: number
   safeMode?: SafeMode
+  faceGate?: 'ok' | 'flagged' | 'n/a'
 }
 
 export interface ForgeImageViewProps {
   props: ForgeImageProps
   assetUrl: (sha: string) => string
+  /** Stable block id — sets id="figure-{blockId}" for sidebar nav stepper. */
+  blockId?: string
   onCaptionChange?: (caption: string) => void
   onApprovalToggle?: () => void
   /** Generate (or regenerate) the sketch via Gemini. An optional prompt
@@ -35,13 +38,14 @@ export interface ForgeImageViewProps {
 export function ForgeImageView({
   props,
   assetUrl,
+  blockId,
   onCaptionChange,
   onApprovalToggle,
   onGenerateSketch,
   onSafeModeChange,
   onImageUpload,
 }: ForgeImageViewProps) {
-  const { assetId, sketchAssetId, caption, altText, approval, displayWidth } = props
+  const { assetId, sketchAssetId, caption, altText, approval, displayWidth, faceGate } = props
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
   const [showPrompt, setShowPrompt] = useState(false)
@@ -115,6 +119,7 @@ export function ForgeImageView({
 
   return (
     <figure
+      id={blockId ? `figure-${blockId}` : undefined}
       className={`forge-image ${displayWidth === 'portrait' ? 'portrait' : 'full'}`}
       data-testid="forge-image"
     >
@@ -175,6 +180,11 @@ export function ForgeImageView({
               <option value="original">Safe: original</option>
               <option value="omit">Safe: omit</option>
             </select>
+          )}
+          {faceGate === 'flagged' && (
+            <span className="forge-face-flag" title="Face detected by gate — review before approving">
+              ⚠ face flag
+            </span>
           )}
           <button
             type="button"
