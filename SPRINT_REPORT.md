@@ -350,3 +350,24 @@ optional in the plan and time did not allow it.
    job state. The generated sketches are persisted in the DB; only the progress
    display is lost. Restart and re-poll returns 404 (expected).
 
+---
+
+# Bug fix — 14 June 2026 (interactive)
+
+Branch: `fix/inline-soft-breaks`.
+
+**Soft line breaks dropped from published HTML.** Shift-Enter (soft break)
+inside a block rendered correctly in BlockNote but collapsed to a space in the
+published HTML. Root cause: `inline_html()` in `renderer.py` left `"\n"` as a
+literal newline after escaping; browsers collapse that to whitespace.
+
+**Fix:**
+- `renderer.py` `inline_html()` text-run path: CRLF-normalise then replace
+  `"\n"` with `"<br>"` after `_escape()` (so the tag itself is never escaped).
+- `safe_edition.py` `inline_md()` text-run path: replace `"\n"` with `"  \n"`
+  (Markdown hard line break) for the Drive/NotebookLM safe edition.
+- Parser already handled `<br>` → `"\n"` (line 68 of `parser.py`) — no change
+  needed there.
+- 8 new tests (unit: `"\n"`/`"\r\n"`/styled; round-trip: paragraph, quote,
+  narrative); 282 backend tests total green.
+

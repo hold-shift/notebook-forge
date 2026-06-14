@@ -9,10 +9,11 @@ from bs4 import BeautifulSoup
 
 from notebook_forge.blocks import FORGE_NARRATIVE, content_hash, make_block, text_run
 from notebook_forge.domcompare import compare
-from notebook_forge.parser import parse_fragment, parse_page
+from notebook_forge.parser import parse_fragment, parse_inline, parse_page
 from notebook_forge.renderer import (
     TEMPLATES_DIR,
     build_jsonld,
+    inline_html,
     render_document,
     render_index,
 )
@@ -221,3 +222,86 @@ def test_narrative_footnote_contrast() -> None:
     reports_dir.mkdir(exist_ok=True)
     (reports_dir / "narrative_contrast.html").write_text(html)
     assert (reports_dir / "narrative_contrast.html").exists()
+
+
+# ---------------------------------------------------------------------------
+# Soft line-break tests
+# ---------------------------------------------------------------------------
+
+
+def test_inline_html_newline_becomes_br() -> None:
+    runs = [text_run("first\nsecond")]
+    assert inline_html(runs) == "first<br>second"
+
+
+def test_inline_html_crlf_becomes_single_br() -> None:
+    runs = [text_run("first\r\nsecond")]
+    assert inline_html(runs) == "first<br>second"
+
+
+def test_inline_html_newline_not_double_escaped() -> None:
+    """The <br> tag must not be escaped to &lt;br&gt;."""
+    runs = [text_run("a\nb")]
+    result = inline_html(runs)
+    assert "<br>" in result
+    assert "&lt;" not in result
+
+
+def test_inline_html_newline_with_styles() -> None:
+    runs = [{"type": "text", "text": "bold\nbreak", "styles": {"bold": True}}]
+    result = inline_html(runs)
+    assert "<br>" in result
+    assert "<strong>" in result
+
+
+def _make_br_soup(html_fragment: str):
+    from bs4 import BeautifulSoup
+    return BeautifulSoup(f"<p>{html_fragment}</p>", "lxml").find("p")
+
+
+def test_parser_br_to_newline() -> None:
+    """Parser: <br> → '\\n' in inline text run."""
+    soup = _make_br_soup("first<br>second")
+    runs = parse_inline(soup)
+    combined = "".join(r.get("text", "") for r in runs if r.get("type") == "text")
+    assert "\n" in combined
+
+
+def test_soft_break_round_trip_paragraph() -> None:
+    """\\n in paragraph content → <br> in HTML → back to \\n via parser."""
+    blocks = [make_block("paragraph", content=[text_run("line one\nline two")])]
+    html = render_document({"title": "T", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+    p = soup.find("p", class_="lead") or soup.find("p")
+    assert p is not None
+    assert p.find("br") is not None, "rendered HTML must contain <br>"
+    # Parse back
+    runs = parse_inline(p)
+    text = "".join(r.get("text", "") for r in runs if r.get("type") == "text")
+    assert "\n" in text, "parser must restore \\n from <br>"
+
+
+def test_soft_break_round_trip_quote() -> None:
+    """\\n in blockquote content survives render→parse."""
+    blocks = [make_block("quote", content=[text_run("first line\nsecond line")])]
+    html = render_document({"title": "T", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+    bq = soup.find("blockquote")
+    assert bq is not None
+    assert bq.find("br") is not None
+    runs = parse_inline(bq)
+    text = "".join(r.get("text", "") for r in runs if r.get("type") == "text")
+    assert "\n" in text
+
+
+def test_soft_break_round_trip_narrative() -> None:
+    """\\n in narrative block content survives render→parse."""
+    blocks = [make_block(FORGE_NARRATIVE, content=[text_run("voice line one\nvoice line two")])]
+    html = render_document({"title": "T", "show_toc": False}, blocks, lambda b, n: "")
+    soup = BeautifulSoup(html, "lxml")
+    div = soup.find("div", class_="narrative")
+    assert div is not None
+    assert div.find("br") is not None
+    runs = parse_inline(div)
+    text = "".join(r.get("text", "") for r in runs if r.get("type") == "text")
+    assert "\n" in text

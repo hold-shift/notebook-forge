@@ -62,7 +62,7 @@ def inline_html(content: list[dict[str, Any]] | None) -> str:
         if kind != "text":
             continue
         styles = run.get("styles") or {}
-        text = _escape(run.get("text", ""))
+        text = _escape(run.get("text", "")).replace("\r\n", "\n").replace("\n", "<br>")
         if styles.get("fnRef"):
             out.append(f'<sup class="fn-ref">{text}</sup>')
             continue
