@@ -72,7 +72,7 @@ def inline_md(content: list[dict[str, Any]] | None) -> str:
         if kind != "text":
             continue
         styles = run.get("styles") or {}
-        text = run.get("text", "")
+        text = run.get("text", "").replace("\r\n", "\n").replace("\n", "  \n")
         if styles.get("fnRef"):
             out.append(f"[{text}]")
             continue
