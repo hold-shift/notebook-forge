@@ -371,3 +371,40 @@ literal newline after escaping; browsers collapse that to whitespace.
 - 8 new tests (unit: `"\n"`/`"\r\n"`/styled; round-trip: paragraph, quote,
   narrative); 282 backend tests total green.
 
+---
+
+# Sprint 6 addendum — UI Restyle
+
+**Branch:** `claude/goofy-elgamal-46e592`  
+**Date:** 14 June 2026
+
+## Milestone status
+
+| Milestone | Status | Notes |
+|---|---|---|
+| M1 token foundation + serif accent | **done** | Warm palette, badge triplets, `--font-serif`, Source Serif 4 woff2, `--border-radius-sm`, ink `.btn-primary`, `docs/STYLE.md` |
+| M2 shared styled primitives | **done** | `Button`, `StatusBadge`, `SectionLabel`, `SerifTitle` in `frontend/src/ui/`; 16 tests |
+| M3 library design system | **done** | Wordmark, doc titles, group headers, TargetPill → StatusBadge; Add/Manage buttons; `.doc-card` padding/radius |
+| M4 editor + settings design system | **done** | MetaBar Save → Button primary; panel h3 headings → SectionLabel sentence-case; push button; Settings saves; font-weight 600→500; BlockNote agreement CSS |
+| M5 persist polish flagged_ids + last-run | **done** | `flagged_ids` and `polishable` in change detail; `GET /api/documents/{slug}/polish/last`; 288 backend tests |
+| M6 polish status badge + popover | **done** | `PolishLastRun` type, `computePolishBadge()`, `PolishPopover` component; badge state machine tests; pre-polish restore via snapshots API |
+| M7 style guide + sprint report | **done** | `docs/STYLE.md` updated to reflect actual shipped API; this addendum |
+
+## Key design decisions
+
+- **Token-only CSS.** No `@mantine/core` in chrome code. Ink primary button replaces blue info-background style. All tokens in `:root`.
+- **Serif accent is narrow.** `var(--font-serif)` (Source Serif 4) used only in `<SerifTitle>` — wordmark, doc-card titles, editor breadcrumb. Never body/labels/inputs.
+- **Sentence case throughout.** All CSS `text-transform: uppercase` removed from panel headings and group headers.
+- **Two font-weights only.** All `font-weight: 600` occurrences in tool chrome changed to 500.
+- **Dark mode is a token-swap follow-up.** All values are in CSS tokens; no hardcoded hex outside definitions and `@font-face`. No toggle ships; dark mode is a one-file change.
+
+## Partials / deferrals
+
+- **Library polish hint** (show `polish_at` on doc cards): deferred. Adding a per-slug join to the list endpoint adds meaningful query complexity and was outside the inline diff budget. Noted in M6 commit body.
+- **Editor inline layout sprawl**: Editor.tsx has ~100 blocks with inline styles. For M4, only buttons/badges/section headers were converted. Full layout refactor is a follow-up.
+- **Polish popover "Review flagged" path**: opens `polishReviewOpen` via `setPolishReviewOpen(true)`. A `polishReport` must already be in state (from the current session's polish run) for the PolishReview modal to mount. If the user navigates away and back, the flag list comes from the `polishLast` API but the full report is not re-fetched. This is a known limitation — flagged review after page reload is a follow-up.
+
+## Test count
+- Backend: 282 → 288 (+6 new: flagged_ids, polishable, early-exit path, polish/last endpoint × 3)
+- Frontend: 62 → 86 (+24 new: Button × 7, StatusBadge × 9, polish badge state machine × 8)
+
