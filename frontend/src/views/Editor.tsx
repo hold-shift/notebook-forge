@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button, SectionLabel, SerifTitle } from '../ui'
 import { BlockNoteView } from '@blocknote/mantine'
 import {
   SuggestionMenuController,
@@ -179,7 +180,7 @@ function ImagesPanel({
   return (
     <div className="pending-panel images-panel">
       <div className="pending-panel-header">
-        <h3>Images</h3>
+        <h3><SectionLabel>Images</SectionLabel></h3>
       </div>
 
       <div className="images-summary">
@@ -403,7 +404,7 @@ function PendingPanel({
       {showHistory && <ChangesModal changes={changes} onClose={() => setShowHistory(false)} />}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3>Pending changes</h3>
+          <h3><SectionLabel>Pending changes</SectionLabel></h3>
           {edits.length > 0 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowHistory(true)}>
               History
@@ -473,14 +474,15 @@ function PendingPanel({
         })}
       </div>
       {targets.filter((t) => t.dirty).length > 1 && (
-        <button
-          type="button"
-          className="btn-primary push-all"
+        <Button
+          variant="primary"
+          className="push-all"
           disabled={!!pushing}
           onClick={() => onPush('__all__')}
+          style={{ width: '100%', marginTop: 4, justifyContent: 'center' }}
         >
           {pushing === '__all__' ? 'Pushing all…' : 'Push to all targets'}
-        </button>
+        </Button>
       )}
       </div>
     </>
@@ -663,9 +665,9 @@ function MetaBar({
         </span>
         {slugError && <span className="error meta-slug-error">{slugError}</span>}
       </label>
-      <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
-        {state === 'saving' ? 'Saving…' : needsConfirm ? '💾 Meta' : '💾 Meta'}
-      </button>
+      <Button variant="primary" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
+        {state === 'saving' ? 'Saving…' : 'Save'}
+      </Button>
       {Boolean(meta.source_asset_id) && (
         <button
           type="button"
@@ -706,7 +708,7 @@ function MetaBar({
         title="Run Gemini mechanical cleanup (typography, whitespace, obvious typos). A snapshot is taken first."
         onClick={onPolish}
       >
-        {polishing ? 'Polishing…' : '✨ Polish text'}
+        {polishing ? '✨ Polishing…' : '✨ Polish text'}
       </button>
       {needsConfirm && (
         <span className="confirm-hint">
@@ -741,7 +743,7 @@ function SnapshotsPanel({ slug }: { slug: string }) {
   if (!snaps.length) return null
   return (
     <div className="pending-panel snapshots-panel">
-      <h3>Snapshots</h3>
+      <h3><SectionLabel>Snapshots</SectionLabel></h3>
       {snaps.slice(0, 8).map((s) => (
         <div key={s.id} className="pending-row">
           <span className="pending-name">#{s.id}</span>
@@ -1102,7 +1104,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         </button>
         <i className="ti ti-chevron-right crumb-sep" aria-hidden />
         <div className="editor-titles">
-          <h2>{isHomepage ? 'Homepage' : doc.title}</h2>
+          <SerifTitle>{isHomepage ? 'Homepage' : doc.title}</SerifTitle>
           <span className="muted">
             {isHomepage ? 'Site index — push to publish' : String(doc.meta.year_display ?? '')}
           </span>
@@ -1211,13 +1213,9 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   Polish review — {polishRemaining.size} pending
                 </span>
                 <div className="polish-review-stub-actions">
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => setPolishReviewOpen(true)}
-                  >
+                  <Button variant="primary" onClick={() => setPolishReviewOpen(true)}>
                     Resume review
-                  </button>
+                  </Button>
                   <button type="button" onClick={onPolishDone}>
                     Done — reload editor
                   </button>

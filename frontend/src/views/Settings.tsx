@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { Button } from '../ui'
 
 export function Settings({ onBack }: { onBack: () => void }) {
   const [secrets, setSecrets] = useState<Record<string, boolean>>({})
@@ -100,7 +101,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-save-row">
-            <button type="button" className="btn-primary" onClick={saveSketch}>Save sketch settings</button>
+            <Button variant="primary" onClick={saveSketch}>Save sketch settings</Button>
             {sketchState && <span className="settings-state muted">{sketchState}</span>}
           </div>
         </div>
@@ -137,7 +138,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-save-row">
-            <button type="button" className="btn-primary" onClick={savePolish}>Save polish settings</button>
+            <Button variant="primary" onClick={savePolish}>Save polish settings</Button>
             {polishState && <span className="settings-state muted">{polishState}</span>}
           </div>
         </div>
@@ -166,9 +167,9 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-save-row">
-            <button type="button" className="btn-primary" onClick={saveNarrative}>
+            <Button variant="primary" onClick={saveNarrative}>
               Save narrative settings
-            </button>
+            </Button>
             {narrativeState && <span className="settings-state muted">{narrativeState}</span>}
           </div>
         </div>

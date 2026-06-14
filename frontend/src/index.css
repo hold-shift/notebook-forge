@@ -302,7 +302,6 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .pending-row {
@@ -506,7 +505,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 }
 .forge-footnote-marker {
   width: 2rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-info);
   border: none;
   background: transparent;
@@ -555,7 +554,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   margin-bottom: 20px; display: block;
 }
 .settings-back:hover { color: var(--color-text-primary); }
-.settings-title { font-size: 20px; font-weight: 600; margin: 0 0 28px; }
+.settings-title { font-size: 20px; font-weight: 500; margin: 0 0 28px; }
 .settings-section {
   border: 0.5px solid var(--color-border-tertiary);
   border-radius: var(--border-radius-lg);
@@ -568,7 +567,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   border-bottom: 0.5px solid var(--color-border-tertiary);
   background: var(--color-background-secondary);
 }
-.settings-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+.settings-section-head h2 { font-size: 13px; font-weight: 500; margin: 0 0 4px; }
 .settings-section-head p { font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.5; }
 .settings-fields { padding: 4px 20px 16px; }
 .settings-row {
@@ -863,7 +862,6 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .polish-review-head p { margin: 0; font-size: 12px; }
@@ -1246,3 +1244,7 @@ mark.diff-ins {
 .images-gen-error { color: var(--color-text-danger, #dc2626); }
 .images-face-flag-summary { color: #b45309; font-weight: 500; }
 .forge-face-flag { font-size: 11px; color: #b45309; font-weight: 500; padding: 1px 6px; background: #fef3c7; border-radius: 4px; border: 0.5px solid #f59e0b; }
+
+/* ---- BlockNote chrome agreement ---- */
+.bn-editor { background: var(--color-background-primary) !important; color: var(--color-text-primary) !important; }
+.bn-block-content { font-size: 14px; }
