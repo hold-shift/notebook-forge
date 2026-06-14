@@ -8,6 +8,7 @@ import {
   toggleCollapsed,
   type OutlineNode,
 } from './outline'
+import { SectionLabel } from '../ui'
 
 function Row({
   node,
@@ -78,7 +79,7 @@ export function OutlineNavigator({
   return (
     <div className="nf-side" data-testid="outline-navigator">
       <div className="nf-side-head">
-        <span>OUTLINE</span>
+        <SectionLabel>Outline</SectionLabel>
         <button
           type="button"
           className="nf-ibtn"

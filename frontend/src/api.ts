@@ -51,6 +51,7 @@ export interface DocDetail {
   blocks: unknown[]
   meta: Record<string, unknown>
   targets: TargetState[]
+  updated_at?: string | null
 }
 
 export interface DiffSegment {
@@ -75,6 +76,16 @@ export interface PolishReport {
   failed_chunks: string[]
   model: string
   targets: TargetState[]
+}
+
+export interface PolishLastRun {
+  at: string
+  model: string
+  blocks_changed: number
+  blocks_unchanged: number
+  flagged_ids: string[]
+  chunks: number
+  failed_chunks: number
 }
 
 export interface ChangeEntry {
@@ -172,6 +183,10 @@ export const api = {
     fetch(`/api/documents/${slug}/polish`, { method: 'POST' }).then((r) =>
       json<PolishReport>(r),
     ),
+  polishLast: (slug: string) =>
+    fetch(`/api/documents/${slug}/polish/last`).then((r) =>
+      json<PolishLastRun | null>(r),
+    ),
   polishProgress: (slug: string) =>
     fetch(`/api/documents/${slug}/polish/progress`, { cache: 'no-store' }).then((r) =>
       json<{ running: boolean; done: number; total: number; failed: number }>(r),
@@ -188,11 +203,18 @@ export const api = {
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
         narrative: { label: string }
+        footer: { notice: string; license_label: string; license_url: string }
         secrets: Record<string, boolean>
       }>(r),
     ),
   saveNarrativeSettings: (body: { label: string }) =>
     fetch('/api/settings/narrative', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean }>(r)),
+  saveFooterSettings: (body: { notice: string; license_label: string; license_url: string }) =>
+    fetch('/api/settings/footer', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

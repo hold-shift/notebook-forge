@@ -281,6 +281,7 @@ def get_document(slug: str, session: Session = Depends(get_session)) -> dict[str
         "kind": doc.kind,
         "blocks": doc.blocks,
         "meta": doc.meta,
+        "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
         "targets": _target_states(session, doc),
     }
 
@@ -663,6 +664,38 @@ def polish_progress(slug: str) -> dict[str, Any]:
     return dict(p)
 
 
+@app.get("/api/documents/{slug}/polish/last")
+def polish_last(slug: str, session: Session = Depends(get_session)) -> dict[str, Any] | None:
+    """Return metadata from the most recent polish run for this document, or null."""
+    doc = _get_doc(session, slug)
+    row = session.scalar(
+        select(Change)
+        .where(
+            Change.document_id == doc.id,
+            Change.kind == "edit",
+            Change.summary.startswith("polish"),
+        )
+        .order_by(Change.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    d = row.detail or {}
+    polishable = d.get("polishable", 0)
+    blocks_changed = d.get("blocks_changed", 0)
+    flagged_count = d.get("flagged", 0)
+    blocks_unchanged = max(0, polishable - blocks_changed - flagged_count)
+    return {
+        "at": row.created_at.isoformat() if row.created_at else None,
+        "model": d.get("model", ""),
+        "blocks_changed": blocks_changed,
+        "blocks_unchanged": blocks_unchanged,
+        "flagged_ids": d.get("flagged_ids", []),
+        "chunks": d.get("chunks", 0),
+        "failed_chunks": d.get("failed_chunks", 0),
+    }
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)
@@ -709,6 +742,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .footer import footer_setting
     from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
@@ -719,6 +753,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
+        "footer": footer_setting(session),
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -795,6 +830,34 @@ def save_narrative_settings(
     else:
         setting.value = value
     return {"ok": True, "narrative": value}
+
+
+class FooterSettingsBody(BaseModel):
+    notice: str = ""
+    license_label: str = ""
+    license_url: str = ""
+
+
+@app.put("/api/settings/footer")
+def save_footer_settings(
+    body: FooterSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    url = body.license_url.strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(422, "license_url must be an http(s) URL")
+    value = {
+        "notice": body.notice.strip(),
+        "license_label": body.license_label.strip(),
+        "license_url": url,
+    }
+    setting = session.get(Setting, "footer")
+    if setting is None:
+        session.add(Setting(key="footer", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "footer": value}
 
 
 @app.get("/api/search")

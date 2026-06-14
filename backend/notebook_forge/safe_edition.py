@@ -222,4 +222,10 @@ def build_safe_markdown(session: Session, workspace: Path, doc: Document) -> str
                     return data_uri(path)
         return ""
 
-    return render_safe_markdown(doc.meta, doc.blocks, sketch_src)
+    # Workspace-wide footer / licence notice; html_fragment_to_md turns the
+    # licence anchor into a Markdown link for the Google Doc.
+    from .footer import footer_html
+
+    meta = dict(doc.meta)
+    meta["footer_html"] = footer_html(session)
+    return render_safe_markdown(meta, doc.blocks, sketch_src)

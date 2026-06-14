@@ -2,6 +2,14 @@
    mockups). The PUBLISHED document output keeps the archive serif house
    style; these tokens style only the tool itself. */
 
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/SourceSerif4-Regular.woff2') format('woff2');
+}
+
 :root {
   --color-background-primary: #ffffff;
   --color-background-secondary: #f5f6f7;
@@ -19,11 +27,47 @@
   --pill-warn-fg: #633806;
   --pill-danger-bg: #fcebeb;
   --pill-danger-fg: #791f1f;
+  --border-radius-sm: 6px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --narrative-bg: #f1eada;
   --narrative-border: #b8a580;
+
+  /* Warm accent palette */
+  --color-ink: #2C2C2A;
+  --color-umber: #633806;
+  --color-tan: #BA7517;
+  --color-amber: #EF9F27;
+  --color-cream: #FAEEDA;
+  --color-pine: #085041;
+  --color-mint: #E1F5EE;
+
+  /* Status badge token triplets */
+  --badge-live-bg: var(--pill-ok-bg);
+  --badge-live-fg: var(--pill-ok-fg);
+  --badge-live-border: transparent;
+
+  --badge-changes-bg: var(--pill-warn-bg);
+  --badge-changes-fg: var(--pill-warn-fg);
+  --badge-changes-border: transparent;
+
+  --badge-unpublished-bg: var(--color-background-secondary);
+  --badge-unpublished-fg: var(--color-text-secondary);
+  --badge-unpublished-border: var(--color-border-tertiary);
+
+  --badge-polished-bg: var(--pill-ok-bg);
+  --badge-polished-fg: var(--pill-ok-fg);
+  --badge-polished-border: transparent;
+
+  --badge-flagged-bg: var(--pill-warn-bg);
+  --badge-flagged-fg: var(--color-tan);
+  --badge-flagged-border: transparent;
+
+  --badge-never-bg: var(--color-background-secondary);
+  --badge-never-fg: var(--color-text-tertiary);
+  --badge-never-border: var(--color-border-tertiary);
 }
 
 body {
@@ -65,9 +109,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 button:disabled { opacity: 0.55; cursor: default; }
 .btn-primary {
-  background: var(--color-background-info) !important;
-  color: var(--color-text-info) !important;
-  border-color: var(--color-border-info) !important;
+  background: var(--color-text-primary) !important;
+  color: var(--color-background-primary) !important;
+  border-color: var(--color-text-primary) !important;
 }
 
 /* ---- Pills ---- */
@@ -146,9 +190,9 @@ button:disabled { opacity: 0.55; cursor: default; }
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
   background: var(--color-background-primary);
   cursor: pointer;
   text-align: left;
@@ -258,7 +302,6 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .pending-row {
@@ -270,9 +313,12 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 13px;
 }
 .pending-identity { display: flex; align-items: center; gap: 6px; }
-.pending-row .dot { width: 8px; height: 8px; border-radius: 50%; }
-.pending-row .dot.dirty { background: #d99a2b; }
-.pending-row .dot.clean { background: #1f9d6b; }
+.pending-row .dot,
+.target-card-head .dot { width: 8px; height: 8px; border-radius: 50%; }
+.pending-row .dot.dirty,
+.target-card-head .dot.dirty { background: #d99a2b; }
+.pending-row .dot.clean,
+.target-card-head .dot.clean { background: #1f9d6b; }
 .pending-name { font-weight: 500; }
 .pending-state { color: var(--color-text-tertiary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .target-btns { display: flex; gap: 4px; justify-content: flex-end; }
@@ -357,8 +403,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .forge-image-label {
   font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-text-tertiary);
 }
 .forge-image-missing {
@@ -462,7 +507,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 }
 .forge-footnote-marker {
   width: 2rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-info);
   border: none;
   background: transparent;
@@ -511,7 +556,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   margin-bottom: 20px; display: block;
 }
 .settings-back:hover { color: var(--color-text-primary); }
-.settings-title { font-size: 20px; font-weight: 600; margin: 0 0 28px; }
+.settings-title { font-size: 20px; font-weight: 500; margin: 0 0 28px; }
 .settings-section {
   border: 0.5px solid var(--color-border-tertiary);
   border-radius: var(--border-radius-lg);
@@ -524,7 +569,7 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   border-bottom: 0.5px solid var(--color-border-tertiary);
   background: var(--color-background-secondary);
 }
-.settings-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+.settings-section-head h2 { font-size: 13px; font-weight: 500; margin: 0 0 4px; }
 .settings-section-head p { font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.5; }
 .settings-fields { padding: 4px 20px 16px; }
 .settings-row {
@@ -617,7 +662,41 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 .change-row i { color: var(--color-text-secondary); font-size: 13px; flex: none; }
 .change-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .change-when { color: var(--color-text-tertiary); font-size: 11px; flex: none; white-space: nowrap; }
-.target-rows { border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; }
+.target-rows { border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.target-card {
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.target-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.target-card-head .pending-name { flex: 1; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.target-card-head .dot { flex: none; }
+.target-link-icon {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  text-decoration: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.target-link-icon:hover { color: var(--color-text-primary); }
+.target-card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 15px;
+  font-size: 11px;
+}
+.target-card-status .pending-state { color: var(--color-text-tertiary); }
+.pending-behind { color: var(--pill-warn-fg); font-weight: 500; }
 .push-all { width: 100%; margin-top: 4px; }
 .btn-danger-sm {
   font-size: 12px !important;
@@ -819,7 +898,6 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .polish-review-head p { margin: 0; font-size: 12px; }
@@ -971,9 +1049,6 @@ mark.diff-ins {
   gap: 6px;
   padding: 8px 4px 4px;
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
   color: var(--color-text-secondary);
   border-bottom: 1px solid var(--color-border-tertiary);
   margin-bottom: 4px;
@@ -1205,3 +1280,7 @@ mark.diff-ins {
 .images-gen-error { color: var(--color-text-danger, #dc2626); }
 .images-face-flag-summary { color: #b45309; font-weight: 500; }
 .forge-face-flag { font-size: 11px; color: #b45309; font-weight: 500; padding: 1px 6px; background: #fef3c7; border-radius: 4px; border: 0.5px solid #f59e0b; }
+
+/* ---- BlockNote chrome agreement ---- */
+.bn-editor { background: var(--color-background-primary) !important; color: var(--color-text-primary) !important; }
+.bn-block-content { font-size: 14px; }

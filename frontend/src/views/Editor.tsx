@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Button, SectionLabel, SerifTitle } from '../ui'
 import { BlockNoteView } from '@blocknote/mantine'
 import {
   SuggestionMenuController,
@@ -15,7 +16,8 @@ import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
-import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
+import { api, type DocDetail, type PolishLastRun, type PolishReport, type TargetState } from '../api'
+import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
@@ -26,6 +28,111 @@ import { PolishProgress } from './PolishProgress'
 import { PolishReview } from './PolishReview'
 
 const AUTOSAVE_MS = 1200
+
+// ---- Polish badge state machine ----
+export type PolishBadgeState = 'never-run' | 'polished' | 'stale' | 'flagged' | 'loading'
+
+export function computePolishBadge(
+  polishLast: PolishLastRun | null | 'loading',
+  updatedAt: string | null,
+): PolishBadgeState {
+  if (polishLast === 'loading') return 'loading'
+  if (polishLast === null) return 'never-run'
+  if (polishLast.flagged_ids.length > 0) return 'flagged'
+  if (updatedAt && polishLast.at <= updatedAt) return 'stale'
+  return 'polished'
+}
+
+function PolishPopover({
+  run,
+  onClose,
+  onRestore,
+  onReviewFlagged,
+}: {
+  run: PolishLastRun
+  onClose: () => void
+  onRestore: () => void
+  onReviewFlagged: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [onClose])
+
+  const at = new Date(run.at)
+  const timeStr = at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute',
+        zIndex: 100,
+        background: 'var(--color-background-primary)',
+        border: '0.5px solid var(--color-border-tertiary)',
+        borderRadius: 'var(--border-radius-lg)',
+        padding: '14px 16px',
+        minWidth: 280,
+        boxShadow: '0 4px 16px rgba(0,0,0,.12)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        top: '100%',
+        left: 0,
+        marginTop: 4,
+      }}
+    >
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+        {timeStr} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{run.model}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '8px 10px',
+          background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 500 }}>{run.blocks_changed}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Cleaned</div>
+        </div>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '8px 10px',
+          background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 500 }}>{run.blocks_unchanged}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Unchanged</div>
+        </div>
+      </div>
+      {run.flagged_ids.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          <span style={{ color: 'var(--color-tan)' }}>{run.flagged_ids.length} flagged</span>
+          {' '}
+          <button
+            type="button"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                     fontSize: 12, color: 'var(--color-text-info)', textDecoration: 'underline' }}
+            onClick={() => { onReviewFlagged(); onClose() }}
+          >
+            Review flagged
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        style={{
+          background: 'none', border: '0.5px solid var(--color-border-tertiary)',
+          borderRadius: 'var(--border-radius-md)', cursor: 'pointer',
+          fontSize: 12, padding: '4px 10px', color: 'var(--color-text-secondary)',
+        }}
+        onClick={() => { onRestore(); onClose() }}
+      >
+        Restore pre-polish snapshot
+      </button>
+    </div>
+  )
+}
 
 interface ChangeRow {
   id: number
@@ -179,7 +286,7 @@ function ImagesPanel({
   return (
     <div className="pending-panel images-panel">
       <div className="pending-panel-header">
-        <h3>Images</h3>
+        <h3><SectionLabel>Images</SectionLabel></h3>
       </div>
 
       <div className="images-summary">
@@ -239,14 +346,14 @@ function ImagesPanel({
       ) : (
         <>
           <div className="images-generate-row">
-            <button
-              type="button"
-              className="btn-primary images-gen-btn"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={eligible === 0}
               onClick={() => void startGenerate()}
             >
               ✏ Generate all sketches
-            </button>
+            </Button>
             <span className="eligible-badge">{eligible} eligible</span>
           </div>
 
@@ -336,22 +443,24 @@ function ImagesPanel({
       )}
 
       <div className="images-actions-row">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={missingCaption === 0 || generatingCaptions}
           title="Generate AI captions for images without one"
           onClick={() => void onGenerateCaptions()}
         >
           {generatingCaptions ? '✨ Captioning…' : missingCaption > 0 ? `✨ Caption (${missingCaption})` : '✨ Caption images'}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={pendingCount === 0}
           title="Mark all pending images as approved"
           onClick={onApproveAll}
         >
           {pendingCount > 0 ? `🖼️ Approve all (${pendingCount})` : '🖼️ Approve all'}
-        </button>
+        </Button>
       </div>
 
       <p className="images-helper">Approved sketches are skipped.</p>
@@ -386,6 +495,9 @@ function PendingPanel({
     )
   }, [slug, targets])
 
+  const targetLabel = (id: string) =>
+    ({ 'github-pages': 'HTML', 'local-folder': 'Local', drive: 'Drive' }[id] ?? id)
+
   const behindCount = (t: TargetState): number =>
     changes.filter(
       (c) =>
@@ -403,7 +515,7 @@ function PendingPanel({
       {showHistory && <ChangesModal changes={changes} onClose={() => setShowHistory(false)} />}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3>Pending changes</h3>
+          <h3><SectionLabel>Pending changes</SectionLabel></h3>
           {edits.length > 0 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowHistory(true)}>
               History
@@ -422,65 +534,71 @@ function PendingPanel({
           </div>
         )}
         <div className="target-rows">
-        {targets.map((t) => {
-          const behind = behindCount(t)
-          return (
-            <div key={t.target} className="pending-row">
-              <span className="pending-identity">
-                <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
-                <span className="pending-name">{t.target}</span>
-                {t.url && (
-                  <a
-                    className="target-link"
-                    href={t.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={`Open the published ${t.kind} output`}
+          {targets.map((t) => {
+            const behind = behindCount(t)
+            const statusLine = t.status !== 'PUBLISHED'
+              ? <span className="pending-state">Never published</span>
+              : <>
+                  <span className="pending-state">
+                    Published{t.published_at ? ` · ${timeAgo(t.published_at)}` : ''}
+                  </span>
+                  {t.dirty && behind > 0 && (
+                    <span className="pending-behind">{behind} change{behind === 1 ? '' : 's'} behind</span>
+                  )}
+                </>
+            return (
+              <div key={t.target} className="target-card">
+                <div className="target-card-head">
+                  <span className={`dot ${t.dirty ? 'dirty' : 'clean'}`} />
+                  <span className="pending-name" title={t.target}>{targetLabel(t.target)}</span>
+                  {t.url && (
+                    <a
+                      className="target-link-icon"
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Open the published ${t.kind} output`}
+                    >
+                      <i className="ti ti-external-link" aria-hidden />
+                    </a>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!t.dirty || pushing === t.target}
+                    onClick={() => onPush(t.target)}
                   >
-                    ↗
-                  </a>
-                )}
-              </span>
-              <span className="pending-state">
-                {t.status !== 'PUBLISHED'
-                  ? 'never published'
-                  : t.dirty
-                    ? `${behind || 'some'} change${behind === 1 ? '' : 's'} behind`
-                    : 'up to date'}
-              </span>
-              <span className="target-btns">
-                <button
-                  type="button"
-                  disabled={!t.dirty || pushing === t.target}
-                  onClick={() => onPush(t.target)}
-                >
-                  {pushing === t.target ? 'Pushing…' : 'Push'}
-                </button>
-                {t.status === 'PUBLISHED' && !hideUnpublish && (
-                  <button
-                    type="button"
-                    className="btn-danger-sm"
-                    disabled={!!pushing || unpublishing === t.target}
-                    title={`Remove this document from ${t.target}`}
-                    onClick={() => onUnpublish(t.target)}
-                  >
-                    {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
-                  </button>
-                )}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+                    {pushing === t.target ? 'Pushing…' : 'Push'}
+                  </Button>
+                  {t.status === 'PUBLISHED' && !hideUnpublish && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={!!pushing || unpublishing === t.target}
+                      title={`Remove this document from ${t.target}`}
+                      onClick={() => onUnpublish(t.target)}
+                    >
+                      {unpublishing === t.target ? 'Removing…' : 'Unpublish'}
+                    </Button>
+                  )}
+                </div>
+                <div className="target-card-status">
+                  {statusLine}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       {targets.filter((t) => t.dirty).length > 1 && (
-        <button
-          type="button"
-          className="btn-primary push-all"
+        <Button
+          variant="primary"
+          className="push-all"
           disabled={!!pushing}
           onClick={() => onPush('__all__')}
+          style={{ width: '100%', marginTop: 4, justifyContent: 'center' }}
         >
           {pushing === '__all__' ? 'Pushing all…' : 'Push to all targets'}
-        </button>
+        </Button>
       )}
       </div>
     </>
@@ -493,12 +611,14 @@ function MetaBar({
   editorDoc,
   onPolish,
   polishing,
+  polishBadge,
 }: {
   doc: DocDetail
   onSaved: (targets: TargetState[]) => void
   editorDoc: () => unknown[]
   onPolish: () => void
   polishing: boolean
+  polishBadge?: React.ReactNode
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
@@ -663,9 +783,9 @@ function MetaBar({
         </span>
         {slugError && <span className="error meta-slug-error">{slugError}</span>}
       </label>
-      <button type="button" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
-        {state === 'saving' ? 'Saving…' : needsConfirm ? '💾 Meta' : '💾 Meta'}
-      </button>
+      <Button variant="primary" disabled={(!dirty && !needsConfirm) || state === 'saving'} onClick={save}>
+        {state === 'saving' ? 'Saving…' : 'Save'}
+      </Button>
       {Boolean(meta.source_asset_id) && (
         <button
           type="button"
@@ -706,8 +826,9 @@ function MetaBar({
         title="Run Gemini mechanical cleanup (typography, whitespace, obvious typos). A snapshot is taken first."
         onClick={onPolish}
       >
-        {polishing ? 'Polishing…' : '✨ Polish text'}
+        {polishing ? '✨ Polishing…' : '✨ Polish text'}
       </button>
+      {polishBadge}
       {needsConfirm && (
         <span className="confirm-hint">
           Detected from the source — please confirm title and years before publishing.
@@ -718,9 +839,71 @@ function MetaBar({
   )
 }
 
+type Snap = { id: number; note: string; created_at: string | null }
+
+function SnapshotRow({
+  s,
+  restoring,
+  onRestore,
+}: {
+  s: Snap
+  restoring: number | null
+  onRestore: (id: number) => void
+}) {
+  return (
+    <div className="pending-row">
+      <span className="pending-name" style={{ fontVariantNumeric: 'tabular-nums' }}>#{s.id}</span>
+      <span className="pending-state">
+        {s.note || 'snapshot'}
+        {s.created_at ? ` · ${timeAgo(s.created_at)}` : ''}
+      </span>
+      <Button variant="secondary" size="sm" disabled={restoring === s.id} onClick={() => onRestore(s.id)}>
+        {restoring === s.id ? 'Restoring…' : 'Restore'}
+      </Button>
+    </div>
+  )
+}
+
+function SnapshotsModal({
+  snaps,
+  restoring,
+  onRestore,
+  onClose,
+}: {
+  snaps: Snap[]
+  restoring: number | null
+  onRestore: (id: number) => void
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>All snapshots</h3>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <i className="ti ti-x" aria-hidden />
+          </button>
+        </div>
+        <div className="changes-modal-list">
+          {snaps.map((s) => (
+            <SnapshotRow key={s.id} s={s} restoring={restoring} onRestore={onRestore} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SnapshotsPanel({ slug }: { slug: string }) {
-  const [snaps, setSnaps] = useState<{ id: number; note: string; created_at: string | null }[]>([])
+  const [snaps, setSnaps] = useState<Snap[]>([])
   const [restoring, setRestoring] = useState<number | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     api.snapshots(slug).then(setSnaps, () => setSnaps([]))
@@ -730,31 +913,36 @@ function SnapshotsPanel({ slug }: { slug: string }) {
     if (!confirm(`Restore snapshot #${id}? Current unpublished edits are replaced.`)) return
     setRestoring(id)
     api.rollback(slug, id).then(
-      () => window.location.reload(), // editor remounts with restored blocks
-      (e) => {
-        setRestoring(null)
-        alert(`Restore failed: ${e}`)
-      },
+      () => window.location.reload(),
+      (e) => { setRestoring(null); alert(`Restore failed: ${e}`) },
     )
   }
 
   if (!snaps.length) return null
   return (
-    <div className="pending-panel snapshots-panel">
-      <h3>Snapshots</h3>
-      {snaps.slice(0, 8).map((s) => (
-        <div key={s.id} className="pending-row">
-          <span className="pending-name">#{s.id}</span>
-          <span className="pending-state">
-            {s.note || 'snapshot'}
-            {s.created_at ? ` · ${s.created_at.slice(0, 16).replace('T', ' ')}` : ''}
-          </span>
-          <button type="button" disabled={restoring === s.id} onClick={() => restore(s.id)}>
-            {restoring === s.id ? 'Restoring…' : 'Restore'}
-          </button>
+    <>
+      {showAll && (
+        <SnapshotsModal
+          snaps={snaps}
+          restoring={restoring}
+          onRestore={restore}
+          onClose={() => setShowAll(false)}
+        />
+      )}
+      <div className="pending-panel snapshots-panel">
+        <div className="pending-panel-header">
+          <h3><SectionLabel>Snapshots</SectionLabel></h3>
+          {snaps.length > 3 && (
+            <button type="button" className="changes-history-btn" onClick={() => setShowAll(true)}>
+              All {snaps.length}
+            </button>
+          )}
         </div>
-      ))}
-    </div>
+        {snaps.slice(0, 3).map((s) => (
+          <SnapshotRow key={s.id} s={s} restoring={restoring} onRestore={restore} />
+        ))}
+      </div>
+    </>
   )
 }
 
@@ -795,6 +983,8 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [unpublishing, setUnpublishing] = useState<string | null>(null)
   const [polishing, setPolishing] = useState(false)
   const [generatingCaptions, setGeneratingCaptions] = useState(false)
+  const [polishLast, setPolishLast] = useState<PolishLastRun | null | 'loading'>('loading')
+  const [polishPopoverOpen, setPolishPopoverOpen] = useState(false)
   const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
   const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
   const [polishReviewOpen, setPolishReviewOpen] = useState(false)
@@ -839,6 +1029,12 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     if (timer.current) clearTimeout(timer.current)
     if (outlineTimer.current) clearTimeout(outlineTimer.current)
   }, [])
+
+  // Fetch polish last-run data
+  useEffect(() => {
+    if (isHomepage) { setPolishLast(null); return }
+    api.polishLast(doc.slug).then(setPolishLast, () => setPolishLast(null))
+  }, [doc.slug, isHomepage])
 
   // Homepage: re-fetch targets on window focus so group changes elsewhere
   // (Library reorder) mark the homepage dirty without a manual reload.
@@ -963,6 +1159,8 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       (report) => {
         setPolishing(false)
         setTargets(report.targets)
+        // Refresh polish last-run badge
+        api.polishLast(doc.slug).then(setPolishLast, () => {})
         if (report.flagged.length === 0) {
           window.location.reload()
         } else {
@@ -1102,7 +1300,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         </button>
         <i className="ti ti-chevron-right crumb-sep" aria-hidden />
         <div className="editor-titles">
-          <h2>{isHomepage ? 'Homepage' : doc.title}</h2>
+          <SerifTitle>{isHomepage ? 'Homepage' : doc.title}</SerifTitle>
           <span className="muted">
             {isHomepage ? 'Site index — push to publish' : String(doc.meta.year_display ?? '')}
           </span>
@@ -1119,13 +1317,46 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       </header>
       <div className="editor-wrap">
         {!isHomepage && (
-          <MetaBar
-            doc={doc}
-            onSaved={setTargets}
-            editorDoc={() => editor.document}
-            onPolish={onPolish}
-            polishing={polishing}
-          />
+          <>
+            <MetaBar
+              doc={doc}
+              onSaved={setTargets}
+              editorDoc={() => editor.document}
+              onPolish={onPolish}
+              polishing={polishing}
+              polishBadge={polishLast !== 'loading' ? (
+                <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => setPolishPopoverOpen((o) => !o)}>
+                    <StatusBadge
+                      variant={(() => {
+                        const s = computePolishBadge(polishLast, doc.updated_at ?? null)
+                        return (s === 'loading' ? 'never-run' : s) as BadgeVariant
+                      })()}
+                    />
+                  </span>
+                  {polishPopoverOpen && polishLast !== null && (
+                    <PolishPopover
+                      run={polishLast}
+                      onClose={() => setPolishPopoverOpen(false)}
+                      onRestore={() => {
+                        const confirmed = confirm('Restore to the pre-polish snapshot? Current edits will be replaced.')
+                        if (!confirmed) return
+                        api.snapshots(doc.slug).then((snaps) => {
+                          const prePolish = snaps.find((s) => s.note === 'before polish')
+                          if (!prePolish) { alert('No pre-polish snapshot found.'); return }
+                          api.rollback(doc.slug, prePolish.id).then(
+                            () => window.location.reload(),
+                            (e) => alert(`Restore failed: ${e}`),
+                          )
+                        })
+                      }}
+                      onReviewFlagged={() => setPolishReviewOpen(true)}
+                    />
+                  )}
+                </span>
+              ) : undefined}
+            />
+          </>
         )}
         <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
           {!isHomepage && (outlineOpen ? (
@@ -1211,13 +1442,9 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                   Polish review — {polishRemaining.size} pending
                 </span>
                 <div className="polish-review-stub-actions">
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => setPolishReviewOpen(true)}
-                  >
+                  <Button variant="primary" onClick={() => setPolishReviewOpen(true)}>
                     Resume review
-                  </button>
+                  </Button>
                   <button type="button" onClick={onPolishDone}>
                     Done — reload editor
                   </button>

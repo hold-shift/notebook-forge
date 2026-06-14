@@ -9,6 +9,7 @@ import {
   type SortMode,
 } from '../lib/librarySort'
 import { ManageGroupsModal } from './ManageGroupsModal'
+import { Button, StatusBadge, SectionLabel, SerifTitle } from '../ui'
 
 const LS_GROUPBY = 'nf-library-groupby'
 const LS_SORT = 'nf-library-sort'
@@ -30,20 +31,12 @@ function TargetPill({ t }: { t: TargetState }) {
   }
   const name = labels[t.target] ?? t.target
   if (t.status !== 'PUBLISHED') {
-    return (
-      <span className="pill neutral">
-        <i className="ti ti-circle-dashed" aria-hidden /> {name} unpublished
-      </span>
-    )
+    return <StatusBadge variant="unpublished" label={`${name} unpublished`} />
   }
   return t.dirty ? (
-    <span className="pill warn">
-      <i className="ti ti-refresh" aria-hidden /> {name} changes to push
-    </span>
+    <StatusBadge variant="changes" label={`${name} changes to push`} />
   ) : (
-    <span className="pill ok">
-      <i className="ti ti-check" aria-hidden /> {name} live
-    </span>
+    <StatusBadge variant="live" label={`${name} live`} />
   )
 }
 
@@ -173,10 +166,10 @@ function DocCard({
           <i className={`ti ${fileIcon(doc.source_type)}`} aria-hidden />
         </div>
         <div className="doc-main">
-          <p className="doc-title">
+          <SerifTitle as="p" className="doc-title">
             {doc.title}
             {doc.year_display ? ` · ${doc.year_display}` : ''}
-          </p>
+          </SerifTitle>
           <p className="doc-meta">
             {doc.source_type} · {doc.figures} images · {doc.sketched} sketched
             {doc.pending_review > 0 ? ` · ${doc.pending_review} awaiting review` : ''}
@@ -316,7 +309,8 @@ export function Library({
     <div className="shell">
       <div className="topnav">
         <span className="brand">
-          <i className="ti ti-anvil" aria-hidden /> Notebook Forge
+          <i className="ti ti-anvil" aria-hidden />
+          <SerifTitle as="span" style={{ fontSize: 15 }}>Notebook Forge</SerifTitle>
         </span>
         <button type="button" className="navlink active">
           Library
@@ -334,14 +328,14 @@ export function Library({
           style={{ display: 'none' }}
           onChange={(e) => onFile(e.target.files?.[0])}
         />
-        <button
-          type="button"
-          className="add-doc"
+        <Button
+          variant="primary"
           disabled={ingesting}
           onClick={() => fileInput.current?.click()}
+          style={{ marginLeft: 'auto' }}
         >
           <i className="ti ti-plus" aria-hidden /> {ingesting ? 'Ingesting…' : 'Add document'}
-        </button>
+        </Button>
       </div>
       <div className="toolbar">
         <input
@@ -369,9 +363,9 @@ export function Library({
           <option value="last_updated">Last updated</option>
           <option value="attention">Needs attention first</option>
         </select>
-        <button type="button" className="btn-secondary" onClick={() => setShowManageGroups(true)}>
+        <Button variant="secondary" onClick={() => setShowManageGroups(true)}>
           Manage groups
-        </button>
+        </Button>
       </div>
       {hits !== null && (
         <div className="search-hits" style={{ paddingTop: 12 }}>
@@ -397,7 +391,7 @@ export function Library({
                 {bucket.color && (
                   <span className="group-dot" style={{ background: bucket.color }} />
                 )}
-                <span>{bucket.label}</span>
+                <SectionLabel>{bucket.label}</SectionLabel>
                 <span className="muted" style={{ marginLeft: 6 }}>({bucket.docs.length})</span>
               </div>
             )}
