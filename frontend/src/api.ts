@@ -51,6 +51,7 @@ export interface DocDetail {
   blocks: unknown[]
   meta: Record<string, unknown>
   targets: TargetState[]
+  updated_at?: string | null
 }
 
 export interface DiffSegment {
@@ -75,6 +76,16 @@ export interface PolishReport {
   failed_chunks: string[]
   model: string
   targets: TargetState[]
+}
+
+export interface PolishLastRun {
+  at: string
+  model: string
+  blocks_changed: number
+  blocks_unchanged: number
+  flagged_ids: string[]
+  chunks: number
+  failed_chunks: number
 }
 
 export interface ChangeEntry {
@@ -171,6 +182,10 @@ export const api = {
   polish: (slug: string) =>
     fetch(`/api/documents/${slug}/polish`, { method: 'POST' }).then((r) =>
       json<PolishReport>(r),
+    ),
+  polishLast: (slug: string) =>
+    fetch(`/api/documents/${slug}/polish/last`).then((r) =>
+      json<PolishLastRun | null>(r),
     ),
   polishProgress: (slug: string) =>
     fetch(`/api/documents/${slug}/polish/progress`, { cache: 'no-store' }).then((r) =>

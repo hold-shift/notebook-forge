@@ -281,6 +281,7 @@ def get_document(slug: str, session: Session = Depends(get_session)) -> dict[str
         "kind": doc.kind,
         "blocks": doc.blocks,
         "meta": doc.meta,
+        "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
         "targets": _target_states(session, doc),
     }
 

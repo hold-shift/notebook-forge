@@ -16,7 +16,8 @@ import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
-import { api, type DocDetail, type PolishReport, type TargetState } from '../api'
+import { api, type DocDetail, type PolishLastRun, type PolishReport, type TargetState } from '../api'
+import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
@@ -27,6 +28,111 @@ import { PolishProgress } from './PolishProgress'
 import { PolishReview } from './PolishReview'
 
 const AUTOSAVE_MS = 1200
+
+// ---- Polish badge state machine ----
+export type PolishBadgeState = 'never-run' | 'polished' | 'stale' | 'flagged' | 'loading'
+
+export function computePolishBadge(
+  polishLast: PolishLastRun | null | 'loading',
+  updatedAt: string | null,
+): PolishBadgeState {
+  if (polishLast === 'loading') return 'loading'
+  if (polishLast === null) return 'never-run'
+  if (polishLast.flagged_ids.length > 0) return 'flagged'
+  if (updatedAt && polishLast.at <= updatedAt) return 'stale'
+  return 'polished'
+}
+
+function PolishPopover({
+  run,
+  onClose,
+  onRestore,
+  onReviewFlagged,
+}: {
+  run: PolishLastRun
+  onClose: () => void
+  onRestore: () => void
+  onReviewFlagged: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [onClose])
+
+  const at = new Date(run.at)
+  const timeStr = at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute',
+        zIndex: 100,
+        background: 'var(--color-background-primary)',
+        border: '0.5px solid var(--color-border-tertiary)',
+        borderRadius: 'var(--border-radius-lg)',
+        padding: '14px 16px',
+        minWidth: 280,
+        boxShadow: '0 4px 16px rgba(0,0,0,.12)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        top: '100%',
+        left: 0,
+        marginTop: 4,
+      }}
+    >
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+        {timeStr} · <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{run.model}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '8px 10px',
+          background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 500 }}>{run.blocks_changed}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Cleaned</div>
+        </div>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '8px 10px',
+          background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 500 }}>{run.blocks_unchanged}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>Unchanged</div>
+        </div>
+      </div>
+      {run.flagged_ids.length > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          <span style={{ color: 'var(--color-tan)' }}>{run.flagged_ids.length} flagged</span>
+          {' '}
+          <button
+            type="button"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                     fontSize: 12, color: 'var(--color-text-info)', textDecoration: 'underline' }}
+            onClick={() => { onReviewFlagged(); onClose() }}
+          >
+            Review flagged
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        style={{
+          background: 'none', border: '0.5px solid var(--color-border-tertiary)',
+          borderRadius: 'var(--border-radius-md)', cursor: 'pointer',
+          fontSize: 12, padding: '4px 10px', color: 'var(--color-text-secondary)',
+        }}
+        onClick={() => { onRestore(); onClose() }}
+      >
+        Restore pre-polish snapshot
+      </button>
+    </div>
+  )
+}
 
 interface ChangeRow {
   id: number
@@ -797,6 +903,8 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
   const [unpublishing, setUnpublishing] = useState<string | null>(null)
   const [polishing, setPolishing] = useState(false)
   const [generatingCaptions, setGeneratingCaptions] = useState(false)
+  const [polishLast, setPolishLast] = useState<PolishLastRun | null | 'loading'>('loading')
+  const [polishPopoverOpen, setPolishPopoverOpen] = useState(false)
   const [polishReport, setPolishReport] = useState<PolishReport | null>(null)
   const [polishRemaining, setPolishRemaining] = useState<Set<string>>(new Set())
   const [polishReviewOpen, setPolishReviewOpen] = useState(false)
@@ -841,6 +949,12 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     if (timer.current) clearTimeout(timer.current)
     if (outlineTimer.current) clearTimeout(outlineTimer.current)
   }, [])
+
+  // Fetch polish last-run data
+  useEffect(() => {
+    if (isHomepage) { setPolishLast(null); return }
+    api.polishLast(doc.slug).then(setPolishLast, () => setPolishLast(null))
+  }, [doc.slug, isHomepage])
 
   // Homepage: re-fetch targets on window focus so group changes elsewhere
   // (Library reorder) mark the homepage dirty without a manual reload.
@@ -965,6 +1079,8 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       (report) => {
         setPolishing(false)
         setTargets(report.targets)
+        // Refresh polish last-run badge
+        api.polishLast(doc.slug).then(setPolishLast, () => {})
         if (report.flagged.length === 0) {
           window.location.reload()
         } else {
@@ -1121,13 +1237,52 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
       </header>
       <div className="editor-wrap">
         {!isHomepage && (
-          <MetaBar
-            doc={doc}
-            onSaved={setTargets}
-            editorDoc={() => editor.document}
-            onPolish={onPolish}
-            polishing={polishing}
-          />
+          <>
+            <MetaBar
+              doc={doc}
+              onSaved={setTargets}
+              editorDoc={() => editor.document}
+              onPolish={onPolish}
+              polishing={polishing}
+            />
+            {/* Polish status badge */}
+            {polishLast !== 'loading' && (
+              <div style={{ position: 'relative', display: 'inline-flex', marginBottom: 8 }}>
+                <span
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setPolishPopoverOpen((o) => !o)}
+                >
+                  <StatusBadge
+                    variant={(() => {
+                      const s = computePolishBadge(polishLast, doc.updated_at ?? null)
+                      return (s === 'loading' ? 'never-run' : s) as BadgeVariant
+                    })()}
+                  />
+                </span>
+                {polishPopoverOpen && polishLast !== null && (
+                  <PolishPopover
+                    run={polishLast}
+                    onClose={() => setPolishPopoverOpen(false)}
+                    onRestore={() => {
+                      // Find the pre-polish snapshot and restore it using the rollback API
+                      // We trigger a page reload after rollback, consistent with SnapshotsPanel
+                      const confirmed = confirm('Restore to the pre-polish snapshot? Current edits will be replaced.')
+                      if (!confirmed) return
+                      api.snapshots(doc.slug).then((snaps) => {
+                        const prePolish = snaps.find((s) => s.note === 'before polish')
+                        if (!prePolish) { alert('No pre-polish snapshot found.'); return }
+                        api.rollback(doc.slug, prePolish.id).then(
+                          () => window.location.reload(),
+                          (e) => alert(`Restore failed: ${e}`),
+                        )
+                      })
+                    }}
+                    onReviewFlagged={() => setPolishReviewOpen(true)}
+                  />
+                )}
+              </div>
+            )}
+          </>
         )}
         <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
           {!isHomepage && (outlineOpen ? (
