@@ -10,6 +10,7 @@ import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
 import { ForgeDedicationView } from './ForgeDedicationView'
 import { ForgeDocGroupView, type ForgeDocGroupProps } from './ForgeDocGroupView'
 import { ForgeNarrativeView } from './ForgeNarrativeView'
+import { addFootnoteAtCursor } from './footnotes'
 
 export const forgeImageSpec = createReactBlockSpec(
   {
@@ -180,6 +181,19 @@ export function narrativeSlashItem(editor: any) {
     subtext: "Author's reflective voice — tinted panel",
     icon: <i className="ti ti-feather" />,
     onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeNarrative' }),
+  }
+}
+
+/** Slash menu item for inserting a footnote at the cursor (document only). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function footnoteSlashItem(editor: any) {
+  return {
+    title: 'Footnote',
+    aliases: ['fn', 'footnote', 'note', 'ref'],
+    group: 'Forge',
+    subtext: 'Numbered footnote at the cursor — auto-renumbers',
+    icon: <i className="ti ti-asterisk" />,
+    onItemClick: () => addFootnoteAtCursor(editor),
   }
 }
 
