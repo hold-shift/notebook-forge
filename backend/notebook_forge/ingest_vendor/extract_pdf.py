@@ -579,30 +579,39 @@ def _split_footnote_lines(
                 cur_lines.append(text)
         _flush()
 
-        body_text = " ".join(r["text"] for r in body_recs if r.get("text")).strip()
-        if not body_text:
+        if not any(r.get("text") for r in body_recs):
             # Block was footnote-only — drop it, but the [^n] marker has
             # nowhere to attach. Leave the note as-is; the global validate/
             # renumber pass will surface it if it ends up unreferenced.
             continue
 
-        # Append the canonical marker(s) so the note co-locates here. Strip a
-        # trailing flattened superscript digit (the reference glued onto the
-        # prose) before appending the first marker.
+        # Append the canonical marker(s) to the LAST non-blank body line so the
+        # note co-locates here, stripping the flattened superscript digit the
+        # reference glued onto the prose. We KEEP the body line records (blank
+        # lines included) rather than flattening to one string: the blank lines
+        # are the paragraph breaks, and the downstream rebuild needs them to
+        # split the body into separate paragraphs. Flattening here merged every
+        # paragraph above a footnote into one (reported by Chris, 15 Jun 2026).
         if lifted_nums:
+            marker = "".join(f"[^{n}]" for n in lifted_nums)
             first_local = footnotes_all[lifted_nums[0] - 1].get("local_num")
-            if first_local is not None:
-                body_text = re.sub(
-                    rf"(?<=\D){first_local}\s*$", "", body_text
-                ).rstrip()
-            body_text = body_text + "".join(f"[^{n}]" for n in lifted_nums)
+            for r in reversed(body_recs):
+                if not r.get("text"):
+                    continue
+                if first_local is not None:
+                    pat = rf"(?<=\D){first_local}\s*$"
+                    r["text"] = re.sub(pat, "", r["text"]).rstrip()
+                    if r.get("md_text"):
+                        r["md_text"] = re.sub(pat, "", r["md_text"]).rstrip()
+                if not r.get("md_text"):
+                    r["md_text"] = r["text"]
+                r["text"] = r["text"] + marker
+                r["md_text"] = r["md_text"] + marker
+                break
 
         nb = dict(tb)
-        # Clear line_records so the downstream paragraph rebuild uses this
-        # marker-carrying text, not a re-join of the (marker-less) body
-        # lines. (Footnote lines have already been removed either way.)
-        nb["line_records"] = []
-        nb["text"] = body_text
+        nb["line_records"] = body_recs
+        nb["text"] = " ".join(r["text"] for r in body_recs if r.get("text")).strip()
         out.append(nb)
 
     return out
