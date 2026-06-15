@@ -218,3 +218,59 @@ def test_m4_ingest_response_has_narrative_fields(
     assert "narrative_flagged" in result
     assert result["narrative_conversions"] == 0
     assert result["narrative_flagged"] == []
+
+
+# ── Regression: footnote-bearing block must preserve paragraph breaks ──
+# Previously _split_footnote_lines flattened the body above a footnote into a
+# single string and cleared line_records, merging every paragraph into one
+# (reported by Chris, 15 Jun 2026 — Vietnam Part 1 PDF). The blank lines that
+# encode paragraph breaks must survive so the downstream rebuild can split.
+
+def _rec(text: str, li: int, y: float, size: float, *, md: str | None = None) -> dict:
+    return {
+        "text": text,
+        "md_text": md if md is not None else text,
+        "li": li,
+        "bbox": (50.0, y, 500.0, y + 12.0),
+        "size": size,
+        "bold": False,
+    }
+
+
+def test_footnote_split_preserves_paragraph_breaks() -> None:
+    from notebook_forge.ingest_vendor.extract_pdf import _split_footnote_lines
+
+    page_height = 800.0
+    body_size = 12.0
+    footnote_size_max = body_size * 0.92  # 11.04
+    # Two body paragraphs separated by a blank line, then a footnote in the
+    # bottom band set in a smaller font.
+    recs = [
+        _rec("First paragraph ends here.", 0, 100.0, body_size),
+        _rec("", 1, 112.0, 0.0),  # paragraph break
+        _rec("Second paragraph before the note.2", 2, 124.0, body_size),
+        _rec("2 The footnote body, long enough to keep.", 3, 760.0, 10.0),
+    ]
+    block = {
+        "bbox": (50.0, 100.0, 500.0, 772.0),
+        "text": "joined",
+        "size": body_size,
+        "block_idx": 1,
+        "line_records": recs,
+    }
+    footnotes: list[dict] = []
+    out = _split_footnote_lines([block], page_height, footnote_size_max, footnotes, 5)
+
+    assert len(out) == 1
+    kept = out[0]["line_records"]
+    # The blank-line paragraph break must still be present.
+    assert any(not r.get("text") for r in kept), "paragraph break (blank line) was lost"
+    # The footnote line itself is gone from the body.
+    assert all("The footnote body" not in (r.get("text") or "") for r in kept)
+    # The [^n] marker is appended to the last body line (digit stripped).
+    last = [r for r in kept if r.get("text")][-1]
+    assert last["text"].endswith("[^1]")
+    assert "before the note.2" not in last["text"]  # flattened superscript stripped
+    # The footnote was captured.
+    assert len(footnotes) == 1
+    assert footnotes[0]["text"].startswith("The footnote body")
