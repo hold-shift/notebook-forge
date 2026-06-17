@@ -28,3 +28,10 @@ frontend/dist/
 
 # Internal planning docs & operator notes (kept local, not published)
 docs/
+
+# Generated validation/coverage output (recreated by tests & CLI)
+reports/
+
+# Internal planning notes (kept local, not published)
+/SPRINT_REPORT.md
+/BUILD_PLAN.md
