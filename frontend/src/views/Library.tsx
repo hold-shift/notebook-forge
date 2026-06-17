@@ -309,7 +309,7 @@ export function Library({
     <div className="shell">
       <div className="topnav">
         <span className="brand">
-          <i className="ti ti-anvil" aria-hidden />
+          <img src="/icon.png" alt="" className="brand-icon" aria-hidden />
           <SerifTitle as="span" style={{ fontSize: 15 }}>Notebook Forge</SerifTitle>
         </span>
         <button type="button" className="navlink active">

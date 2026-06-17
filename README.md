@@ -1,3 +1,5 @@
+<img src="frontend/public/icon.png" alt="Notebook Forge" width="96" />
+
 # Notebook Forge
 
 **Prepare any photo‑rich document for [NotebookLM](https://notebooklm.google.com)

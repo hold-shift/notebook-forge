@@ -145,7 +145,8 @@ button:disabled { opacity: 0.55; cursor: default; }
   padding: 12px 20px;
   border-bottom: 0.5px solid var(--color-border-tertiary);
 }
-.topnav .brand { font-weight: 500; font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
+.topnav .brand { font-weight: 500; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
+.topnav .brand-icon { width: 22px; height: 22px; border-radius: 5px; display: block; }
 .topnav .navlink {
   font-size: 13px;
   color: var(--color-text-secondary);
