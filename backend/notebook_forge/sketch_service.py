@@ -33,8 +33,10 @@ CAPTION_PROMPT = (
 def eligible_figure_block_ids(blocks: list[dict]) -> list[str]:
     """Block IDs eligible for batch sketch generation.
 
-    A figure is eligible if it has an original photo AND its sketch has not
-    yet been approved. This guards against clobbering approved sketches.
+    A figure is eligible if it has an original photo, its safe-edition mode
+    still calls for a sketch, AND its sketch has not yet been approved. Figures
+    set to Safe: original / Safe: omit never embed a sketch, so they're skipped
+    (and approved sketches are skipped to avoid clobbering them).
     """
     out = []
     for b in blocks:
@@ -42,6 +44,8 @@ def eligible_figure_block_ids(blocks: list[dict]) -> list[str]:
             continue
         props = b.get("props", {})
         if not props.get("assetId"):
+            continue
+        if props.get("safeMode", "sketch") in ("original", "omit"):
             continue
         if props.get("sketchAssetId") and props.get("approval") == "approved":
             continue

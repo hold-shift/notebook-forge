@@ -260,9 +260,13 @@ function ImagesPanel({
   const sketched = figs.filter((b) => b.props.sketchAssetId).length
   const pendingCount = figs.filter((b) => b.props.approval === 'pending' && b.props.sketchAssetId).length
   const missingCaption = figs.filter((b) => !b.props.caption).length
+  // Mirrors backend eligible_figure_block_ids: needs an original photo, still
+  // wants a sketch in the safe edition (Safe: original / omit are skipped), and
+  // isn't already an approved sketch.
   const eligible = figs.filter(
     (b) =>
       b.props.assetId &&
+      (b.props.safeMode ?? 'sketch') === 'sketch' &&
       !(b.props.sketchAssetId && b.props.approval === 'approved'),
   ).length
 
@@ -987,7 +991,10 @@ function ConvertNarrativeItem({ editor }: { editor: any }) {
   // hovered block). Falls back to nothing when 0/many blocks are selected.
   const selected = useSelectedBlocks(editor)
   if (!Components) return null
-  const block = selected.length === 1 ? selected[0] : undefined
+  // Loosely typed: stripItalic/addItalic operate on the inline-content JSON,
+  // which a typed Block models as a union (incl. undefined / table content).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const block: any = selected.length === 1 ? selected[0] : undefined
   if (block?.type === 'paragraph') {
     return (
       <Components.Generic.Menu.Item
