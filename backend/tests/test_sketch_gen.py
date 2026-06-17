@@ -75,6 +75,55 @@ def test_cache_prevents_rebilling(tmp_path: Path) -> None:
     assert cache_key(original, "a", "m") != cache_key(original, "b", "m")
 
 
+def _no_image_response() -> dict:
+    """A text-only Gemini reply (no inline image) with a finishReason."""
+    return {
+        "candidates": [
+            {"finishReason": "IMAGE_SAFETY", "content": {"parts": [{"text": "I can't do that."}]}}
+        ]
+    }
+
+
+def test_no_image_is_retried_then_succeeds(tmp_path: Path) -> None:
+    """A transient text-only reply is retried; a later image part wins."""
+    sketch = png_bytes()
+    calls: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(200, json=_no_image_response())  # first: no image
+        return httpx.Response(200, json={
+            "candidates": [{"content": {"parts": [
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(sketch).decode()}}
+            ]}}]
+        })
+
+    gen = GeminiSketchGenerator(
+        "test-key", tmp_path / "cache", transport=httpx.MockTransport(handler)
+    )
+    result = gen.generate(png_bytes((9, 9, 9)), "image/png")
+    assert result.image_bytes == sketch
+    assert len(calls) == 2  # retried once after the empty first reply
+
+
+def test_no_image_after_all_retries_surfaces_reason(tmp_path: Path) -> None:
+    """Persistent refusals fail with the API's reason, not a generic message."""
+    calls: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, json=_no_image_response())
+
+    gen = GeminiSketchGenerator(
+        "test-key", tmp_path / "cache", transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(RuntimeError, match="IMAGE_SAFETY"):
+        gen.generate(png_bytes(), "image/png")
+    assert len(calls) == 3  # initial + MAX_RETRIES, all empty
+    assert not list((tmp_path / "cache").glob("*.png"))  # nothing cached
+
+
 def test_face_gate_blocks_after_retries(tmp_path: Path, monkeypatch) -> None:
     # the gate's retry/block/warn wiring is ours to test; the detector's
     # true-positive rate is OpenCV's. Patch the detector to always "see"
