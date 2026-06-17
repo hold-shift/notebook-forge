@@ -14,9 +14,16 @@ export interface ForgeFootnoteViewProps {
   props: ForgeFootnoteProps
   onTextChange?: (text: string) => void
   onMarkerChange?: (marker: string) => void
+  /** Remove this footnote (note + inline reference) and renumber the rest. */
+  onRemove?: () => void
 }
 
-export function ForgeFootnoteView({ props, onTextChange, onMarkerChange }: ForgeFootnoteViewProps) {
+export function ForgeFootnoteView({
+  props,
+  onTextChange,
+  onMarkerChange,
+  onRemove,
+}: ForgeFootnoteViewProps) {
   return (
     <aside className="forge-footnote" role="note" data-testid="forge-footnote">
       <input
@@ -34,6 +41,18 @@ export function ForgeFootnoteView({ props, onTextChange, onMarkerChange }: Forge
         onChange={(e) => onTextChange?.(e.target.value)}
         readOnly={!onTextChange}
       />
+      {onRemove && (
+        <button
+          type="button"
+          className="forge-footnote-remove"
+          aria-label="Remove footnote"
+          title="Remove footnote and its reference, then renumber"
+          contentEditable={false}
+          onClick={onRemove}
+        >
+          <i className="ti ti-trash" aria-hidden />
+        </button>
+      )}
     </aside>
   )
 }

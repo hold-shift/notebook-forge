@@ -20,7 +20,6 @@ import { api, type DocDetail, type PolishLastRun, type PolishReport, type Target
 import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
-import { removeFootnoteFromEditor } from '../forge/footnotes'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -948,20 +947,6 @@ function SnapshotsPanel({ slug }: { slug: string }) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RemoveFootnoteItem({ block, editor }: { block: any; editor: any }) {
-  const Components = useComponentsContext()
-  if (!Components) return null
-  if (block?.type !== 'forgeFootnote') return null
-  return (
-    <Components.Generic.Menu.Item
-      onClick={() => removeFootnoteFromEditor(editor, block.props?.marker ?? '')}
-    >
-      Remove footnote
-    </Components.Generic.Menu.Item>
-  )
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
   const Components = useComponentsContext()
   if (!Components) return null
@@ -1435,7 +1420,6 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                         <RemoveBlockItem>Delete</RemoveBlockItem>
                         <BlockColorsItem>Colors</BlockColorsItem>
                         <ConvertNarrativeItem block={menuProps.block} editor={editor} />
-                        <RemoveFootnoteItem block={menuProps.block} editor={editor} />
                       </DragHandleMenu>
                     )}
                   />
