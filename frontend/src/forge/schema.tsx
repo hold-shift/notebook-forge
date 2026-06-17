@@ -10,7 +10,7 @@ import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
 import { ForgeDedicationView } from './ForgeDedicationView'
 import { ForgeDocGroupView, type ForgeDocGroupProps } from './ForgeDocGroupView'
 import { ForgeNarrativeView } from './ForgeNarrativeView'
-import { addFootnoteAtCursor } from './footnotes'
+import { addFootnoteAtCursor, removeFootnoteFromEditor } from './footnotes'
 
 export const forgeImageSpec = createReactBlockSpec(
   {
@@ -103,6 +103,7 @@ export const forgeFootnoteSpec = createReactBlockSpec(
         onMarkerChange={(marker) =>
           editor.updateBlock(block, { props: { ...block.props, marker } })
         }
+        onRemove={() => removeFootnoteFromEditor(editor, block.props.marker)}
       />
     ),
   },
