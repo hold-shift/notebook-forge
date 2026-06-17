@@ -311,6 +311,15 @@ export function Library({
         <span className="brand">
           <img src="/icon.png" alt="" className="brand-icon" aria-hidden />
           <SerifTitle as="span" style={{ fontSize: 15 }}>Notebook Forge</SerifTitle>
+          <a
+            className="brand-version"
+            href="https://github.com/hold-shift/notebook-forge"
+            target="_blank"
+            rel="noreferrer"
+            title="View Notebook Forge on GitHub"
+          >
+            <i className="ti ti-brand-github" aria-hidden /> v{__APP_VERSION__}
+          </a>
         </span>
         <button type="button" className="navlink active">
           Library

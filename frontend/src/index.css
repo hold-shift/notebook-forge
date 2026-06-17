@@ -147,6 +147,22 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .topnav .brand { font-weight: 500; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
 .topnav .brand-icon { width: 22px; height: 22px; border-radius: 5px; display: block; }
+.topnav .brand-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 999px;
+  transition: color 0.12s, background 0.12s;
+}
+.topnav .brand-version:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+}
 .topnav .navlink {
   font-size: 13px;
   color: var(--color-text-secondary);
