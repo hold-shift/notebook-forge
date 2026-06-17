@@ -678,17 +678,22 @@ class TestPolishLastEndpoint:
         session.flush()
 
         client = self._client(session, workspace)
-        # Sanity: the run flagged this block.
+        # Sanity: the run flagged this block, anchored at the run time.
         last = client.get(f"/api/documents/{doc.slug}/polish/last").json()
         assert block_id in last["flagged_ids"]
+        run_at = last["at"]
 
         # Resolving the review clears the flagged list...
-        resolved = client.post(f"/api/documents/{doc.slug}/polish/resolve-flags")
-        assert resolved.status_code == 200
-        assert resolved.json()["flagged_ids"] == []
+        resolved = client.post(f"/api/documents/{doc.slug}/polish/resolve-flags").json()
+        assert resolved["flagged_ids"] == []
+        # ...and re-anchors freshness to the review-completion time, so applying
+        # the flagged changes doesn't read back as "stale" (resolved_at > run).
+        assert resolved["at"] >= run_at
 
-        # ...and it stays cleared on the next read (badge no longer "flagged").
-        assert client.get(f"/api/documents/{doc.slug}/polish/last").json()["flagged_ids"] == []
+        # It stays cleared and re-anchored on the next read.
+        again = client.get(f"/api/documents/{doc.slug}/polish/last").json()
+        assert again["flagged_ids"] == []
+        assert again["at"] == resolved["at"]
 
     def test_resolve_flags_null_when_no_run(self, session: Session, workspace: Path) -> None:
         doc = services.create_document(
