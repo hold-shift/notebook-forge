@@ -139,7 +139,7 @@ and connection status for each secret.
 - **macOS** (secrets are stored in the macOS Keychain).
 - **Python 3.12** and [**uv**](https://docs.astral.sh/uv/) (Python package
   manager).
-- **Node.js 18+** and **npm**.
+- **Node.js 20.19+** (or 22.12+) and **npm**.
 - A **Google Gemini API key** for sketch generation (optional — you can also
   upload your own sketches). For publishing: a GitHub fine‑grained token
   (Pages) and Google Drive OAuth (NotebookLM edition).
