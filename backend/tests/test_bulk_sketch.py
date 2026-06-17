@@ -19,6 +19,7 @@ def _img(  # noqa: PLR0913
     asset_id: str = "sha1",
     sketch_id: str = "",
     approval: str = "pending",
+    safe_mode: str = "sketch",
 ) -> dict:
     return {
         "id": block_id,
@@ -27,6 +28,7 @@ def _img(  # noqa: PLR0913
             "assetId": asset_id,
             "sketchAssetId": sketch_id,
             "approval": approval,
+            "safeMode": safe_mode,
         },
     }
 
@@ -52,6 +54,22 @@ def test_eligible_excludes_no_asset() -> None:
     """Block without an original photo is not eligible."""
     blocks = [_img("b1", asset_id="", sketch_id="", approval="pending")]
     assert eligible_figure_block_ids(blocks) == []
+
+
+def test_eligible_excludes_safe_original_and_omit() -> None:
+    """Safe: original / omit never embed a sketch, so they're not eligible."""
+    blocks = [
+        _img("orig", asset_id="sha1", safe_mode="original"),
+        _img("omit", asset_id="sha2", safe_mode="omit"),
+        _img("sketch", asset_id="sha3", safe_mode="sketch"),
+    ]
+    assert eligible_figure_block_ids(blocks) == ["sketch"]
+
+
+def test_eligible_defaults_to_sketch_when_safemode_absent() -> None:
+    """A figure with no safeMode prop defaults to sketch → eligible."""
+    blocks = [{"id": "b1", "type": "forgeImage", "props": {"assetId": "sha1"}}]
+    assert eligible_figure_block_ids(blocks) == ["b1"]
 
 
 def test_eligible_mixed_set() -> None:
