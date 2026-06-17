@@ -30,7 +30,7 @@ from .groups import (
     set_positions,
     update_group,
 )
-from .models import Asset, Change, Group, Snapshot, SyncState, Target
+from .models import Asset, Change, Group, Snapshot, SyncState, Target, utcnow
 
 
 @lru_cache(maxsize=1)
@@ -685,8 +685,11 @@ def polish_last(slug: str, session: Session = Depends(get_session)) -> dict[str,
     blocks_changed = d.get("blocks_changed", 0)
     flagged_count = d.get("flagged", 0)
     blocks_unchanged = max(0, polishable - blocks_changed - flagged_count)
+    # Freshness anchor: when the review was resolved (applying the flagged
+    # changes is part of polishing, not a later edit), else the run time.
+    at = d.get("resolved_at") or (row.created_at.isoformat() if row.created_at else None)
     return {
-        "at": row.created_at.isoformat() if row.created_at else None,
+        "at": at,
         "model": d.get("model", ""),
         "blocks_changed": blocks_changed,
         "blocks_unchanged": blocks_unchanged,
@@ -723,6 +726,9 @@ def polish_resolve_flags(
     detail = dict(row.detail or {})
     detail["flagged_ids"] = []
     detail["flags_resolved"] = True
+    # Re-anchor polish freshness to the review-completion time so applying the
+    # flagged changes doesn't immediately read back as "stale".
+    detail["resolved_at"] = utcnow().isoformat()
     row.detail = detail
     return polish_last(slug, session)
 
