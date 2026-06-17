@@ -696,6 +696,37 @@ def polish_last(slug: str, session: Session = Depends(get_session)) -> dict[str,
     }
 
 
+@app.post("/api/documents/{slug}/polish/resolve-flags")
+def polish_resolve_flags(
+    slug: str, session: Session = Depends(get_session)
+) -> dict[str, Any] | None:
+    """Mark the most recent polish run's flagged changes as reviewed.
+
+    The flagged list is a record of what a run held back for review; once the
+    operator finishes the review (applies and/or skips), those flags are no
+    longer pending. Clearing the run's `flagged_ids` keeps the polish badge
+    from staying stuck on "flagged" forever. Document content is untouched —
+    this only updates the change-log metadata."""
+    doc = _get_doc(session, slug)
+    row = session.scalar(
+        select(Change)
+        .where(
+            Change.document_id == doc.id,
+            Change.kind == "edit",
+            Change.summary.startswith("polish"),
+        )
+        .order_by(Change.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    detail = dict(row.detail or {})
+    detail["flagged_ids"] = []
+    detail["flags_resolved"] = True
+    row.detail = detail
+    return polish_last(slug, session)
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)

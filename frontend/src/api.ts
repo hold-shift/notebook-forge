@@ -187,6 +187,10 @@ export const api = {
     fetch(`/api/documents/${slug}/polish/last`).then((r) =>
       json<PolishLastRun | null>(r),
     ),
+  polishResolveFlags: (slug: string) =>
+    fetch(`/api/documents/${slug}/polish/resolve-flags`, { method: 'POST' }).then((r) =>
+      json<PolishLastRun | null>(r),
+    ),
   polishProgress: (slug: string) =>
     fetch(`/api/documents/${slug}/polish/progress`, { cache: 'no-store' }).then((r) =>
       json<{ running: boolean; done: number; total: number; failed: number }>(r),
