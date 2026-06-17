@@ -20,6 +20,7 @@ import { api, type DocDetail, type PolishLastRun, type PolishReport, type Target
 import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
+import { imageSketchUpdates } from '../forge/sketchSync'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
 import { OutlineNavigator } from '../forge/OutlineNavigator'
 import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
@@ -234,12 +235,17 @@ function ImagesPanel({
   editorDoc,
   onApproveAll,
   onGenerateCaptions,
+  onSketchesGenerated,
   generatingCaptions,
 }: {
   slug: string
   editorDoc: () => unknown[]
   onApproveAll: () => void
   onGenerateCaptions: () => Promise<void>
+  /** Called when a batch sketch job finishes, so the editor can pull the
+   * newly-generated sketches into its in-memory blocks (otherwise they only
+   * appear after a manual reload). */
+  onSketchesGenerated: () => void
   generatingCaptions: boolean
 }) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -290,6 +296,9 @@ function ImagesPanel({
         if (s.status !== 'running') {
           clearInterval(pollTimer.current!)
           pollTimer.current = null
+          // The job persisted sketches server-side; pull them into the editor
+          // so they show without a manual reload.
+          onSketchesGenerated()
         }
       } catch {
         // ignore transient poll errors
@@ -1290,6 +1299,23 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     }
   }, [editor, doc.slug, save])
 
+  const refreshImageBlocks = useCallback(() => {
+    // Pull the sketch-related props the batch job persisted server-side into
+    // the editor's in-memory blocks. Surgical (only forgeImage sketch props) so
+    // any unsaved prose edits survive; a follow-up save reconciles the rest.
+    api.getDocument(doc.slug).then((fresh) => {
+      const updates = imageSketchUpdates(
+        editor.document as unknown[],
+        fresh.blocks as unknown[],
+      )
+      for (const u of updates) {
+        editor.updateBlock(u.id, {
+          props: u.props,
+        } as PartialBlock<typeof forgeSchema.blockSchema>)
+      }
+    }, () => {})
+  }, [editor, doc.slug])
+
   const jumpToBlock = useCallback((blockId: string) => {
     const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${blockId}"]`)
     if (!el) return
@@ -1513,6 +1539,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 editorDoc={() => editor.document}
                 onApproveAll={onApproveAll}
                 onGenerateCaptions={onGenerateMissingCaptions}
+                onSketchesGenerated={refreshImageBlocks}
                 generatingCaptions={generatingCaptions}
               />
             )}
