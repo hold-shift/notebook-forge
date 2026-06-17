@@ -137,6 +137,48 @@ def generate_sketch_for_block(
     }
 
 
+def upload_sketch_for_block(
+    session: Session,
+    workspace: Path,
+    doc: Document,
+    block_id: str,
+    src_path: Path,
+) -> dict[str, Any]:
+    """Attach an operator-supplied sketch to a figure — the escape hatch when
+    the image model refuses (e.g. blockReason=OTHER). Stores the file in the
+    sketches bucket, points the block at it, resets approval to pending, and
+    clears any stale face-gate flag (a hand-supplied sketch isn't gated)."""
+    blocks = list(doc.blocks)
+    idx = next(
+        (i for i, b in enumerate(blocks)
+         if b.get("id") == block_id and b.get("type") == FORGE_IMAGE),
+        None,
+    )
+    if idx is None:
+        raise LookupError(f"no forgeImage block '{block_id}' in {doc.slug}")
+
+    sketch_asset = ingest_file(session, workspace, src_path, "sketches")
+    sketch_asset.filename = f"{doc.slug}-{block_id[:8]}-sketch-upload{src_path.suffix}"
+
+    block = dict(blocks[idx])
+    props = dict(block.get("props", {}))
+    props["sketchAssetId"] = sketch_asset.sha256
+    props["approval"] = "pending"
+    props["faceGate"] = "n/a"
+    block["props"] = props
+    blocks[idx] = block
+
+    services.save_blocks(
+        session, doc, blocks,
+        summary=f"uploaded sketch for figure block {block_id[:8]}",
+    )
+    services.record_change(
+        session, doc, "edit", "sketch uploaded",
+        detail={"block_id": block_id, "sketch_asset": sketch_asset.sha256},
+    )
+    return {"sketchAssetId": sketch_asset.sha256, "face_gate": "n/a"}
+
+
 def generate_caption_for_block(
     session: Session,
     workspace: Path,

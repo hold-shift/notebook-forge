@@ -133,6 +133,14 @@ export const api = {
       body: form,
     }).then((r) => json<{ assetId: string }>(r))
   },
+  uploadFigureSketch: (slug: string, blockId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`/api/documents/${slug}/figures/${blockId}/upload-sketch`, {
+      method: 'POST',
+      body: form,
+    }).then((r) => json<{ ok: boolean; detail: { sketchAssetId: string } }>(r))
+  },
   generateCaption: (slug: string, blockId: string) =>
     fetch(`/api/documents/${slug}/figures/${blockId}/generate-caption`, { method: 'POST' }).then(
       (r) => json<{ caption: string }>(r),

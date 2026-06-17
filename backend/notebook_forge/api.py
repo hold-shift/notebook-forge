@@ -510,6 +510,36 @@ def upload_figure_image(
     return {"assetId": asset.sha256}
 
 
+@app.post("/api/documents/{slug}/figures/{block_id}/upload-sketch")
+def upload_sketch(
+    slug: str,
+    block_id: str,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Attach an operator-supplied sketch to a figure (escape hatch when the
+    image model refuses). Persists the block and returns the new sketchAssetId."""
+    import shutil
+    import tempfile
+
+    from .sketch_service import upload_sketch_for_block
+
+    doc = _get_doc(session, slug)
+    suffix = Path(file.filename or "sketch").suffix or ".png"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        detail = upload_sketch_for_block(
+            session, _state()["workspace"], doc, block_id, tmp_path
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
+
+
 @app.post("/api/documents/{slug}/figures/{block_id}/generate-caption")
 def generate_caption(
     slug: str,
