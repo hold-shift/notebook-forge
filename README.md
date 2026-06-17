@@ -1,29 +1,61 @@
 # Notebook Forge
 
-**Turn a scanned family memoir into a polished website *and* a NotebookLM‑safe
-edition — without ever publishing a recognisable face.**
+**Prepare any photo‑rich document for [NotebookLM](https://notebooklm.google.com)
+— so photographs of people actually survive ingestion and appear in the
+generated slideshows, guides and answers, without publishing a single
+recognisable face.**
 
-Notebook Forge is a local‑first content tool for family historians. You feed
-it the PDFs and Word documents your memoir already lives in; it extracts the
-prose, photos, captions and footnotes into an editable document, lets you
-clean it up in a Notion‑style editor, and publishes to three synchronised
-targets at once:
+![How it works: NotebookLM shows a faceless sketch whose caption links back to the original photo](screenshots/notebook-lm.jpg)
 
-- **A public website** (GitHub Pages) — the canonical, nicely typeset edition.
+> ### ℹ️ Why this tool is needed
+>
+> NotebookLM **silently strips images that contain identifiable people** during
+> source ingestion — while images of objects and landscapes in the *same*
+> document are ingested fine. Because those photos are removed before
+> processing, they can never appear in NotebookLM's slideshows, guides or
+> multimodal answers, which makes those features unusable for memoirs,
+> biographies and historical documents about people.
+>
+> Notebook Forge's fix: it replaces each photo of a person with a **faceless
+> sketch** that passes ingestion, and links that sketch back to the original
+> photo hosted on your own site — so the people survive into the generated
+> output while their faces are never published.
+>
+> See [**NOTEBOOKLM_IMAGE_ISSUE.md**](NOTEBOOKLM_IMAGE_ISSUE.md) for the full
+> reproduction and a community bug report.
+
+Notebook Forge is a local‑first content tool. You feed it the PDFs and Word
+documents your content already lives in; it extracts the prose, photos, captions
+and footnotes into an editable document, lets you clean it up in a Notion‑style
+editor, and publishes to three synchronised targets at once:
+
+- **A public website** (GitHub Pages) — the canonical, nicely typeset edition,
+  which also **hosts the original photos** that the safe edition links back to.
 - **A NotebookLM‑safe edition** (Google Drive) — every photograph is replaced
-  by a faceless **sketch silhouette**, so you can load the whole memoir into
-  [NotebookLM](https://notebooklm.google.com) (or share it) without exposing
-  identifiable people. Captions link back to the originals on the live site.
+  by a faceless **sketch silhouette** and inlined into a Google Doc you can load
+  straight into NotebookLM. Each caption keeps a "View original photo" link back
+  to the live site.
 - **A local folder** — a portable static mirror for rehearsal or offline use.
 
 Everything is stored locally in SQLite. Nothing is sent anywhere except the
 image model you choose to call and the targets you explicitly publish to.
 
+### Example uses
+
+- **Family memoirs and personal histories** — share Grandad's war memoir in
+  NotebookLM with the photos intact, but faceless.
+- **Genealogy and archival projects** — make a photo‑heavy family archive
+  explorable without publishing relatives' faces.
+- **Oral‑history and community‑history collections** — club, regiment, school or
+  town histories full of named people.
+- **Biographies and journalism** — long‑form documents whose subjects appear in
+  photographs you don't want surfaced by a third‑party model.
+
 ## How it works
 
 ```
         ┌───────────────┐
-        │  PDF / DOCX    │   your source memoir
+        │  PDF / DOCX    │   your source document
         └───────┬────────┘
                 │  INGEST  — headings · paragraphs · footnotes
                 │            images (captions paired by page geometry)
@@ -79,7 +111,8 @@ targets and snapshot history; the left rail is a live document outline:
 
 ### The editor
 
-A BlockNote (Notion‑style) editor with custom blocks built for memoirs.
+A BlockNote (Notion‑style) editor with custom blocks built for long,
+photo‑rich documents.
 
 - **Figures (`forgeImage`)** — the original photo and its NotebookLM‑safe
   sketch side by side. Per figure you can:
