@@ -666,3 +666,36 @@ class TestPolishLastEndpoint:
         client = self._client(session, workspace)
         resp = client.get("/api/documents/nonexistent-slug/polish/last")
         assert resp.status_code == 404
+
+    def test_resolve_flags_clears_flagged_ids(
+        self, session: Session, workspace: Path
+    ) -> None:
+        blocks = [make_block("paragraph", content=[text_run("sailers went home.")])]
+        doc = services.create_document(session, "polish-resolve-doc", "Pol", blocks)
+        block_id = doc.blocks[0]["id"]
+        runner = MockRunner([{block_id: "sailors went home."}])
+        polish_document(session, workspace, doc, runner=runner)
+        session.flush()
+
+        client = self._client(session, workspace)
+        # Sanity: the run flagged this block.
+        last = client.get(f"/api/documents/{doc.slug}/polish/last").json()
+        assert block_id in last["flagged_ids"]
+
+        # Resolving the review clears the flagged list...
+        resolved = client.post(f"/api/documents/{doc.slug}/polish/resolve-flags")
+        assert resolved.status_code == 200
+        assert resolved.json()["flagged_ids"] == []
+
+        # ...and it stays cleared on the next read (badge no longer "flagged").
+        assert client.get(f"/api/documents/{doc.slug}/polish/last").json()["flagged_ids"] == []
+
+    def test_resolve_flags_null_when_no_run(self, session: Session, workspace: Path) -> None:
+        doc = services.create_document(
+            session, "no-run-doc", "NR",
+            [make_block("paragraph", content=[text_run("Hi.")])],
+        )
+        client = self._client(session, workspace)
+        resp = client.post(f"/api/documents/{doc.slug}/polish/resolve-flags")
+        assert resp.status_code == 200
+        assert resp.json() is None

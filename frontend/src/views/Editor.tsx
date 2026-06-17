@@ -1225,8 +1225,11 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     setPolishReport(null)
     setPolishRemaining(new Set())
     setPolishReviewOpen(false)
-    window.location.reload()
-  }, [])
+    // The flags have now been reviewed (applied and/or skipped), so clear the
+    // run's flagged record before reloading — otherwise the badge stays stuck
+    // on "flagged". Reload regardless of whether the call succeeds.
+    api.polishResolveFlags(doc.slug).finally(() => window.location.reload())
+  }, [doc.slug])
 
   const onApplyAll = useCallback(() => {
     if (!polishReport) return
@@ -1395,7 +1398,13 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                           )
                         })
                       }}
-                      onReviewFlagged={() => setPolishReviewOpen(true)}
+                      onReviewFlagged={() => {
+                        // The flagged review lives in the in-memory report; if
+                        // it's gone (e.g. after a reload), re-run polish to
+                        // regenerate it rather than opening an empty panel.
+                        if (polishReport) setPolishReviewOpen(true)
+                        else onPolish()
+                      }}
                     />
                   )}
                 </span>
