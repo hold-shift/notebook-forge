@@ -7,7 +7,6 @@ import {
   SideMenu,
   DragHandleMenu,
   RemoveBlockItem,
-  BlockColorsItem,
   useComponentsContext,
   useCreateBlockNote,
 } from '@blocknote/react'
@@ -1432,7 +1431,8 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                       title: 'Photo / Figure',
                       subtext: 'Insert a photo or illustration',
                       aliases: ['im', 'image', 'photo', 'figure', 'fig'],
-                      group: 'Media',
+                      group: 'Forge',
+                      icon: <i className="ti ti-photo" />,
                       onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeImage' }),
                     }
                     const all = [...defaults, photoItem, narrativeSlashItem(editor), footnoteSlashItem(editor)]
@@ -1454,7 +1454,6 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                     dragHandleMenu={(menuProps: any) => (
                       <DragHandleMenu>
                         <RemoveBlockItem>Delete</RemoveBlockItem>
-                        <BlockColorsItem>Colors</BlockColorsItem>
                         <ConvertNarrativeItem block={menuProps.block} editor={editor} />
                       </DragHandleMenu>
                     )}
