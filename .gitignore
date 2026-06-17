@@ -25,3 +25,6 @@ frontend/dist/
 
 # OS
 .DS_Store
+
+# Internal planning docs & operator notes (kept local, not published)
+docs/
