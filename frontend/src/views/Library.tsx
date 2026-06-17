@@ -202,6 +202,7 @@ export function Library({
   const [groups, setGroups] = useState<GroupInfo[]>([])
   const [error, setError] = useState('')
   const [ingesting, setIngesting] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [hits, setHits] = useState<{ slug: string; title: string; snip: string }[] | null>(null)
@@ -245,6 +246,14 @@ export function Library({
     api.ingest(file).then(
       (resp) => { setIngesting(false); onOpen(resp.slug) },
       (e) => { setIngesting(false); alert(`Ingest failed: ${e}`) },
+    )
+  }
+
+  const onNew = () => {
+    setCreating(true)
+    api.createDocument().then(
+      (resp) => { setCreating(false); onOpen(resp.slug) },
+      (e) => { setCreating(false); alert(`Could not create document: ${e}`) },
     )
   }
 
@@ -339,11 +348,19 @@ export function Library({
         />
         <Button
           variant="primary"
-          disabled={ingesting}
-          onClick={() => fileInput.current?.click()}
+          disabled={creating}
+          onClick={onNew}
           style={{ marginLeft: 'auto' }}
         >
-          <i className="ti ti-plus" aria-hidden /> {ingesting ? 'Ingesting…' : 'Add document'}
+          <i className="ti ti-plus" aria-hidden /> {creating ? 'Creating…' : 'New'}
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={ingesting}
+          onClick={() => fileInput.current?.click()}
+          title="Create a document by importing a PDF or Word file"
+        >
+          <i className="ti ti-upload" aria-hidden /> {ingesting ? 'Importing…' : 'Import PDF/DOCX'}
         </Button>
       </div>
       <div className="toolbar">

@@ -263,6 +263,12 @@ export const api = {
       json<{ ok: boolean; slug: string; title: string; detected_date: string; figures: number }>(r),
     )
   },
+  createDocument: (title = 'Untitled') =>
+    fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<{ ok: boolean; slug: string; title: string }>(r)),
   groups: () => fetch('/api/groups').then((r) => json<GroupInfo[]>(r)),
   createGroup: (name: string, color: string) =>
     fetch('/api/groups', {

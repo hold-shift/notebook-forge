@@ -236,3 +236,35 @@ def ingest_document(
         "narrative_conversions": len(conversions),
         "narrative_flagged": [c["preview"] for c in conversions if c["flagged"]],
     }
+
+
+def create_blank_document(session: Session, title: str = "Untitled") -> dict[str, Any]:
+    """Create an empty document from scratch (no source file). Seeds the house
+    defaults and a single empty paragraph so the editor opens ready to type.
+    The title/date are confirmed-by-default since there's nothing to detect."""
+    title = (title or "").strip() or "Untitled"
+    slug_base = slugify(title) or "untitled"
+    slug = slug_base
+    i = 2
+    while services.get_document(session, slug) is not None:
+        slug = f"{slug_base}-{i}"
+        i += 1
+
+    meta = {
+        "slug": slug,
+        "title": title,
+        "author": DEFAULT_AUTHOR,
+        "overline": DEFAULT_OVERLINE,
+        "standfirst": "",
+        "place": "",
+        "year_display": "",
+        "date_confirmed": True,  # nothing to detect; no confirmation gate
+        "canonical_url": f"{PAGES_BASE}/rfs/{slug}.html",
+        "homepage_url": f"{PAGES_BASE}/index.html",
+        "meta_description": "",
+    }
+    blocks = [make_block("paragraph", content=[])]
+    doc = services.create_document(
+        session, slug=slug, title=title, blocks=blocks, meta=meta, log="created blank",
+    )
+    return {"slug": slug, "title": title, "blocks": len(doc.blocks)}

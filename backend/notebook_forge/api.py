@@ -415,6 +415,21 @@ def delete_document(slug: str, session: Session = Depends(get_session)) -> dict[
     return {"ok": True, "deleted": slug}
 
 
+class CreateDocumentBody(BaseModel):
+    title: str = "Untitled"
+
+
+@app.post("/api/documents")
+def create_document_route(
+    body: CreateDocumentBody | None = None, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Create a new empty document from scratch (no source file)."""
+    from .ingestion import create_blank_document
+
+    detail = create_blank_document(session, body.title if body else "Untitled")
+    return {"ok": True, **detail}
+
+
 @app.post("/api/ingest")
 def ingest(
     file: UploadFile, session: Session = Depends(get_session)

@@ -85,6 +85,35 @@ def test_ingest_slug_collision_appends_suffix(workspace: Path, session: Session)
     assert d2["slug"] == f"{d1['slug']}-2"
 
 
+def test_create_blank_document(session: Session) -> None:
+    from notebook_forge.ingestion import create_blank_document
+
+    detail = create_blank_document(session)
+    session.commit()
+    doc = services.get_document(session, detail["slug"])
+    assert doc is not None
+    assert detail["slug"] == "untitled"
+    assert doc.title == "Untitled"
+    # one empty paragraph so the editor opens ready to type
+    assert len(doc.blocks) == 1
+    assert doc.blocks[0]["type"] == "paragraph"
+    assert doc.blocks[0]["content"] == []
+    # no source file, and no date-confirmation gate
+    assert "source_file" not in doc.meta
+    assert doc.meta["date_confirmed"] is True
+
+
+def test_create_blank_document_custom_title_and_collision(session: Session) -> None:
+    from notebook_forge.ingestion import create_blank_document
+
+    a = create_blank_document(session, "My New Story")
+    session.commit()
+    b = create_blank_document(session, "My New Story")
+    session.commit()
+    assert a["slug"] == "my-new-story"
+    assert b["slug"] == "my-new-story-2"
+
+
 def test_unsupported_type_refuses(workspace: Path, session: Session, tmp_path: Path) -> None:
     bad = tmp_path / "notes.txt"
     bad.write_text("hello")
