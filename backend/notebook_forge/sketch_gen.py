@@ -24,6 +24,12 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{mode
 MAX_RETRIES = 2
 
 
+class NoImageReturned(RuntimeError):
+    """Gemini replied without an image part. Often transient (the image model
+    sporadically returns text only), so it's retried; a persistent safety
+    refusal carries its reason in the message for the operator."""
+
+
 def cache_key(image_bytes: bytes, prompt: str, model: str) -> str:
     h = hashlib.sha256()
     h.update(image_bytes)
@@ -102,12 +108,29 @@ class GeminiSketchGenerator(SketchGenerator):
             )
         resp.raise_for_status()
         data = resp.json()
+        reasons: list[str] = []
+        texts: list[str] = []
         for candidate in data.get("candidates", []):
+            fr = candidate.get("finishReason")
+            if fr and fr != "STOP":
+                reasons.append(str(fr))
             for part in candidate.get("content", {}).get("parts", []):
                 inline = part.get("inlineData") or part.get("inline_data")
                 if inline and inline.get("data"):
                     return base64.b64decode(inline["data"])
-        raise RuntimeError("Gemini response contained no image part")
+                if part.get("text"):
+                    texts.append(part["text"].strip())
+        # No image part. Pull whatever the API told us about why, so a real
+        # refusal is distinguishable from a transient empty response.
+        block_reason = (data.get("promptFeedback") or {}).get("blockReason")
+        bits: list[str] = []
+        if block_reason:
+            bits.append(f"blockReason={block_reason}")
+        if reasons:
+            bits.append(f"finishReason={','.join(reasons)}")
+        if texts:
+            bits.append(f'model said: "{" ".join(texts)[:200]}"')
+        raise NoImageReturned("; ".join(bits) or "empty response")
 
     def generate(
         self,
@@ -129,12 +152,24 @@ class GeminiSketchGenerator(SketchGenerator):
         attempts = 0
         sketch = b""
         faces = 0
+        last_no_image: NoImageReturned | None = None
         while attempts <= MAX_RETRIES:
             attempts += 1
-            sketch = self._call_gemini(original_bytes, mime, prompt)
+            try:
+                sketch = self._call_gemini(original_bytes, mime, prompt)
+            except NoImageReturned as exc:
+                # Image models sporadically return text-only; retry within the
+                # same budget before giving up.
+                last_no_image = exc
+                sketch = b""
+                continue
             faces = detect_faces(sketch)
             if faces == 0:
                 break
+        if not sketch:
+            raise RuntimeError(
+                f"Gemini returned no image after {attempts} attempts ({last_no_image})"
+            )
         if faces > 0:
             self.last_gate = GateReport(status="flagged", faces=faces, attempts=attempts)
             if self.face_gate == "block":
