@@ -2,6 +2,13 @@
 
 # Notebook Forge
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Version](https://img.shields.io/badge/version-0.3.0-success)
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Built for NotebookLM](https://img.shields.io/badge/built%20for-NotebookLM-4285F4?logo=googlebard&logoColor=white)
+
 **Prepare any photo‑rich document for [NotebookLM](https://notebooklm.google.com)
 — so photographs of people actually survive ingestion and appear in the
 generated slideshows, guides and answers, without publishing a single
@@ -26,10 +33,11 @@ recognisable face.**
 > See [**NOTEBOOKLM_IMAGE_ISSUE.md**](NOTEBOOKLM_IMAGE_ISSUE.md) for the full
 > reproduction and a community bug report.
 
-Notebook Forge is a local‑first content tool. You feed it the PDFs and Word
-documents your content already lives in; it extracts the prose, photos, captions
-and footnotes into an editable document, lets you clean it up in a Notion‑style
-editor, and publishes to three synchronised targets at once:
+Notebook Forge is a local‑first content tool. **Import** a PDF or Word document
+your content already lives in — it extracts the prose, photos, captions and
+footnotes into an editable document — or start a **New**, blank document from
+scratch. Either way you clean it up in a Notion‑style editor and publish to
+three synchronised targets at once:
 
 - **A public website** (GitHub Pages) — the canonical, nicely typeset edition,
   which also **hosts the original photos** that the safe edition links back to.
@@ -56,31 +64,33 @@ image model you choose to call and the targets you explicitly publish to.
 ## How it works
 
 ```
-        ┌───────────────┐
-        │  PDF / DOCX    │   your source document
-        └───────┬────────┘
-                │  INGEST  — headings · paragraphs · footnotes
-                │            images (captions paired by page geometry)
-                │            date-range detection · italic → narrative
-                ▼
-        ┌────────────────────────────┐
-        │  BlockNote document tree    │   canonical copy in SQLite
-        │  + content-addressed images │   (WAL · JSON blocks · FTS5 search)
-        └───────────────┬────────────┘
-                        │  EDIT  — prose polish · figure sketches · captions
-                        │          narrative panels · footnotes · structure
-                        ▼
-        ┌────────────────────────────┐
-        │   Notion-style editor       │
-        └───────────────┬────────────┘
-                        │  PUBLISH  — one click, three synchronised targets
-        ┌───────────────┼───────────────────────────┐
-        ▼               ▼                            ▼
-┌───────────────┐ ┌────────────────────┐ ┌────────────────────┐
-│ GitHub Pages  │ │ Google Drive       │ │ Local folder       │
-│ public website│ │ NotebookLM-safe    │ │ static mirror /    │
-│               │ │ (faceless sketches)│ │ rehearsal copy     │
-└───────────────┘ └────────────────────┘ └────────────────────┘
+        ┌──────────────────────┐        ┌──────────────────────┐
+        │ Import a file        │        │ New document         │
+        │ (PDF / DOCX)         │        │ (start blank)        │
+        └───────────┬──────────┘        └───────────┬──────────┘
+                    │                               │
+                    │                               │
+                    └───────────────┬───────────────┘
+                                    ▼
+              ┌──────────────────────────────────────────┐
+              │ BlockNote document tree                  │
+              │ stored locally in SQLite (FTS5 search)   │
+              └─────────────────────┬────────────────────┘
+                                    │
+                                    │  edit:  polish · sketches · captions ·
+                                    │         narrative · footnotes
+                                    ▼
+              ┌──────────────────────────────────────────┐
+              │ Notion-style editor                      │
+              └─────────────────────┬────────────────────┘
+                                    │
+                                    │  publish  (one click → three targets)
+               ┌────────────────────┴────────┬─────────────────────────────┐
+               ▼                             ▼                             ▼
+  ┌────────────────────────┐    ┌────────────────────────┐    ┌────────────────────────┐
+  │ GitHub Pages           │    │ Google Drive           │    │ Local folder           │
+  │ public website         │    │ NotebookLM-safe        │    │ static mirror          │
+  └────────────────────────┘    └────────────────────────┘    └────────────────────────┘
 ```
 
 ## Screenshots
@@ -100,7 +110,9 @@ targets and snapshot history; the left rail is a live document outline:
 
 ### Library & ingestion
 
-- **Add a document** — drop in a **PDF or DOCX**. Ingestion extracts headings,
+- **New** — create an empty document from scratch and start writing
+  immediately in the editor.
+- **Import PDF/DOCX** — drop in a **PDF or DOCX**. Ingestion extracts headings,
   paragraphs and footnotes, pairs each photo with its caption by page
   geometry, detects the date range, and converts fully‑italic passages into
   narrative panels.
@@ -208,8 +220,8 @@ environment variable.
 ## First steps
 
 1. Start the app (`make dev`) and open the Library.
-2. Click **+ Add document** and choose a PDF or DOCX. Confirm the detected
-   title and date range in the editor's meta bar.
+2. Click **+ New** to start a blank document, or **Import PDF/DOCX** to bring
+   one in (confirm the detected title and date range in the meta bar).
 3. Add a **Gemini API key** (see *Configuration*) and click
    **Generate all sketches**, or upload your own sketches per figure.
 4. Optionally run **Polish text** and review the flagged changes.
@@ -244,7 +256,7 @@ repository.
 
 ## Licence
 
-Code: **MIT** (see [LICENSE](LICENSE)).
+Code: **MIT** (see [LICENSE](LICENSE)) — free to use, modify and distribute.
 
-Memoir content and photographs are **not** part of this repository — they
-belong to their authors. The example site publishes under CC BY‑NC‑ND.
+Your documents, photographs and any generated sketches are **not** part of
+this repository and remain entirely yours.
