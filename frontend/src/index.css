@@ -1305,3 +1305,15 @@ mark.diff-ins {
 /* ---- BlockNote chrome agreement ---- */
 .bn-editor { background: var(--color-background-primary) !important; color: var(--color-text-primary) !important; }
 .bn-block-content { font-size: 14px; }
+
+.editor-error {
+  margin: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-sm, 6px);
+  background: var(--color-background-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}

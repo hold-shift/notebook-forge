@@ -29,6 +29,39 @@ import { PolishReview } from './PolishReview'
 
 const AUTOSAVE_MS = 1200
 
+/** Contains a render crash inside the editor canvas (e.g. a misbehaving
+ * BlockNote menu) so it shows a recoverable message instead of blanking the
+ * whole app. The surrounding page — outline, panels, save — keeps working. */
+export class EditorErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Editor render error:', error, info)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="editor-error" role="alert">
+          <p>Something in the editor hit a snag and this view was paused.</p>
+          <p className="muted" style={{ fontSize: 12 }}>{String(this.state.error.message)}</p>
+          <Button variant="secondary" onClick={() => this.setState({ error: null })}>
+            Dismiss
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 // ---- Polish badge state machine ----
 export type PolishBadgeState = 'never-run' | 'polished' | 'stale' | 'flagged' | 'loading'
 
@@ -950,7 +983,9 @@ function SnapshotsPanel({ slug }: { slug: string }) {
 function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
   const Components = useComponentsContext()
   if (!Components) return null
-  if (block.type === 'paragraph') {
+  // menuProps.block can be momentarily undefined while the side menu mounts;
+  // accessing block.type unguarded there threw and blanked the whole editor.
+  if (block?.type === 'paragraph') {
     return (
       <Components.Generic.Menu.Item
         onClick={() =>
@@ -961,7 +996,7 @@ function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
       </Components.Generic.Menu.Item>
     )
   }
-  if (block.type === 'forgeNarrative') {
+  if (block?.type === 'forgeNarrative') {
     return (
       <Components.Generic.Menu.Item
         onClick={() =>
@@ -1374,6 +1409,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             </div>
           ))}
           <div className="editor-canvas">
+            <EditorErrorBoundary>
             <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={false}>
               {isHomepage ? (
                 <SuggestionMenuController
@@ -1426,6 +1462,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 )}
               />
             </BlockNoteView>
+            </EditorErrorBoundary>
           </div>
           <button
             type="button"
