@@ -9,6 +9,7 @@ import {
   RemoveBlockItem,
   useComponentsContext,
   useCreateBlockNote,
+  useSelectedBlocks,
 } from '@blocknote/react'
 import { insertOrUpdateBlockForSlashMenu } from '@blocknote/core'
 import type { PartialBlock } from '@blocknote/core'
@@ -979,11 +980,14 @@ function SnapshotsPanel({ slug }: { slug: string }) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ConvertNarrativeItem({ block, editor }: { block: any; editor: any }) {
+function ConvertNarrativeItem({ editor }: { editor: any }) {
   const Components = useComponentsContext()
+  // BlockNote's dragHandleMenu render-prop never receives the block as a prop;
+  // read it from the selection instead (opening the drag menu selects the
+  // hovered block). Falls back to nothing when 0/many blocks are selected.
+  const selected = useSelectedBlocks(editor)
   if (!Components) return null
-  // menuProps.block can be momentarily undefined while the side menu mounts;
-  // accessing block.type unguarded there threw and blanked the whole editor.
+  const block = selected.length === 1 ? selected[0] : undefined
   if (block?.type === 'paragraph') {
     return (
       <Components.Generic.Menu.Item
@@ -1451,10 +1455,10 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 sideMenu={(props) => (
                   <SideMenu
                     {...props}
-                    dragHandleMenu={(menuProps: any) => (
+                    dragHandleMenu={() => (
                       <DragHandleMenu>
                         <RemoveBlockItem>Delete</RemoveBlockItem>
-                        <ConvertNarrativeItem block={menuProps.block} editor={editor} />
+                        <ConvertNarrativeItem editor={editor} />
                       </DragHandleMenu>
                     )}
                   />
