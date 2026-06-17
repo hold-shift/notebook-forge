@@ -33,6 +33,8 @@ export interface ForgeImageViewProps {
   onSafeModeChange?: (mode: SafeMode) => void
   /** Upload a photo file — called when the block has no assetId yet. */
   onImageUpload?: (file: File) => Promise<void>
+  /** Upload a hand-made sketch — escape hatch when the model refuses. */
+  onSketchUpload?: (file: File) => Promise<void>
 }
 
 export function ForgeImageView({
@@ -44,6 +46,7 @@ export function ForgeImageView({
   onGenerateSketch,
   onSafeModeChange,
   onImageUpload,
+  onSketchUpload,
 }: ForgeImageViewProps) {
   const { assetId, sketchAssetId, caption, altText, approval, displayWidth, faceGate } = props
   const [generating, setGenerating] = useState(false)
@@ -53,7 +56,22 @@ export function ForgeImageView({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [sketchUploading, setSketchUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const sketchInputRef = useRef<HTMLInputElement>(null)
+
+  const handleSketchUpload = async (file: File) => {
+    if (!onSketchUpload) return
+    setSketchUploading(true)
+    setGenError('')
+    try {
+      await onSketchUpload(file)
+    } catch (e) {
+      setGenError(String(e))
+    } finally {
+      setSketchUploading(false)
+    }
+  }
 
   const handleUpload = async (file: File) => {
     if (!onImageUpload) return
@@ -134,11 +152,32 @@ export function ForgeImageView({
             <span className="forge-image-label">Sketch (NotebookLM-safe)</span>
           </div>
         ) : (
-          <div className="forge-image-cell forge-image-missing" data-testid="sketch-missing">
-            <span>No sketch yet</span>
+          <div
+            className={`forge-image-cell forge-image-missing${onSketchUpload ? ' uploadable' : ''}`}
+            data-testid="sketch-missing"
+            onClick={onSketchUpload ? () => sketchInputRef.current?.click() : undefined}
+            title={onSketchUpload ? 'Click to upload your own sketch' : undefined}
+          >
+            <span>{sketchUploading ? 'Uploading…' : 'No sketch yet'}</span>
+            {onSketchUpload && !sketchUploading && (
+              <span className="forge-image-sublabel">Click to upload one</span>
+            )}
           </div>
         )}
       </div>
+      {onSketchUpload && (
+        <input
+          ref={sketchInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void handleSketchUpload(file)
+            e.target.value = ''
+          }}
+        />
+      )}
       <figcaption>
         <AutoTextarea
           className="forge-caption-input"
@@ -168,6 +207,17 @@ export function ForgeImageView({
                 ✎ prompt
               </button>
             </>
+          )}
+          {onSketchUpload && (
+            <button
+              type="button"
+              className="forge-generate"
+              onClick={() => sketchInputRef.current?.click()}
+              disabled={sketchUploading}
+              title="Upload your own sketch (use when the model won't generate one)"
+            >
+              {sketchUploading ? 'Uploading…' : '⬆ Upload sketch'}
+            </button>
           )}
           {onSafeModeChange && (
             <select

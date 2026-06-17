@@ -408,6 +408,8 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .forge-image-missing {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
   align-items: center;
   justify-content: center;
   border: 1px dashed var(--color-border-tertiary);
@@ -416,6 +418,12 @@ button:disabled { opacity: 0.55; cursor: default; }
   font-size: 12px;
   min-height: 80px;
 }
+.forge-image-missing.uploadable { cursor: pointer; transition: border-color 0.12s, color 0.12s; }
+.forge-image-missing.uploadable:hover {
+  border-color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+}
+.forge-image-missing .forge-image-sublabel { font-size: 10px; opacity: 0.8; }
 .forge-image figcaption {
   display: flex;
   flex-direction: column;

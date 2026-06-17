@@ -188,6 +188,52 @@ def test_generate_sketch_for_block_wires_asset_and_pending(
     assert asset_path(workspace, asset).read_bytes() == sketch
 
 
+def test_upload_sketch_for_block_attaches_asset(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    from notebook_forge.assets import asset_path
+    from notebook_forge.models import Asset
+    from notebook_forge.sketch_service import upload_sketch_for_block
+
+    repo = make_repo(tmp_path, with_sketches=False)
+    target = get_or_create_pages_target(session, repo)
+    doc, _ = import_document(session, workspace, repo, SLUG, target)
+    session.commit()
+
+    block = next(b for b in doc.blocks if b["type"] == FORGE_IMAGE)
+    assert block["props"]["sketchAssetId"] == ""
+
+    my_sketch = png_bytes((7, 7, 7))
+    src = tmp_path / "my-sketch.png"
+    src.write_bytes(my_sketch)
+    detail = upload_sketch_for_block(session, workspace, doc, block["id"], src)
+    session.commit()
+
+    updated = next(b for b in doc.blocks if b["id"] == block["id"])
+    assert updated["props"]["sketchAssetId"] == detail["sketchAssetId"]
+    assert updated["props"]["approval"] == "pending"
+    assert updated["props"]["faceGate"] == "n/a"  # hand-supplied sketch isn't gated
+    asset = session.get(Asset, detail["sketchAssetId"])
+    assert asset.kind == "sketches"  # same bucket as generated sketches
+    assert asset_path(workspace, asset).read_bytes() == my_sketch
+
+
+def test_upload_sketch_unknown_block_raises(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    from notebook_forge.sketch_service import upload_sketch_for_block
+
+    repo = make_repo(tmp_path, with_sketches=False)
+    target = get_or_create_pages_target(session, repo)
+    doc, _ = import_document(session, workspace, repo, SLUG, target)
+    session.commit()
+
+    src = tmp_path / "x.png"
+    src.write_bytes(png_bytes())
+    with pytest.raises(LookupError):
+        upload_sketch_for_block(session, workspace, doc, "no-such-block", src)
+
+
 def test_sketch_settings_defaults_and_override(session: Session) -> None:
     from notebook_forge.models import Setting
     from notebook_forge.sketch import SILHOUETTE_PROMPT, SKETCH_MODEL
