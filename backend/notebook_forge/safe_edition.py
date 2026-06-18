@@ -128,12 +128,15 @@ def render_safe_markdown(
 
     # Metadata header — one bold-labelled line each, hard-broken so they stack
     # tightly (two trailing spaces = a Markdown line break within one block).
+    from .collection import count_words  # local import avoids an import cycle
+
     fields = [
         ("Title", meta.get("title", "")),
         ("Standfirst", meta.get("standfirst", "")),
         ("Author", meta.get("author", "")),
         ("Years covered", meta.get("year_display", "")),
         ("Source name", meta.get("slug", "") or meta.get("source_file", "")),
+        ("Word count", f"{count_words(blocks):,}"),
     ]
     lines: list[str] = [f"**{label}:** {value}  " for label, value in fields if value]
     lines += ["", "---", ""]

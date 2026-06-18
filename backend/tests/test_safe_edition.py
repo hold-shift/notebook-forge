@@ -71,6 +71,8 @@ def test_render_safe_markdown_structure() -> None:
     assert "**Author:** R.F. Skitch  " in md
     assert "**Years covered:** 1953–1954  " in md
     assert "**Source name:** 1953-1954_in-the-navy  " in md
+    import re as _re
+    assert _re.search(r"\*\*Word count:\*\* \d+  ", md)  # prose word count present
     assert md.split("---")[0].count("\n# ") == 0  # no H1 title line
     assert "\n---\n" in md
     # figure: sketch image + caption linking to the live anchor
