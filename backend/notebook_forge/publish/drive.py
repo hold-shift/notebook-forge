@@ -32,6 +32,12 @@ def update_request_body(name: str) -> dict[str, Any]:
     return {"name": name}
 
 
+def csv_request_body(name: str, folder_id: str) -> dict[str, Any]:
+    """files.create metadata for a plain text/csv file — NOT converted to a
+    Google Sheet, so NotebookLM ingests it as a Data Table."""
+    return {"name": name, "mimeType": "text/csv", "parents": [folder_id]}
+
+
 class DriveClient(Protocol):
     """The thin slice of the Drive v3 client the target needs. The real
     implementation (next sprint) wraps google-api-python-client; tests use
@@ -52,6 +58,35 @@ class DriveClient(Protocol):
     def set_tab_title(self, file_id: str, title: str) -> None:
         """Rename the Google Doc's first tab (Docs API)."""
         ...
+
+
+def upsert_file(
+    client: DriveClient,
+    folder_id: str,
+    name: str,
+    media: bytes,
+    media_mime: str,
+    *,
+    doc_convert: bool,
+) -> tuple[str, str]:
+    """Create `name` in the folder, or update it in place if it already exists.
+
+    doc_convert=True imports the media as a Google Doc (the per-doc report);
+    doc_convert=False stores it verbatim as a CSV file (the master tracks).
+    Returns (file_id, "created"|"updated").
+    """
+    existing = client.find_file(name, folder_id)
+    if existing:
+        return (
+            client.update_file(existing, update_request_body(name), media, media_mime),
+            "updated",
+        )
+    body = (
+        create_request_body(name, folder_id)
+        if doc_convert
+        else csv_request_body(name, folder_id)
+    )
+    return client.create_file(body, media, media_mime), "created"
 
 
 @dataclass

@@ -853,6 +853,19 @@ def report_get(slug: str, session: Session = Depends(get_session)) -> dict[str, 
     return {**_report_state(session, doc), "body_md": report.body_md if report else ""}
 
 
+@app.post("/api/documents/{slug}/report/push")
+def report_push(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Push report_<source_name> to Drive (creates or updates the Doc)."""
+    from .publish.reports import push_report
+
+    doc = _get_doc(session, slug)
+    try:
+        detail = push_report(session, _state()["workspace"], doc)
+    except PermissionError as exc:  # not generated yet / no Drive target / no auth
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "detail": detail, "report": _report_state(session, doc)}
+
+
 # ---------------------------------------------------------------- master tracks
 
 _MASTER_SETTING = "reports_master"
@@ -881,26 +894,38 @@ def report_master_status(session: Session = Depends(get_session)) -> dict[str, A
 
 @app.post("/api/reports/master/generate")
 def report_master_generate(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Rebuild the four master CSVs from current ReportTrack rows.
+    """Rebuild the four master CSVs from current ReportTrack rows and push them
+    to Drive as text/csv Data Tables.
 
-    Validates each CSV's column widths before recording the build. The Drive
-    push is layered on in the publish step.
+    Each CSV's column widths are self-checked before the push; build_at /
+    pushed_at / drive_file_ids are recorded together so a failed push records
+    nothing.
     """
     from .models import Setting
+    from .publish.reports import push_master
     from .reports.csvbuild import validate_widths
     from .reports.master import build_master_csvs
 
-    csvs = build_master_csvs(session)
-    for text in csvs.values():
+    for text in build_master_csvs(session).values():
         validate_widths(text)  # self-check — raises on a width mismatch
 
-    meta = {"built_at": utcnow().isoformat()}
+    try:
+        pushed = push_master(session, _state()["workspace"])
+    except PermissionError as exc:  # no Drive target / no auth
+        raise HTTPException(409, str(exc)) from exc
+
+    now = utcnow().isoformat()
+    meta = {
+        "built_at": now,
+        "pushed_at": now,
+        "drive_file_ids": {tt: r["file_id"] for tt, r in pushed.items()},
+    }
     row = session.get(Setting, _MASTER_SETTING)
     if row is None:
         session.add(Setting(key=_MASTER_SETTING, value=meta))
     else:
         row.value = {**row.value, **meta}
-    return {"ok": True, "master": _master_status(session)}
+    return {"ok": True, "master": _master_status(session), "pushed": pushed}
 
 
 @app.post("/api/documents/{slug}/publish/{target_name}")

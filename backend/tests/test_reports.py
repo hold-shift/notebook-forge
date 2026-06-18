@@ -692,11 +692,15 @@ class TestMasterApi:
         app.dependency_overrides[get_session] = lambda: session
         return TestClient(app)
 
-    def test_status_empty_then_after_build(
+    def test_status_empty_then_after_build_and_push(
         self, session: Session, workspace: Path
     ) -> None:
+        from notebook_forge.models import Target
+
         doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
         _gen_for(session, workspace, doc, "Alice")
+        session.add(Target(name="drive", kind="drive", config={"mock": True, "folder_id": "f"}))
+        session.flush()
         client = self._client(session)
 
         before = client.get("/api/reports/master").json()
@@ -706,4 +710,105 @@ class TestMasterApi:
         built = client.post("/api/reports/master/generate").json()
         assert built["ok"] is True
         assert built["master"]["built_at"] is not None
+        assert built["master"]["pushed_at"] is not None
         assert built["master"]["by_track"]["people"] == 1
+        # Four CSVs pushed, file ids recorded.
+        assert set(built["pushed"]) == {"people", "geo", "glossary", "chronology"}
+        assert built["master"]["drive_file_ids"]["people"]
+
+    def test_generate_409_without_drive_target(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        client = self._client(session)
+        resp = client.post("/api/reports/master/generate")
+        assert resp.status_code == 409
+
+
+# ------------------------------------------------------------------ drive push
+
+class TestDrivePush:
+    def test_push_report_creates_doc_and_tracks_file(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.reports import push_report
+        from notebook_forge.reports.service import get_report
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        drive = MockDriveClient()
+        detail = push_report(session, workspace, doc, client=drive, folder_id="folder-x")
+
+        assert detail["name"] == "report_doc-a"
+        assert detail["action"] == "created"
+        # Imported as a Google Doc from Markdown.
+        create = next(c for c in drive.calls if c[0] == "create")
+        assert create[1]["body"]["mimeType"] == "application/vnd.google-apps.document"
+        assert create[1]["media_mime"] == "text/markdown"
+        # Tab titled and the Report row updated.
+        assert any(c[0] == "set_tab_title" for c in drive.calls)
+        report = get_report(session, doc)
+        assert report.drive_file_id == detail["file_id"]
+        assert report.pushed_at is not None
+
+    def test_push_report_updates_in_place(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.reports import push_report
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        drive = MockDriveClient()
+        first = push_report(session, workspace, doc, client=drive, folder_id="f")
+        second = push_report(session, workspace, doc, client=drive, folder_id="f")
+        assert second["action"] == "updated"
+        assert second["file_id"] == first["file_id"]  # stable Doc id
+
+    def test_push_report_requires_generation(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.reports import push_report
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        with pytest.raises(PermissionError):
+            push_report(session, workspace, doc, client=MockDriveClient(), folder_id="f")
+
+    def test_push_master_uploads_four_csvs_as_text_csv(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.reports import push_master
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        drive = MockDriveClient()
+        results = push_master(session, workspace, client=drive, folder_id="f")
+
+        assert {r["name"] for r in results.values()} == {
+            "master_people.csv", "master_geography.csv",
+            "master_glossary.csv", "master_chronology.csv",
+        }
+        # Uploaded as CSV, never converted to a Sheet.
+        for call in (c for c in drive.calls if c[0] == "create"):
+            assert call[1]["body"]["mimeType"] == "text/csv"
+            assert call[1]["media_mime"] == "text/csv"
+
+    def test_report_push_endpoint(self, session: Session, workspace: Path) -> None:
+        from fastapi.testclient import TestClient
+
+        from notebook_forge.api import app, get_session
+        from notebook_forge.models import Target
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        session.add(Target(name="drive", kind="drive", config={"mock": True, "folder_id": "f"}))
+        session.flush()
+        app.dependency_overrides[get_session] = lambda: session
+        client = TestClient(app)
+        resp = client.post(f"/api/documents/{doc.slug}/report/push")
+        assert resp.status_code == 200
+        assert resp.json()["report"]["drive_file_id"]
