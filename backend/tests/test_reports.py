@@ -315,8 +315,11 @@ class TestRender:
             inconsistencies=["Withall / Withell spelling variants."],
             anchors=[{"section": "The family", "quote": "tits look big", "attribution": "Junior"}],
             tracks={
-                "people": [{"section": "Preamble", "name": "Tiger", "role": "stepfather"}],
-                "geo": [],
+                "people": [
+                    {"section": "Preamble", "name": "Tiger", "role": "stepfather"},
+                    {"section": "The family", "name": "Joyce Hough", "role": "neighbour"},
+                ],
+                "geo": [{"section": "Preamble", "place": "Collie", "what": "home", "arrival": "-"}],
                 "glossary": [],
                 "chronology": [],
             },
@@ -339,10 +342,33 @@ class TestRender:
         assert "**Source name (NotebookLM):** 1934-1945_junior" in body
         assert "25,742" in body  # word count formatted with thousands separator
         assert "the original memoir is authoritative" in body
-        # §6 CSV blocks, one per track, with the locked headers.
-        assert "**6a. People register**" in body
-        assert "source,section,name,role_or_relationship" in body
-        assert "1934-1945_junior,Preamble,Tiger,stepfather" in body
+
+    def test_section_6_is_counts_summary_not_inline_csv(self) -> None:
+        data = ReportData(
+            title="Junior", author="R.F. Skitch", years="1934–1945",
+            source_name="1934-1945_junior", word_count=25742,
+            exec_summary="x", digest_md="**P**\nx",
+            tracks={
+                "people": [
+                    {"section": "Preamble", "name": "Tiger", "role": "stepfather"},
+                    {"section": "The family", "name": "Joyce Hough", "role": "neighbour"},
+                ],
+                "geo": [{"section": "Preamble", "place": "Collie", "what": "home", "arrival": "-"}],
+                "glossary": [],
+                "chronology": [],
+            },
+        )
+        body = render_report(data)
+        # Counts, not rows.
+        assert "- People: 2" in body
+        assert "- Places: 1" in body
+        assert "- Glossary terms: 0" in body
+        assert "- Chronology entries: 0" in body
+        assert "master_people.csv" in body
+        # No inline CSV at all.
+        assert "```csv" not in body
+        assert "source,section,name,role_or_relationship" not in body
+        assert "1934-1945_junior,Preamble,Tiger,stepfather" not in body
 
     def test_empty_sections_use_none_fallbacks(self) -> None:
         data = ReportData(

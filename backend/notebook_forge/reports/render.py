@@ -1,27 +1,28 @@
 """Render the locked §0–§6 report body from structured data.
 
 Mirrors `build_report` in the standalone `notebook_forge_reports.py`: the same
-section order, headings, the fixed provenance note, the "(none …)" fallbacks,
-and §6 reference tracks as four labelled ```csv blocks. This is the single
-source of truth for the Drive Doc body and any preview — `service.py` calls it
-once at generation and stores the result as `Report.body_md`.
+section order, headings, the fixed provenance note, and the "(none …)"
+fallbacks. This is the single source of truth for the Drive Doc body and any
+preview — `service.py` calls it once at generation and stores the result as
+`Report.body_md`.
 
-§6 is rendered from the canonical track rows (the same rows persisted as
-ReportTrack), so the embedded CSVs and the master tracks never diverge.
+§6 is a compact counts summary that points at the master reference tables; the
+full per-document rows are persisted as ReportTrack and pooled into the
+master CSVs (see master.py), so they are never inlined here. Inlining the CSVs
+both duplicated the master and was the single biggest page inflator once the
+Markdown was converted to a Google Doc.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from .csvbuild import TRACK_HEADERS, csv_block, row_from_data
-
-# (track_type, §6 sub-heading) in the locked order.
-_TRACK_SECTIONS = [
-    ("people", "6a. People register"),
-    ("geo", "6b. Geographical log"),
-    ("glossary", "6c. Glossary"),
-    ("chronology", "6d. Chronology"),
+# (track_type, summary label) in the locked order.
+_TRACK_LABELS = [
+    ("people", "People"),
+    ("geo", "Places"),
+    ("glossary", "Glossary terms"),
+    ("chronology", "Chronology entries"),
 ]
 
 _NOTE = (
@@ -90,17 +91,30 @@ def render_report(data: ReportData) -> str:
     parts.append("\n".join(anchor_lines) if anchor_lines else "- (none selected)")
 
     parts.append("\n### 6. Reference tracks\n")
-    parts.append(render_tracks_section(data.source_name, data.tracks))
+    parts.append(render_tracks_section(data.tracks))
 
     return "\n".join(parts) + "\n"
 
 
-def render_tracks_section(
-    source_name: str, tracks: dict[str, list[dict[str, Any]]]
-) -> str:
-    """The §6 body: four labelled ```csv blocks, one per track type."""
-    blocks: list[str] = []
-    for track_type, label in _TRACK_SECTIONS:
-        rows = [row_from_data(track_type, source_name, d) for d in tracks.get(track_type, [])]
-        blocks.append(f"**{label}**\n" + csv_block(TRACK_HEADERS[track_type], rows))
-    return "\n\n".join(blocks)
+def render_tracks_section(tracks: dict[str, list[dict[str, Any]]]) -> str:
+    """The §6 body: a compact per-track counts summary, not inline CSV.
+
+    The full rows live in ReportTrack and are pooled into the master CSVs;
+    inlining them here duplicated the master and inflated the Google Doc.
+    """
+    lines = [
+        "This report's structured reference data is maintained in the master "
+        "reference tables, not inline. For this document:",
+        "",
+    ]
+    lines += [
+        f"- {label}: {len(tracks.get(track_type, []))}"
+        for track_type, label in _TRACK_LABELS
+    ]
+    lines += [
+        "",
+        "Full rows — each carrying its `source` column — are pooled into "
+        "master_people.csv, master_geography.csv, master_glossary.csv, and "
+        "master_chronology.csv.",
+    ]
+    return "\n".join(lines)
