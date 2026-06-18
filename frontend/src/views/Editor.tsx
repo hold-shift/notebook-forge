@@ -16,7 +16,7 @@ import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
-import { api, type DocDetail, type PolishLastRun, type PolishReport, type TargetState } from '../api'
+import { api, type DocDetail, type PolishLastRun, type PolishReport, type ReportState, type TargetState } from '../api'
 import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
@@ -75,6 +75,112 @@ export function computePolishBadge(
   if (polishLast.flagged_ids.length > 0) return 'flagged'
   if (updatedAt && polishLast.at <= updatedAt) return 'stale'
   return 'polished'
+}
+
+// ---- Report badge state machine ----
+export function computeReportBadge(
+  report: ReportState | null | 'loading',
+): { variant: BadgeVariant; label: string } | 'loading' {
+  if (report === 'loading') return 'loading'
+  if (!report || !report.exists) return { variant: 'never-run', label: 'Not generated' }
+  if (report.status === 'failed') return { variant: 'flagged', label: 'Failed' }
+  if (report.stale) return { variant: 'stale', label: 'Stale' }
+  return { variant: 'polished', label: 'Generated' }
+}
+
+const DRIVE_DOC_URL = (id: string) => `https://docs.google.com/document/d/${id}/edit`
+
+function ReportPanel({ slug }: { slug: string }) {
+  const [report, setReport] = useState<ReportState | null | 'loading'>('loading')
+  const [generating, setGenerating] = useState(false)
+  const [pushing, setPushing] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setReport('loading')
+    api.report(slug).then((r) => setReport(r), () => setReport(null))
+  }, [slug])
+
+  const onGenerate = useCallback(() => {
+    setError('')
+    setGenerating(true)
+    api.generateReport(slug).then(
+      (r) => setReport(r.report),
+      (e) => setError(String(e)),
+    ).finally(() => setGenerating(false))
+  }, [slug])
+
+  const onPush = useCallback(() => {
+    setError('')
+    setPushing(true)
+    api.pushReport(slug).then(
+      (r) => setReport(r.report),
+      (e) => setError(String(e)),
+    ).finally(() => setPushing(false))
+  }, [slug])
+
+  const exists = report !== 'loading' && report !== null && report.exists
+  const badge = computeReportBadge(report)
+  const driveId = exists ? (report as ReportState).drive_file_id : null
+
+  return (
+    <>
+      {generating && (
+        <PolishProgress
+          slug={slug}
+          poll={api.reportProgress}
+          heading="Generating report with Gemini…"
+          prepLabel="Reading provenance and chunking chapters…"
+          unit="chapter"
+        />
+      )}
+      <div className="pending-panel">
+        <div className="pending-panel-header">
+          <h3><SectionLabel>Analytical report</SectionLabel></h3>
+        </div>
+        <div className="target-rows">
+          <div className="target-card">
+            <div className="target-card-head">
+              <span className={`dot ${exists && !(report as ReportState).stale ? 'clean' : 'dirty'}`} />
+              <span className="pending-name" title="report → Drive">Report</span>
+              {driveId && (
+                <a
+                  className="target-link-icon"
+                  href={DRIVE_DOC_URL(driveId)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open the report in Google Drive"
+                >
+                  <i className="ti ti-external-link" aria-hidden />
+                </a>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={generating}
+                onClick={onGenerate}
+              >
+                {generating ? 'Generating…' : exists ? 'Regenerate' : 'Generate'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!exists || generating || pushing}
+                title="Push report_<source_name> to Drive"
+                onClick={onPush}
+              >
+                {pushing ? 'Pushing…' : 'Push to Drive'}
+              </Button>
+            </div>
+            <div className="target-card-status">
+              {badge !== 'loading' && <StatusBadge variant={badge.variant} label={badge.label} />}
+              {error && <span className="pending-state" style={{ color: 'var(--color-danger, #b00)' }}>{error}</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
 }
 
 function PolishPopover({
@@ -1552,6 +1658,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
               unpublishing={unpublishing}
               hideUnpublish={isHomepage}
             />
+            {!isHomepage && <ReportPanel slug={doc.slug} />}
             <SnapshotsPanel slug={doc.slug} />
             {!isHomepage && (
               <div className="danger-panel">
