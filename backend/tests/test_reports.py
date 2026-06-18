@@ -221,9 +221,41 @@ class TestSerializer:
 
     def test_parse_consolidate_uses_fallback_anchors(self) -> None:
         fallback = [{"section": "s", "quote": "q", "attribution": "a"}]
-        data = parse_consolidate_json(json.dumps({"executive_summary": "Overview."}), fallback)
+        data = parse_consolidate_json(
+            json.dumps({"executive_summary": "Overview."}), fallback, [], [], []
+        )
         assert data["executive_summary"] == "Overview."
         assert data["anchors"] == fallback
+
+    def test_parse_consolidate_falls_back_for_curated_fields(self) -> None:
+        # Reply omits §3/§4 → the raw pooled lists are returned (nothing lost).
+        data = parse_consolidate_json(
+            json.dumps({"executive_summary": "S"}),
+            [],
+            ["raw stated"],
+            ["[INFERENCE] raw"],
+            ["raw inconsistency"],
+        )
+        assert data["interpersonal_stated"] == ["raw stated"]
+        assert data["interpersonal_inference"] == ["[INFERENCE] raw"]
+        assert data["inconsistencies"] == ["raw inconsistency"]
+
+    def test_parse_consolidate_uses_curated_fields_when_present(self) -> None:
+        data = parse_consolidate_json(
+            json.dumps({
+                "executive_summary": "S",
+                "interpersonal_stated": ["curated dynamic"],
+                "inconsistencies": ["Spelling variants: Withall/Withell, Alec/Alex"],
+            }),
+            [],
+            ["raw stated"],
+            ["[INFERENCE] raw"],
+            ["raw inconsistency"],
+        )
+        assert data["interpersonal_stated"] == ["curated dynamic"]
+        # Omitted field still falls back.
+        assert data["interpersonal_inference"] == ["[INFERENCE] raw"]
+        assert data["inconsistencies"] == ["Spelling variants: Withall/Withell, Alec/Alex"]
 
 
 # ------------------------------------------------------------------ runner
@@ -296,6 +328,29 @@ class TestRunner:
         assert ordered == []
         assert len(failed) == 1
         assert "chapter 0" in failed[0]
+
+    def test_consolidate_parses_curated_and_sends_raw_material(self) -> None:
+        calls: list = []
+        reply = json.dumps({
+            "executive_summary": "S",
+            "anchors": [],
+            "interpersonal_stated": ["curated dynamic"],
+            "interpersonal_inference": [],  # empty → falls back to raw
+            "inconsistencies": ["Spelling variants: A/Ay"],
+        })
+        runner = GeminiReportRunner("test-key", transport=gemini_transport([reply], calls))
+        chapters = [("One", {"digest_md": "**One**\nx", "anchors": []})]
+        out = runner.consolidate(
+            "src", "1955", chapters,
+            stated=["raw stated"], inference=["raw inference"], inconsistencies=["raw inc"],
+        )
+        assert out["interpersonal_stated"] == ["curated dynamic"]
+        assert out["interpersonal_inference"] == ["raw inference"]  # fallback
+        assert out["inconsistencies"] == ["Spelling variants: A/Ay"]
+        # The raw pooled material was sent for synthesis.
+        user = calls[0]["contents"][0]["parts"][0]["text"]
+        assert "RAW PER-CHAPTER MATERIAL TO SYNTHESISE" in user
+        assert "raw stated" in user
 
 
 # ------------------------------------------------------------------ render
@@ -412,8 +467,10 @@ class FakeReportRunner:
         return self.by_title[chunk.title]
 
     def consolidate(
-        self, source_name: str, years: str, chapters_data, *, extra_rules: str = ""
+        self, source_name: str, years: str, chapters_data,
+        *, stated=None, inference=None, inconsistencies=None, extra_rules: str = "",
     ) -> dict[str, Any]:
+        # Omits the curated §3/§4 fields → service falls back to the raw lists.
         cands = [a for _, d in chapters_data for a in d.get("anchors", [])]
         return {"executive_summary": "Whole-document overview.", "anchors": cands[:8]}
 
@@ -564,6 +621,93 @@ class TestService:
         assert report_is_stale(session, doc, report) is True
 
 
+class CuratingFakeRunner:
+    """Emits many raw §3/§4 lines per chapter, but consolidation returns a
+    short curated synthesis — exercising Change 2's curation + the length win."""
+
+    model = "fake-report-model"
+
+    def __init__(self, lines_per_chapter: int = 20) -> None:
+        self.n = lines_per_chapter
+
+    def digest_chapter(self, chunk: ReportChunk, source_name: str, *, extra_rules: str = ""):
+        return chapter_digest(
+            chunk.title,
+            people=[{"section": chunk.title, "name": f"Person {chunk.title}", "role": "r"}],
+            interpersonal_stated=[f"raw stated {chunk.title} {i}" for i in range(self.n)],
+            interpersonal_inference=[f"[INFERENCE] raw {chunk.title} {i}" for i in range(self.n)],
+            inconsistencies=[f"variant {chunk.title} {i}/{i}b" for i in range(self.n)],
+        )
+
+    def consolidate(self, source_name, years, chapters_data, *, stated=None,
+                    inference=None, inconsistencies=None, extra_rules=""):
+        # Synthesised, proportional output — independent of the raw volume.
+        return {
+            "executive_summary": "Curated overview.",
+            "anchors": [],
+            "interpersonal_stated": ["CURATED: the central family dynamic."],
+            "interpersonal_inference": ["[INFERENCE] CURATED reading (Anchored to One.)"],
+            "inconsistencies": ["Spelling variants: A/Ay, B/Bee."],
+        }
+
+
+class TestCuration:
+    def _doc(self, session: Session) -> Any:
+        blocks = []
+        for i in range(6):
+            blocks += [heading(2, f"Ch{i}"), para(f"Body {i}.")]
+        return make_doc(session, blocks, slug="curated-doc")
+
+    def test_curated_output_is_rendered_not_raw(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._doc(session)
+        generate_report(session, workspace, doc, runner=CuratingFakeRunner(), )
+        body = get_report(session, doc).body_md
+        assert "CURATED: the central family dynamic." in body
+        assert "Spelling variants: A/Ay, B/Bee." in body
+        # The raw per-chapter lines are NOT transcribed into the body.
+        assert "raw stated Ch0 0" not in body
+        assert "variant Ch3 5/5b" not in body
+
+    def test_curated_body_shorter_than_raw_fallback(
+        self, session: Session, workspace: Path
+    ) -> None:
+        # Same chapter material; one runner curates, the other omits §3/§4 so the
+        # service falls back to the full raw concatenation.
+        class RawFallbackRunner(CuratingFakeRunner):
+            def consolidate(self, *a, **k):
+                return {"executive_summary": "x", "anchors": []}
+
+        doc_a = self._doc(session)
+        generate_report(session, workspace, doc_a, runner=CuratingFakeRunner())
+        curated_len = len(get_report(session, doc_a).body_md)
+
+        doc_b = make_doc(
+            session,
+            [b for i in range(6) for b in (heading(2, f"Ch{i}"), para(f"Body {i}."))],
+            slug="raw-doc",
+        )
+        generate_report(session, workspace, doc_b, runner=RawFallbackRunner())
+        raw_len = len(get_report(session, doc_b).body_md)
+
+        assert curated_len < raw_len  # curation meaningfully shortens the body
+
+    def test_curation_does_not_change_persisted_tracks(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._doc(session)
+        generate_report(session, workspace, doc, runner=CuratingFakeRunner())
+        # Full-granularity people rows still persisted (one per chapter), despite
+        # §3/§4 being curated down in the body.
+        people = session.scalars(
+            select(ReportTrack).where(
+                ReportTrack.document_id == doc.id, ReportTrack.track_type == "people"
+            )
+        ).all()
+        assert len(people) == 6
+
+
 # ------------------------------------------------------------------ API
 
 class GenericFakeRunner:
@@ -580,7 +724,8 @@ class GenericFakeRunner:
         )
 
     def consolidate(
-        self, source_name: str, years: str, chapters_data, *, extra_rules: str = ""
+        self, source_name: str, years: str, chapters_data,
+        *, stated=None, inference=None, inconsistencies=None, extra_rules: str = "",
     ) -> dict[str, Any]:
         return {"executive_summary": "Overview.", "anchors": []}
 

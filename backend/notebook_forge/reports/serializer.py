@@ -93,12 +93,24 @@ Return ONLY a single valid JSON object (no fences, no commentary):
 {{
   "executive_summary": "<=150 words: a faithful overview of the whole memoir's arc \
 and scope, in the biographer register. No new facts beyond what the digests contain.",
-  "anchors": [{{"section": "...", "quote": "<=25 words verbatim", "attribution": "..."}}]
+  "anchors": [{{"section": "...", "quote": "<=25 words verbatim", "attribution": "..."}}],
+  "interpersonal_stated": ["the most significant stated relationship dynamics, grouped by \
+relationship and proportional to the document — NOT an exhaustive restatement of every line"],
+  "interpersonal_inference": ["[INFERENCE] <the most significant readings only> \
+(Anchored to <section>.)"],
+  "inconsistencies": ["genuine open questions and contradictions, one per line; collapse \
+routine spelling/typo variants into a SINGLE grouped line, e.g. 'Spelling variants: \
+Withall/Withell, Jesse/Jessie, Alec/Alex, Griffin/Griffen'"]
 }}
 
 For "anchors": SELECT the 5-8 strongest from the candidates below (vivid, characteristic, or \
 pivotal). Do not invent or alter quotes; copy a candidate verbatim. Keep variety across \
 the document.
+
+For "interpersonal_stated", "interpersonal_inference", "inconsistencies": SYNTHESISE the raw \
+per-chapter material below — do NOT copy it wholesale. Be proportional to the document, not \
+exhaustive. Preserve the author's exact spellings inside the grouped variant line. Add no new \
+facts beyond the supplied material, and keep every [INFERENCE] tag.
 
 PER-CHAPTER DIGESTS:
 ---
@@ -106,7 +118,17 @@ PER-CHAPTER DIGESTS:
 ---
 
 ANCHOR CANDIDATES (JSON):
-{anchor_candidates}"""
+{anchor_candidates}
+
+RAW PER-CHAPTER MATERIAL TO SYNTHESISE (do not copy wholesale):
+Stated relationship dynamics:
+{raw_stated}
+
+Interpersonal inferences:
+{raw_inference}
+
+Inconsistencies / open questions:
+{raw_inconsistencies}"""
 
 # The chapter-object keys that must default to a list when absent.
 _LIST_KEYS = (
@@ -134,15 +156,33 @@ def build_chapter_prompt(source_name: str, chapter_title: str, chapter_text: str
     )
 
 
+def _bullet_block(items: list[str]) -> str:
+    """Render a raw pooled list as bullets for the synthesis prompt."""
+    return "\n".join(f"- {it}" for it in items) if items else "(none)"
+
+
 def build_consolidate_prompt(
-    source_name: str, years: str, digests: str, anchor_candidates: list[dict[str, Any]]
+    source_name: str,
+    years: str,
+    digests: str,
+    anchor_candidates: list[dict[str, Any]],
+    raw_stated: list[str],
+    raw_inference: list[str],
+    raw_inconsistencies: list[str],
 ) -> str:
-    """The user-message body for the single whole-document consolidation call."""
+    """The user-message body for the single whole-document consolidation call.
+
+    The raw pooled §3/§4 material is included for the model to SYNTHESISE
+    (curate + group), not transcribe.
+    """
     return CONSOLIDATE_INSTRUCTION.format(
         source_name=source_name,
         years=years,
         digests=digests,
         anchor_candidates=json.dumps(anchor_candidates, ensure_ascii=False),
+        raw_stated=_bullet_block(raw_stated),
+        raw_inference=_bullet_block(raw_inference),
+        raw_inconsistencies=_bullet_block(raw_inconsistencies),
     )
 
 
@@ -189,17 +229,37 @@ def parse_chapter_json(raw: str) -> dict[str, Any]:
     return data
 
 
-def parse_consolidate_json(
-    raw: str, fallback_anchors: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Parse the consolidation reply (executive_summary + selected anchors).
+def _str_list(value: Any) -> list[str]:
+    """Coerce a parsed field to a list of non-empty strings (or [] if absent)."""
+    if not isinstance(value, list):
+        return []
+    return [s.strip() for s in value if isinstance(s, str) and s.strip()]
 
-    Falls back to the first eight candidate anchors if the model omits them.
+
+def parse_consolidate_json(
+    raw: str,
+    fallback_anchors: list[dict[str, Any]],
+    fallback_stated: list[str],
+    fallback_inference: list[str],
+    fallback_inconsistencies: list[str],
+) -> dict[str, Any]:
+    """Parse the consolidation reply (executive summary, anchors, and the
+    curated §3/§4 lists).
+
+    Each field falls back to the supplied raw material when the model omits it
+    or returns it empty — so we degrade to the pre-curation behaviour rather
+    than losing data (mirrors the existing anchor fallback).
     """
     data = extract_json(raw)
     summary = data.get("executive_summary")
     anchors = data.get("anchors")
+    stated = _str_list(data.get("interpersonal_stated"))
+    inference = _str_list(data.get("interpersonal_inference"))
+    inconsistencies = _str_list(data.get("inconsistencies"))
     return {
         "executive_summary": summary.strip() if isinstance(summary, str) else "",
         "anchors": anchors if isinstance(anchors, list) and anchors else fallback_anchors[:8],
+        "interpersonal_stated": stated or fallback_stated,
+        "interpersonal_inference": inference or fallback_inference,
+        "inconsistencies": inconsistencies or fallback_inconsistencies,
     }

@@ -158,24 +158,30 @@ def generate_report(
         chunks, runner, source_name, extra_rules=cfg["rules"], on_chunk_done=_on_chunk_done,
     )
 
-    consolidated = runner.consolidate(
-        source_name, prov["years"], chapters_data, extra_rules=cfg["rules"]
-    )
-
     tracks = _collect_tracks(chapters_data)
-    stated = _dedup_lines(
+    # Raw pooled §3/§4 material: source for the consolidation synthesis and the
+    # fallback if the model omits a curated field.
+    raw_stated = _dedup_lines(
         [s for _, d in chapters_data for s in d.get("interpersonal_stated", [])]
     )
-    inferences = _dedup_lines(
+    raw_inference = _dedup_lines(
         [s for _, d in chapters_data for s in d.get("interpersonal_inference", [])]
     )
-    inconsistencies = _dedup_lines(
+    raw_inconsistencies = _dedup_lines(
         [s for _, d in chapters_data for s in d.get("inconsistencies", [])]
     )
     digest_md = "\n\n".join(
         d["digest_md"].strip() for _, d in chapters_data if d.get("digest_md")
     )
 
+    consolidated = runner.consolidate(
+        source_name, prov["years"], chapters_data,
+        stated=raw_stated, inference=raw_inference, inconsistencies=raw_inconsistencies,
+        extra_rules=cfg["rules"],
+    )
+
+    # Render §3/§4 from the curated output; defensively fall back to the raw
+    # pooled lists (covers stub runners that bypass parse_consolidate_json).
     body_md = render_report(
         ReportData(
             title=prov["title"],
@@ -185,9 +191,9 @@ def generate_report(
             word_count=prov["word_count"],
             exec_summary=consolidated.get("executive_summary", ""),
             digest_md=digest_md,
-            stated=stated,
-            inferences=inferences,
-            inconsistencies=inconsistencies,
+            stated=consolidated.get("interpersonal_stated") or raw_stated,
+            inferences=consolidated.get("interpersonal_inference") or raw_inference,
+            inconsistencies=consolidated.get("inconsistencies") or raw_inconsistencies,
             anchors=consolidated.get("anchors", []),
             tracks=tracks,
         )

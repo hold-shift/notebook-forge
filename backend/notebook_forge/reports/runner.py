@@ -100,21 +100,40 @@ class GeminiReportRunner:
         years: str,
         chapters_data: list[tuple[str, dict[str, Any]]],
         *,
+        stated: list[str] | None = None,
+        inference: list[str] | None = None,
+        inconsistencies: list[str] | None = None,
         extra_rules: str = "",
     ) -> dict[str, Any]:
-        """Whole-document executive summary + selected anchors."""
+        """Whole-document executive summary + anchors + curated §3/§4 lists.
+
+        The pooled raw `stated` / `inference` / `inconsistencies` lists (from
+        service) are sent for synthesis and serve as the fallbacks if the model
+        omits a curated field.
+        """
+        stated = stated or []
+        inference = inference or []
+        inconsistencies = inconsistencies or []
         digests = "\n\n".join(
             f"## {title}\n{data.get('digest_md', '')}" for title, data in chapters_data
         )
         candidates = [a for _, data in chapters_data for a in data.get("anchors", [])]
         system = build_system_rules(extra_rules)
-        prompt = build_consolidate_prompt(source_name, years, digests, candidates)
+        prompt = build_consolidate_prompt(
+            source_name, years, digests, candidates, stated, inference, inconsistencies
+        )
         try:
             raw = self._call(system, prompt, _MAX_TOKENS_CONSOLIDATE)
-            return parse_consolidate_json(raw, candidates)
+            return parse_consolidate_json(raw, candidates, stated, inference, inconsistencies)
         except ReportParseError:
-            # Consolidation is non-fatal: fall back to empty summary + top anchors.
-            return {"executive_summary": "", "anchors": candidates[:8]}
+            # Consolidation is non-fatal: fall back to the raw pooled material.
+            return {
+                "executive_summary": "",
+                "anchors": candidates[:8],
+                "interpersonal_stated": stated,
+                "interpersonal_inference": inference,
+                "inconsistencies": inconsistencies,
+            }
 
 
 def make_runner(model: str = REPORT_MODEL, transport=None) -> GeminiReportRunner:  # noqa: ANN001
