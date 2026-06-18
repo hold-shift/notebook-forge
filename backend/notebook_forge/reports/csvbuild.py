@@ -25,6 +25,23 @@ TRACK_HEADERS: dict[str, list[str]] = {
     "chronology": ["source", "section", "date_or_marker", "event"],
 }
 
+# The stored ReportTrack.data keys that fill each track's columns after the
+# leading `source` column. These are the model's own row keys (see the chapter
+# JSON contract), distinct from the CSV header labels above.
+TRACK_FIELDS: dict[str, list[str]] = {
+    "people": ["section", "name", "role"],
+    "geo": ["section", "place", "what", "arrival"],
+    "glossary": ["section", "term", "meaning"],
+    "chronology": ["section", "marker", "event"],
+}
+
+TRACK_TYPES = tuple(TRACK_HEADERS)
+
+
+def row_from_data(track_type: str, source: str, data: dict) -> list[str]:
+    """Map a stored track-row dict to its CSV row: [source, *fields]."""
+    return [source, *(str(data.get(f, "") or "") for f in TRACK_FIELDS[track_type])]
+
 
 def write_csv(header: list[str], rows: list[list[str]]) -> str:
     """Render header + rows to a CSV string (QUOTE_MINIMAL, \\n line endings)."""

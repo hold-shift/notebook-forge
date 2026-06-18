@@ -1,16 +1,21 @@
-"""Analytical report pipeline: chunker, csvbuild, serializer, runner."""
+"""Analytical report pipeline: chunker, csvbuild, serializer, runner, service."""
 
 from __future__ import annotations
 
 import csv
 import io
 import json
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from notebook_forge import services
 from notebook_forge.blocks import make_block, text_run
+from notebook_forge.models import Report, ReportTrack
 from notebook_forge.reports.chunker import OPENING_TITLE, ReportChunk, chunk_document
 from notebook_forge.reports.csvbuild import (
     TRACK_HEADERS,
@@ -18,6 +23,7 @@ from notebook_forge.reports.csvbuild import (
     validate_widths,
     write_csv,
 )
+from notebook_forge.reports.render import ReportData, render_report
 from notebook_forge.reports.runner import GeminiReportRunner, run_chunks
 from notebook_forge.reports.serializer import (
     ReportParseError,
@@ -25,6 +31,11 @@ from notebook_forge.reports.serializer import (
     build_system_rules,
     parse_chapter_json,
     parse_consolidate_json,
+)
+from notebook_forge.reports.service import (
+    generate_report,
+    get_report,
+    report_is_stale,
 )
 
 # ------------------------------------------------------------------ helpers
@@ -285,3 +296,243 @@ class TestRunner:
         assert ordered == []
         assert len(failed) == 1
         assert "chapter 0" in failed[0]
+
+
+# ------------------------------------------------------------------ render
+
+class TestRender:
+    def test_renders_locked_section_order_and_provenance(self) -> None:
+        data = ReportData(
+            title="Junior",
+            author="R.F. Skitch",
+            years="1934–1945",
+            source_name="1934-1945_junior",
+            word_count=25742,
+            exec_summary="A childhood in Collie.",
+            digest_md="**Preamble**\nBorn 1934.",
+            stated=["Junior loved his Dad."],
+            inferences=["[INFERENCE] domestic strain (Anchored to Mum.)"],
+            inconsistencies=["Withall / Withell spelling variants."],
+            anchors=[{"section": "The family", "quote": "tits look big", "attribution": "Junior"}],
+            tracks={
+                "people": [{"section": "Preamble", "name": "Tiger", "role": "stepfather"}],
+                "geo": [],
+                "glossary": [],
+                "chronology": [],
+            },
+        )
+        body = render_report(data)
+        # Section order.
+        for marker in (
+            "# Analytical Report — *Junior*",
+            "### 0. Provenance header",
+            "### 1. Executive summary",
+            "### 2. Section-by-section digest",
+            "### 3. Interpersonal & familial dynamics",
+            "### 4. Source inconsistencies & open questions",
+            "### 5. Notable verbatim anchors",
+            "### 6. Reference tracks",
+        ):
+            assert marker in body
+        assert body.index("### 0.") < body.index("### 6.")
+        # Provenance specifics.
+        assert "**Source name (NotebookLM):** 1934-1945_junior" in body
+        assert "25,742" in body  # word count formatted with thousands separator
+        assert "the original memoir is authoritative" in body
+        # §6 CSV blocks, one per track, with the locked headers.
+        assert "**6a. People register**" in body
+        assert "source,section,name,role_or_relationship" in body
+        assert "1934-1945_junior,Preamble,Tiger,stepfather" in body
+
+    def test_empty_sections_use_none_fallbacks(self) -> None:
+        data = ReportData(
+            title="T", author="A", years="", source_name="s", word_count=0,
+            exec_summary="", digest_md="",
+        )
+        body = render_report(data)
+        assert "- (none recorded)" in body  # stated
+        assert "- (none identified)" in body  # inconsistencies
+        assert "- (none selected)" in body  # anchors
+
+
+# ------------------------------------------------------------------ service
+
+def chapter_digest(section: str, **over: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "digest_md": f"**{section}**\nDigest of {section}.",
+        "people": [],
+        "geo": [],
+        "glossary": [],
+        "chronology": [],
+        "interpersonal_stated": [],
+        "interpersonal_inference": [],
+        "inconsistencies": [],
+        "anchors": [],
+    }
+    base.update(over)
+    return base
+
+
+class FakeReportRunner:
+    """Returns a scripted digest per chapter title; trivial consolidation."""
+
+    def __init__(self, by_title: dict[str, dict[str, Any]]) -> None:
+        self.by_title = by_title
+        self.model = "fake-report-model"
+
+    def digest_chapter(
+        self, chunk: ReportChunk, source_name: str, *, extra_rules: str = ""
+    ) -> dict[str, Any]:
+        return self.by_title[chunk.title]
+
+    def consolidate(
+        self, source_name: str, years: str, chapters_data, *, extra_rules: str = ""
+    ) -> dict[str, Any]:
+        cands = [a for _, d in chapters_data for a in d.get("anchors", [])]
+        return {"executive_summary": "Whole-document overview.", "anchors": cands[:8]}
+
+
+def make_doc(session: Session, blocks: list[dict[str, Any]], slug: str = "doc-1") -> Any:
+    return services.create_document(
+        session, slug, "Test Memoir", blocks, meta={"slug": slug, "author": "R.F. Skitch"}
+    )
+
+
+class TestService:
+    def _two_chapter_doc(self, session: Session) -> Any:
+        return make_doc(
+            session,
+            [heading(2, "One"), para("Body one."), heading(2, "Two"), para("Body two.")],
+        )
+
+    def test_generate_persists_report_and_tracks(self, session: Session, workspace: Path) -> None:
+        doc = self._two_chapter_doc(session)
+        runner = FakeReportRunner({
+            "One": chapter_digest(
+                "One",
+                people=[{"section": "One", "name": "Tiger", "role": "stepfather"}],
+                chronology=[{"section": "One", "marker": "1955", "event": "enlisted"}],
+                anchors=[{"section": "One", "quote": "a way out", "attribution": "Bob"}],
+            ),
+            "Two": chapter_digest(
+                "Two",
+                people=[{"section": "Two", "name": "Major Buckland", "role": "officer"}],
+                chronology=[{"section": "Two", "marker": "1956", "event": "posted"}],
+            ),
+        })
+        result = generate_report(session, workspace, doc, runner=runner)
+        assert result["status"] == "generated"
+        assert result["chapters"] == 2
+
+        report = get_report(session, doc)
+        assert report is not None
+        assert report.source_name == "doc-1"
+        assert report.model == "fake-report-model"
+        assert report.exec_summary == "Whole-document overview."
+        assert "### 6. Reference tracks" in report.body_md
+
+        people = session.scalars(
+            select(ReportTrack).where(
+                ReportTrack.document_id == doc.id, ReportTrack.track_type == "people"
+            )
+        ).all()
+        assert {r.data["name"] for r in people} == {"Tiger", "Major Buckland"}
+
+    def test_intra_doc_dedup_keep_first_and_chronology_keep_all(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._two_chapter_doc(session)
+        runner = FakeReportRunner({
+            "One": chapter_digest(
+                "One",
+                people=[{"section": "One", "name": "Tiger", "role": "stepfather"}],
+                geo=[{"section": "One", "place": "Perth", "what": "home", "arrival": "-"}],
+                glossary=[{"section": "One", "term": "KD", "meaning": "khaki drill"}],
+                chronology=[{"section": "One", "marker": "1955", "event": "enlisted"}],
+                interpersonal_stated=["Tiger was supportive."],
+            ),
+            "Two": chapter_digest(
+                "Two",
+                # duplicate name / place / term (casefold) → dropped by keep-first
+                people=[{"section": "Two", "name": "tiger", "role": "stepfather again"}],
+                geo=[{"section": "Two", "place": "perth", "what": "revisited", "arrival": "-"}],
+                glossary=[{"section": "Two", "term": "kd", "meaning": "khaki drill dup"}],
+                # chronology is kept in full
+                chronology=[{"section": "Two", "marker": "1956", "event": "posted"}],
+                interpersonal_stated=["Tiger was supportive."],  # duplicate line dropped
+            ),
+        })
+        generate_report(session, workspace, doc, runner=runner)
+
+        def rows(track: str) -> list[ReportTrack]:
+            return session.scalars(
+                select(ReportTrack).where(
+                    ReportTrack.document_id == doc.id, ReportTrack.track_type == track
+                ).order_by(ReportTrack.seq)
+            ).all()
+
+        assert len(rows("people")) == 1  # keep first "Tiger"
+        assert rows("people")[0].data["role"] == "stepfather"
+        assert len(rows("geo")) == 1
+        assert len(rows("glossary")) == 1
+        assert len(rows("chronology")) == 2  # keep all
+        report = get_report(session, doc)
+        assert report.body_md.count("Tiger was supportive.") == 1  # §3 line deduped
+
+    def test_regenerate_replaces_rows_idempotently(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._two_chapter_doc(session)
+        runner = FakeReportRunner({
+            "One": chapter_digest("One", people=[{"section": "One", "name": "Tiger", "role": "x"}]),
+            "Two": chapter_digest("Two"),
+        })
+        generate_report(session, workspace, doc, runner=runner)
+        generate_report(session, workspace, doc, runner=runner)
+
+        # Exactly one Report row and no doubled track rows after a second run.
+        reports = session.scalars(select(Report).where(Report.document_id == doc.id)).all()
+        assert len(reports) == 1
+        people = session.scalars(
+            select(ReportTrack).where(
+                ReportTrack.document_id == doc.id, ReportTrack.track_type == "people"
+            )
+        ).all()
+        assert len(people) == 1
+
+    def test_regenerate_one_doc_leaves_other_doc_rows_untouched(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc_a = make_doc(
+            session, [heading(2, "One"), para("a")], slug="doc-a"
+        )
+        doc_b = make_doc(
+            session, [heading(2, "One"), para("b")], slug="doc-b"
+        )
+        runner = FakeReportRunner({
+            "One": chapter_digest(
+                "One", people=[{"section": "One", "name": "Person", "role": "r"}]
+            ),
+        })
+        generate_report(session, workspace, doc_a, runner=runner)
+        generate_report(session, workspace, doc_b, runner=runner)
+        # Regenerating A must not delete B's rows.
+        generate_report(session, workspace, doc_a, runner=runner)
+
+        b_rows = session.scalars(
+            select(ReportTrack).where(ReportTrack.document_id == doc_b.id)
+        ).all()
+        assert len(b_rows) == 1
+        assert b_rows[0].source_name == "doc-b"
+
+    def test_report_staleness_tracks_document_changes(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = self._two_chapter_doc(session)
+        runner = FakeReportRunner({"One": chapter_digest("One"), "Two": chapter_digest("Two")})
+        generate_report(session, workspace, doc, runner=runner)
+        report = get_report(session, doc)
+        assert report_is_stale(session, doc, report) is False
+
+        services.save_blocks(session, doc, [*doc.blocks, para("A new paragraph.")])
+        assert report_is_stale(session, doc, report) is True
