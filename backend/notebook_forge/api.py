@@ -78,7 +78,7 @@ def get_session():
         session.commit()
 
 
-app = FastAPI(title="Notebook Forge", version="0.3.0")
+app = FastAPI(title="Notebook Forge", version="0.4.0")
 
 # Serve the local-folder export so its pages are one click away in the UI
 # (browsers refuse file:// links from http pages).
