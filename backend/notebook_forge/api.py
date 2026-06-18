@@ -853,6 +853,56 @@ def report_get(slug: str, session: Session = Depends(get_session)) -> dict[str, 
     return {**_report_state(session, doc), "body_md": report.body_md if report else ""}
 
 
+# ---------------------------------------------------------------- master tracks
+
+_MASTER_SETTING = "reports_master"
+
+
+def _master_status(session: Session) -> dict[str, Any]:
+    """Master track stats plus last-built / last-pushed metadata."""
+    from .models import Setting
+    from .reports.master import master_stats
+
+    row = session.get(Setting, _MASTER_SETTING)
+    meta = dict(row.value) if row else {}
+    return {
+        **master_stats(session),
+        "built_at": meta.get("built_at"),
+        "pushed_at": meta.get("pushed_at"),
+        "drive_file_ids": meta.get("drive_file_ids", {}),
+    }
+
+
+@app.get("/api/reports/master")
+def report_master_status(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Master reference-track status: N documents · N rows · last built."""
+    return _master_status(session)
+
+
+@app.post("/api/reports/master/generate")
+def report_master_generate(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Rebuild the four master CSVs from current ReportTrack rows.
+
+    Validates each CSV's column widths before recording the build. The Drive
+    push is layered on in the publish step.
+    """
+    from .models import Setting
+    from .reports.csvbuild import validate_widths
+    from .reports.master import build_master_csvs
+
+    csvs = build_master_csvs(session)
+    for text in csvs.values():
+        validate_widths(text)  # self-check — raises on a width mismatch
+
+    meta = {"built_at": utcnow().isoformat()}
+    row = session.get(Setting, _MASTER_SETTING)
+    if row is None:
+        session.add(Setting(key=_MASTER_SETTING, value=meta))
+    else:
+        row.value = {**row.value, **meta}
+    return {"ok": True, "master": _master_status(session)}
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)

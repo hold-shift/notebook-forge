@@ -622,3 +622,88 @@ class TestReportApi:
 
         body = client.get(f"/api/documents/{doc.slug}/report").json()["body_md"]
         assert "### 6. Reference tracks" in body
+
+
+# ------------------------------------------------------------------ master
+
+def _gen_for(session: Session, workspace: Path, doc: Any, person: str) -> None:
+    runner = FakeReportRunner({
+        "One": chapter_digest(
+            "One", people=[{"section": "One", "name": person, "role": "r"}]
+        ),
+    })
+    generate_report(session, workspace, doc, runner=runner)
+
+
+class TestMaster:
+    def test_pools_rows_across_documents_with_source_column(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.reports.master import build_master_csvs
+
+        doc_a = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        doc_b = make_doc(session, [heading(2, "One"), para("b")], slug="doc-b")
+        _gen_for(session, workspace, doc_a, "Alice")
+        _gen_for(session, workspace, doc_b, "Bob")
+
+        csvs = build_master_csvs(session)
+        people = csvs["people"]
+        # Both sources present, each row source-tagged; same person could repeat.
+        assert "doc-a,One,Alice,r" in people
+        assert "doc-b,One,Bob,r" in people
+        # Every track produces a header even when empty.
+        assert csvs["glossary"].startswith("source,section,term,meaning")
+
+    def test_rebuild_is_idempotent_and_per_source(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.reports.master import build_master_csvs
+
+        doc_a = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        doc_b = make_doc(session, [heading(2, "One"), para("b")], slug="doc-b")
+        _gen_for(session, workspace, doc_a, "Alice")
+        _gen_for(session, workspace, doc_b, "Bob")
+
+        # Regenerate A with a different person; rebuild master.
+        _gen_for(session, workspace, doc_a, "Alistair")
+        people = build_master_csvs(session)["people"]
+        assert "doc-a,One,Alistair,r" in people
+        assert "doc-a,One,Alice,r" not in people  # A's old row replaced
+        assert "doc-b,One,Bob,r" in people  # B untouched
+        assert people.count("doc-b,One,Bob,r") == 1  # no duplication on rebuild
+
+    def test_master_stats(self, session: Session, workspace: Path) -> None:
+        from notebook_forge.reports.master import master_stats
+
+        doc_a = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc_a, "Alice")
+        stats = master_stats(session)
+        assert stats["documents"] == 1
+        assert stats["by_track"]["people"] == 1
+        assert stats["rows"] >= 1
+
+
+class TestMasterApi:
+    def _client(self, session: Session):  # noqa: ANN202
+        from fastapi.testclient import TestClient
+
+        from notebook_forge.api import app, get_session
+
+        app.dependency_overrides[get_session] = lambda: session
+        return TestClient(app)
+
+    def test_status_empty_then_after_build(
+        self, session: Session, workspace: Path
+    ) -> None:
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        _gen_for(session, workspace, doc, "Alice")
+        client = self._client(session)
+
+        before = client.get("/api/reports/master").json()
+        assert before["built_at"] is None
+        assert before["documents"] == 1
+
+        built = client.post("/api/reports/master/generate").json()
+        assert built["ok"] is True
+        assert built["master"]["built_at"] is not None
+        assert built["master"]["by_track"]["people"] == 1
