@@ -27,6 +27,7 @@ import { buildOutline, headingIds, type BlockLike } from '../forge/outline'
 import { timeAgo } from './Library'
 import { PolishProgress } from './PolishProgress'
 import { PolishReview } from './PolishReview'
+import { HomepageContentPanel } from './HomepageContent'
 
 const AUTOSAVE_MS = 1200
 
@@ -1499,6 +1500,12 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
     }, () => {})
   }, [editor, doc.slug])
 
+  // After a homepage content save/upload, the homepage's dirty state changes
+  // server-side; pull fresh target states so the Pending-changes panel updates.
+  const refreshHomepageTargets = useCallback(() => {
+    api.getDocument(doc.slug).then((f) => setTargets(f.targets), () => {})
+  }, [doc.slug])
+
   const jumpToBlock = useCallback((blockId: string) => {
     const el = document.querySelector<HTMLElement>(`.editor-canvas [data-id="${blockId}"]`)
     if (!el) return
@@ -1573,6 +1580,25 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
         </span>
       </header>
       <div className="editor-wrap">
+        {isHomepage && (
+          <div className="editor-body homepage-body">
+            <div className="homepage-main">
+              <HomepageContentPanel onSaved={refreshHomepageTargets} />
+            </div>
+            <div className="editor-side">
+              <PendingPanel
+                slug={doc.slug}
+                targets={targets}
+                onPush={onPush}
+                onUnpublish={onUnpublish}
+                pushing={pushing}
+                unpublishing={unpublishing}
+                hideUnpublish
+              />
+              <SnapshotsPanel slug={doc.slug} />
+            </div>
+          </div>
+        )}
         {!isHomepage && (
           <>
             <MetaBar
@@ -1621,8 +1647,9 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             />
           </>
         )}
-        <div className={`editor-body${!isHomepage ? ' with-outline' : ''}`}>
-          {!isHomepage && (outlineOpen ? (
+        {!isHomepage && (
+        <div className="editor-body with-outline">
+          {outlineOpen ? (
             <OutlineNavigator nodes={outline} activeId={activeHeading} onSelect={selectHeading} />
           ) : (
             <div className="nf-rail">
@@ -1635,7 +1662,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                 <i className="ti ti-list-tree" aria-hidden />
               </button>
             </div>
-          ))}
+          )}
           <div className="editor-canvas">
             <EditorErrorBoundary>
             <BlockNoteView editor={editor} onChange={onChange} theme="light" slashMenu={false}>
@@ -1746,6 +1773,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   )

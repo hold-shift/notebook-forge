@@ -111,25 +111,49 @@ def test_jsonld_refreshes_edited_fields() -> None:
 
 def test_index_renderer() -> None:
     html = render_index(
-        title="The Skitch Family Archive",
-        welcome="A collection of the writings of Robert Francis Skitch.",
-        dedication="",
-        entries=[
+        title="Robert Francis Skitch",
+        welcome="",
+        dedication="To Mum & Dad.",
+        entries=[],
+        footer_text="© Christopher M.R. Skitch",
+        content={
+            "subject_name": "Robert Francis Skitch",
+            "subject_birth": "1934",
+            "subject_place": "Collie, Western Australia",
+            "tagline": "Eleven memoirs spanning eight decades.",
+            "notebooklm_cta_title": "Explore with NotebookLM",
+            "notebooklm_cta_subtitle": "Ask questions across the collection",
+            "notebooklm_url": "https://notebooklm.google.com/notebook/abc",
+            "about_archive_paras": ["My father wrote these memoirs."],
+            "about_notebooklm_paras": ["I uploaded the collection."],
+            "notebooklm_features": ["Analytical reports"],
+            "signoff": "— Christopher Skitch",
+            "banner_slots": [
+                {"era": "Army Years", "image_url": "", "caption": "Officer portrait",
+                 "notebooklm_adapted": True},
+            ],
+        },
+        timeline=[
             {
-                "years": "1934–1945",
-                "title": "Junior",
-                "description": "Early years.",
-                "url": "rfs/1934-1945_junior.html",
-                "word_count": 12000,
-                "reading_time": "48 min",
+                "name": "Early life & service",
+                "rows": [
+                    {"period": "1934–1945", "title": "Junior",
+                     "reading_time": "~2 hr", "url": "rfs/1934-1945_junior.html"},
+                ],
             }
         ],
-        footer_text="© Christopher M.R. Skitch",
     )
-    assert "The Skitch Family Archive" in html
+    # Masthead
+    assert "Robert Francis Skitch" in html
+    assert "b. 1934" in html
+    assert "To Mum & Dad." in html
+    # Timeline memoir row (replaces the old doc cards)
     assert 'href="rfs/1934-1945_junior.html"' in html
-    assert "12,000 words" in html
-    assert "48 min" in html
+    assert "Junior" in html
+    assert "~2 hr" in html
+    # Closing section + NotebookLM CTA
+    assert "Explore with NotebookLM" in html
+    assert "[NotebookLM edition — image adapted]" in html
 
 
 def test_narrative_merge() -> None:

@@ -128,6 +128,32 @@ export interface MasterStatus {
   drive_file_ids: Record<string, string>
 }
 
+export interface BannerSlot {
+  era: string
+  caption: string
+  notebooklm_adapted: boolean
+  /** Asset SHA of the uploaded image, or null for the placeholder. */
+  image_asset_id: string | null
+  /** Resolved URL for thumbnail display ('' when no image). */
+  image_url: string
+}
+
+export interface HomepageSettings {
+  subject_name: string
+  subject_birth: string
+  subject_place: string
+  tagline: string
+  dedication: string
+  notebooklm_cta_title: string
+  notebooklm_cta_subtitle: string
+  notebooklm_url: string
+  about_archive: string
+  signoff: string
+  about_notebooklm: string
+  notebooklm_features: string[]
+  banner_slots: BannerSlot[]
+}
+
 async function json<T>(resp: Response): Promise<T> {
   if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`)
   return resp.json() as Promise<T>
@@ -276,9 +302,24 @@ export const api = {
         reports: { model: string; rules: string }
         narrative: { label: string }
         footer: { notice: string; license_label: string; license_url: string }
+        homepage: HomepageSettings
         secrets: Record<string, boolean>
       }>(r),
     ),
+  saveHomepageSettings: (body: HomepageSettings) =>
+    fetch('/api/settings/homepage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean; homepage: HomepageSettings }>(r)),
+  uploadBannerImage: (slotIndex: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`/api/homepage/banner-image/${slotIndex}`, {
+      method: 'POST',
+      body: form,
+    }).then((r) => json<{ image_url: string; image_asset_id: string }>(r))
+  },
   saveNarrativeSettings: (body: { label: string }) =>
     fetch('/api/settings/narrative', {
       method: 'PUT',

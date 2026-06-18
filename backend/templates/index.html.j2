@@ -14,137 +14,187 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{{ title }}">
 {% if og_description %}<meta name="twitter:description" content="{{ og_description }}">{% endif %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --paper:#faf8f3; --paper-edge:#f3efe6; --ink:#2a2520; --ink-soft:#5b5248;
-    --ink-faint:#8a8073; --accent:#9c5a3c; --accent-deep:#7d4226; --rule:#e4ddd0;
-    --measure:680px;
-    --narr-bg:#f1eada; --narr-border:#b8a580;
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --khaki:       #6b6b3a;
+    --khaki-light: #e8e7d8;
+    --khaki-mid:   #b5b48a;
+    --khaki-dark:  #4a4a26;
+    --ink:         #111110;
+    --ink-secondary: #444440;
+    --ink-tertiary:  #888880;
+    --rule:        #e0dfd8;
+    --bg:          #ffffff;
+    --bg-offset:   #f8f8f5;
   }
-  *{box-sizing:border-box;}
-  html{-webkit-text-size-adjust:100%;}
-  body{margin:0; background:var(--paper); color:var(--ink);
-    font-family:"Newsreader",Georgia,"Times New Roman",serif; font-optical-sizing:auto;
-    font-size:20px; line-height:1.72; -webkit-font-smoothing:antialiased;
-    text-rendering:optimizeLegibility;}
-  .wrap{max-width:var(--measure); margin:0 auto; padding:4.5rem 24px 5rem;}
 
-  /* masthead */
-  .overline{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.22em;
-    text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 1.2rem;}
-  h1.title{font-family:"Fraunces",serif; font-optical-sizing:auto; font-weight:600;
-    font-size:clamp(2.4rem,6vw,3.3rem); line-height:1.06; letter-spacing:-.012em;
-    margin:0 0 1.6rem; color:var(--ink);}
-  .intro{font-size:1.12rem; line-height:1.66; color:var(--ink-soft); margin:0 0 1.2rem;}
-  .intro.lead{font-size:1.22rem; color:var(--ink);}
-  .dedication{font-family:"Fraunces",serif; font-style:italic; font-size:1.1rem;
-    color:var(--accent-deep); text-align:center; margin:2.4rem 0 0;}
-  .div{height:1px; border:0; background:var(--rule); margin:2.8rem 0 2.4rem;}
-  .seclabel{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.18em;
-    text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin:0 0 1.4rem;}
+  body { background: var(--bg); font-family: Georgia, 'Times New Roman', serif; color: var(--ink); }
+  .page { max-width: 720px; margin: 0 auto; padding: 3.5rem 2rem; }
 
-  /* document cards */
-  .doc{display:block; text-decoration:none; color:inherit;
-    background:#fffdf9; border:1px solid var(--rule); border-radius:12px;
-    padding:1.5rem 1.6rem 1.25rem; margin:0 0 1.1rem;
-    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;}
-  .doc:hover, .doc:focus-visible{transform:translateY(-2px); border-color:#d9cdb8;
-    box-shadow:0 10px 30px -16px rgba(42,37,32,.4); outline:none;}
-  .doc .era{font-family:"Fraunces",serif; font-size:.72rem; letter-spacing:.16em;
-    text-transform:uppercase; color:var(--accent); font-weight:600;
-    font-variant-numeric:lining-nums; margin:0 0 .5rem;}
-  .doc h2{font-family:"Fraunces",serif; font-weight:600; font-size:1.45rem;
-    line-height:1.15; margin:0 0 .15rem; color:var(--ink);}
-  .doc .sub{font-style:italic; color:var(--ink-soft); font-size:1.02rem; margin:0 0 .7rem;}
-  .doc .desc{font-size:.98rem; line-height:1.55; color:var(--ink-soft); margin:0 0 1.1rem;}
-  /* the demoted metadata line */
-  .doc .meta{display:flex; align-items:center; gap:.6rem; padding-top:.85rem;
-    border-top:1px solid var(--rule); font-size:.82rem; color:var(--ink-faint);
-    font-variant-numeric:lining-nums;}
-  .doc .meta .dot{color:var(--rule);}
-  .doc .arrow{margin-left:auto; color:var(--accent); font-family:"Fraunces",serif;
-    font-weight:600; transition:transform .18s;}
-  .doc:hover .arrow{transform:translateX(3px);}
+  .eyebrow { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-tertiary); margin-bottom: .65rem; }
+  .masthead { border-bottom: 2px solid var(--khaki); padding-bottom: 1.75rem; margin-bottom: 2rem; }
+  .masthead h1 { font-size: 42px; font-weight: 400; line-height: 1.1; color: var(--ink); margin-bottom: .4rem; }
+  .masthead .dates { font-family: system-ui, sans-serif; font-size: 14px; letter-spacing: .06em; color: var(--khaki); text-transform: uppercase; margin-bottom: 1rem; }
+  .masthead .tagline { font-size: 17px; color: var(--ink-secondary); line-height: 1.75; max-width: 520px; }
+  .dedication { font-style: italic; font-size: 15px; color: var(--ink-tertiary); margin-top: 1.25rem; }
 
-  footer{margin-top:3.5rem; padding-top:1.8rem; border-top:1px solid var(--rule);
-    font-size:.84rem; color:var(--ink-faint); line-height:1.6;}
-  div.narrative{background:var(--narr-bg); border-left:3px solid var(--narr-border); border-radius:0 10px 10px 0; padding:1.05rem 1.25rem; margin:1.6rem 0;}
-  div.narrative p{margin:0 0 1.05rem;}
-  div.narrative p:last-child{margin-bottom:0;}
-  footer p{margin:0 0 .5rem;}
-  footer a{color:var(--accent-deep); text-decoration:none;}
-  footer a:hover{text-decoration:underline;}
-  footer .mark{font-family:"Fraunces",serif; color:var(--accent); font-weight:600;}
+  .banner { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin-bottom: 2rem; }
+  .banner-cell { background: var(--bg-offset); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 2rem .75rem 1.25rem; border-right: 1px solid var(--rule); position: relative; }
+  .banner-cell:last-child { border-right: none; }
+  .banner-cell svg { opacity: .25; }
+  .banner-cell img { max-width: 100%; height: auto; border-radius: 3px; }
+  .banner-cell .img-label { font-family: system-ui, sans-serif; font-size: 10px; color: var(--ink-tertiary); text-align: center; line-height: 1.4; }
+  .banner-cell .era { font-family: system-ui, sans-serif; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--khaki); position: absolute; top: .75rem; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+  .banner-cell .adapted { font-family: system-ui, sans-serif; font-size: 9px; color: #bbb; margin-top: 2px; text-align: center; }
 
-  @media (max-width:520px){
-    body{font-size:18px;}
-    .wrap{padding-top:3rem;}
-    .doc{padding:1.25rem 1.2rem 1rem;}
-    .doc .meta{flex-wrap:wrap;}
+  .cta { display: flex; align-items: center; gap: 14px; padding: 1rem 1.25rem; border: 1px solid var(--rule); border-left: 3px solid var(--khaki); border-radius: 0 6px 6px 0; background: var(--bg-offset); margin-bottom: 2.5rem; text-decoration: none; color: inherit; }
+  .cta-title { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+  .cta-sub { font-family: system-ui, sans-serif; font-size: 12px; color: var(--ink-tertiary); }
+  .cta-arrow { font-size: 18px; color: var(--khaki-mid); margin-left: auto; flex-shrink: 0; }
+
+  .section-label { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-tertiary); margin-bottom: 1.25rem; }
+  .timeline { position: relative; padding-left: 1.75rem; }
+  .timeline::before { content: ''; position: absolute; left: 3px; top: 6px; bottom: 6px; width: 1px; background: var(--rule); }
+
+  .tgroup { margin-bottom: 1.5rem; }
+  .tgroup-header { display: flex; align-items: center; gap: 10px; margin-bottom: .65rem; position: relative; }
+  /* Centre the dot on the 1px rule (at left:3px) and vertically on its row. */
+  .tdot { width: 8px; height: 8px; border-radius: 50%; background: var(--khaki); flex-shrink: 0; position: absolute; left: calc(-1.75rem - 0.5px); top: 50%; transform: translateY(-50%); }
+  .tgroup-name { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--khaki); }
+
+  .memoir-item { display: flex; align-items: center; gap: 10px; padding: .65rem .9rem; background: var(--bg); border: 1px solid var(--rule); border-radius: 5px; text-decoration: none; color: inherit; margin-bottom: 4px; }
+  .memoir-item:hover { border-color: var(--khaki-mid); }
+  .memoir-period { font-family: system-ui, sans-serif; font-size: 11px; color: var(--ink-tertiary); min-width: 72px; flex-shrink: 0; }
+  .memoir-title { font-size: 15px; color: var(--ink); flex: 1; }
+  .memoir-meta { font-family: system-ui, sans-serif; font-size: 11px; color: var(--ink-tertiary); flex-shrink: 0; margin-right: 6px; }
+  .memoir-arrow { color: var(--khaki-mid); font-size: 14px; }
+
+  .closing { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
+  .closing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1.5rem; }
+  .closing p { font-size: 15px; line-height: 1.85; color: var(--ink-secondary); margin-bottom: 1rem; }
+  .closing p:last-of-type { margin-bottom: 0; }
+  .closing-col h3 { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--khaki); margin-bottom: .85rem; }
+  .notebooklm-features { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .notebooklm-features li { font-family: system-ui, sans-serif; font-size: 13px; color: var(--ink-secondary); display: flex; align-items: baseline; gap: 8px; line-height: 1.5; }
+  .notebooklm-features li::before { content: '—'; color: var(--khaki-mid); flex-shrink: 0; }
+  .signoff { font-style: italic; font-size: 15px; color: var(--ink-tertiary); margin-top: 1.5rem; }
+
+  footer { font-family: system-ui, sans-serif; font-size: 11px; color: var(--ink-tertiary); margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); line-height: 1.7; }
+
+  @media (max-width: 600px) {
+    .closing-grid { grid-template-columns: 1fr; }
   }
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
-  .docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.9rem;margin:0 0 1.1rem;}
-  .docgrid .doc{margin:0;padding:1.1rem 1.2rem .9rem;}
 </style>
 {{ jsonld_script|safe }}
 </head>
 <body>
-<div class="wrap">
+<div class="page">
 
-  <p class="overline">The Family Archive · Collected Memoirs</p>
-  <h1 class="title">{{ title }}</h1>
-
-  {%- macro doc_card(e, compact) -%}
-  <a class="doc" href="{{ e.url }}">
-    {% if e.years %}<p class="era">{{ e.years }}</p>{% endif %}
-    <h2>{{ e.title }}</h2>
-    {% if e.subtitle %}<p class="sub">{{ e.subtitle }}</p>{% endif %}
-    {% if not compact and e.description %}<p class="desc">{{ e.description }}</p>{% endif %}
-    <div class="meta">
-      {%- if e.word_count %}<span>{{ "{:,}".format(e.word_count) }} words</span>{% endif -%}
-      {%- if e.word_count and e.reading_time %}<span class="dot">·</span>{% endif -%}
-      {%- if e.reading_time %}<span class="read">{{ e.reading_time }}</span>{% endif -%}
-      <span class="arrow">Read →</span>
-    </div>
-  </a>
+  {# Each banner slot keeps its own placeholder SVG (copied verbatim from the
+     mockup), shown only when no image has been uploaded for that slot. #}
+  {%- macro placeholder_svg(i) -%}
+    {%- if i == 0 -%}
+      <svg width="48" height="60" viewBox="0 0 24 30" fill="none" stroke="#6b6b3a" stroke-width="1.2">
+        <circle cx="12" cy="8" r="5"/>
+        <path d="M4 28c0-5 3.6-8 8-8s8 3 8 8"/>
+        <rect x="8" y="13" width="8" height="3" rx="1"/>
+      </svg>
+    {%- elif i == 1 -%}
+      <svg width="56" height="44" viewBox="0 0 28 22" fill="none" stroke="#6b6b3a" stroke-width="1.2">
+        <rect x="2" y="6" width="24" height="14" rx="2"/>
+        <rect x="6" y="9" width="4" height="4" rx="1"/>
+        <rect x="18" y="9" width="4" height="3" rx="1"/>
+        <path d="M2 10h24"/>
+        <circle cx="7" cy="20" r="2"/>
+        <circle cx="21" cy="20" r="2"/>
+        <path d="M12 2c0 0 2-2 5-2s7 2 8 6"/>
+      </svg>
+    {%- else -%}
+      <svg width="44" height="56" viewBox="0 0 22 28" fill="none" stroke="#6b6b3a" stroke-width="1.2">
+        <circle cx="11" cy="4" r="2.5"/>
+        <line x1="11" y1="6.5" x2="11" y2="28"/>
+        <line x1="11" y1="10" x2="4" y2="22"/>
+        <line x1="11" y1="10" x2="18" y2="22"/>
+        <circle cx="11" cy="7" r="3.5" stroke-dasharray="2 1"/>
+        <line x1="7" y1="15" x2="15" y2="15"/>
+      </svg>
+    {%- endif -%}
   {%- endmacro -%}
 
-  {% if body_entries is not none %}
-  {% for e in body_entries %}
-    {% if e.kind == 'intro' %}<p class="intro{% if e.lead is defined and e.lead %} lead{% endif %}">{{ e.html|safe }}</p>
-    {% elif e.kind == 'narrative' %}<div class="narrative">{% for p in e.paragraphs %}<p>{{ p|safe }}</p>{% endfor %}</div>
-    {% elif e.kind == 'dedication' %}<p class="dedication">{{ e.text }}</p>
-    {% elif e.kind == 'hr' %}<hr class="div">
-    {% elif e.kind == 'seclabel' %}<p class="seclabel">{{ e.text }}</p>
-    {% elif e.kind == 'group' %}
-      <p class="seclabel">{{ e.label }}</p>
-      {% if e.layout == 'compact_grid' %}<div class="docgrid">{% endif %}
-      {% for card in e.entries %}{{ doc_card(card, e.layout == 'compact_grid') }}{% endfor %}
-      {% if e.layout == 'compact_grid' %}</div>{% endif %}
-    {% endif %}
-  {% endfor %}
-  {% else %}
-  {% if welcome %}
-  {% for para in welcome.split('\n\n') if para.strip() %}
-  <p class="intro{% if loop.first %} lead{% endif %}">{{ para.strip() }}</p>
-  {% endfor %}
-  {% endif %}
+  <div class="masthead">
+    <p class="eyebrow">The Skitch Family Archive</p>
+    <h1>{{ content.subject_name }}</h1>
+    <p class="dates">b. {{ content.subject_birth }} &nbsp;·&nbsp; {{ content.subject_place }}</p>
+    {% if content.tagline %}<p class="tagline">{{ content.tagline }}</p>{% endif %}
+    {% if dedication %}<p class="dedication">{{ dedication }}</p>{% endif %}
+  </div>
 
-  {% if dedication %}<p class="dedication">{{ dedication }}</p>{% endif %}
+  <div class="banner">
+    {% for slot in content.banner_slots %}
+    <div class="banner-cell">
+      {% if slot.era %}<span class="era">{{ slot.era }}</span>{% endif %}
+      {% if slot.image_url %}
+      <img src="{{ slot.image_url }}" alt="{{ slot.caption }}">
+      {% else %}
+      {{ placeholder_svg(loop.index0) }}
+      {% endif %}
+      {% if slot.caption %}<p class="img-label">{{ slot.caption }}</p>{% endif %}
+      {% if slot.notebooklm_adapted %}<p class="adapted">[NotebookLM edition — image adapted]</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
 
-  <hr class="div">
-  <p class="seclabel">The Memoirs</p>
+  <a class="cta" href="{{ content.notebooklm_url }}" target="_blank" rel="noopener">
+    <div>
+      <p class="cta-title">{{ content.notebooklm_cta_title }}</p>
+      {% if content.notebooklm_cta_subtitle %}<p class="cta-sub">{{ content.notebooklm_cta_subtitle }}</p>{% endif %}
+    </div>
+    <span class="cta-arrow">→</span>
+  </a>
 
-  {% for e in entries %}{{ doc_card(e, false) }}{% endfor %}
-  {% endif %}
+  <p class="section-label">Memoirs</p>
+
+  <div class="timeline">
+    {% for group in timeline %}
+    <div class="tgroup">
+      <div class="tgroup-header">
+        <div class="tdot"></div>
+        <span class="tgroup-name">{{ group.name }}</span>
+      </div>
+      {% for row in group.rows %}
+      <a class="memoir-item" href="{{ row.url }}">
+        <span class="memoir-period">{{ row.period }}</span><span class="memoir-title">{{ row.title }}</span>{% if row.reading_time %}<span class="memoir-meta">{{ row.reading_time }}</span>{% endif %}<span class="memoir-arrow">→</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="closing">
+    <p class="section-label">About this archive</p>
+    <div class="closing-grid">
+      <div class="closing-col">
+        <h3>The archive</h3>
+        {% for para in content.about_archive_paras %}<p>{{ para }}</p>{% endfor %}
+        {% if content.signoff %}<p class="signoff">{{ content.signoff }}</p>{% endif %}
+      </div>
+      <div class="closing-col">
+        <h3>Exploring with NotebookLM</h3>
+        {% for para in content.about_notebooklm_paras %}<p>{{ para }}</p>{% endfor %}
+        {% if content.notebooklm_features %}
+        <ul class="notebooklm-features">
+          {% for feature in content.notebooklm_features %}<li>{{ feature }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        <p style="margin-top:1rem"><a href="{{ content.notebooklm_url }}" style="color:var(--khaki);font-family:system-ui,sans-serif;font-size:13px">Open the collection in NotebookLM →</a></p>
+      </div>
+    </div>
+  </div>
 
   {% if footer_text %}
-  <footer>
-    <p>{{ footer_text|safe }}</p>
-  </footer>
+  <footer>{{ footer_text|safe }}</footer>
   {% endif %}
 
 </div>

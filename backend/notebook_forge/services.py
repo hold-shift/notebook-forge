@@ -82,8 +82,12 @@ def effective_content_hash(session: Session, doc: Document) -> str:
     from .blocks import FORGE_NARRATIVE
     meta = dict(doc.meta)
     if doc.kind == "homepage":
-        from .homepage import group_listing_fingerprint
+        from .homepage import group_listing_fingerprint, homepage_fingerprint
+        # group_listing_fingerprint preserves the legacy block-based signal
+        # (e.g. manual member reorder); homepage_fingerprint adds the redesign's
+        # content settings + the full library-group timeline.
         meta["__group_listing__"] = group_listing_fingerprint(session, doc.blocks)
+        meta["__homepage__"] = homepage_fingerprint(session)
     if any(b.get("type") == FORGE_NARRATIVE for b in doc.blocks):
         from .narrative import effective_narrative_label
         meta["__narrative_label__"] = effective_narrative_label(session, doc)

@@ -685,6 +685,20 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
 .secret-status.ok { color: #1f9d6b; }
 .secret-status.missing { color: var(--color-text-tertiary); }
 
+/* ---- Homepage editor: content panel (left) + sticky publish rail (right) ---- */
+.homepage-main { min-width: 0; }
+.homepage-content { margin-bottom: 16px; }
+.homepage-content-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.homepage-content-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-size: 14px; font-weight: 500; color: var(--color-text-primary);
+}
+.homepage-content-toggle i { font-size: 14px; color: var(--color-text-secondary); }
+
 /* ---- Pending-changes list ---- */
 .pending-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .pending-panel-header h3 { margin: 0; }

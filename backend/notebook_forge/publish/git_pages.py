@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from .base import PublishBundle, PublishResult, PublishTarget, copy_if_changed
+from .base import BundleAsset, PublishBundle, PublishResult, PublishTarget, copy_if_changed
 
 
 class GitPagesTarget(PublishTarget):
@@ -71,15 +71,21 @@ class GitPagesTarget(PublishTarget):
                 self._git("checkout", "-B", self.branch, "FETCH_HEAD", cwd=clone)
         return clone
 
-    def publish_root_files(self, root_files: dict[str, str]) -> str | None:
-        """Commit + push only the site-root artefacts (Rebuild index
-        action — e.g. after editing the homepage welcome). Returns the
-        commit sha, or None when nothing changed."""
+    def publish_root_files(
+        self, root_files: dict[str, str], root_assets: list[BundleAsset] = (),
+    ) -> str | None:
+        """Commit + push the site-root artefacts (Rebuild index action — e.g.
+        after editing the homepage) plus any root-level static assets (homepage
+        banner images). Returns the commit sha, or None when nothing changed."""
         clone = self._working_clone()
         for name, content in root_files.items():
             (clone / name).write_text(content)
+        for asset in root_assets:
+            copy_if_changed(asset.path, clone / asset.name, asset.sha256)
         for name in root_files:
             self._git("add", "--", name, cwd=clone)
+        for asset in root_assets:
+            self._git("add", "--", asset.name, cwd=clone)
         if not self._git("status", "--porcelain", cwd=clone):
             return None
         self._git(

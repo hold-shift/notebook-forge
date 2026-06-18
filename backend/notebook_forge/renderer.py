@@ -366,8 +366,15 @@ def render_index(
     og_description: str = "",
     jsonld_script: str = "",
     body_entries: list[dict[str, Any]] | None = None,
+    content: dict[str, Any] | None = None,
+    timeline: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Collection index page from document metadata."""
+    """Collection index page from document metadata.
+
+    `content` carries the redesigned homepage's editable fields and `timeline`
+    the group-derived memoir list; `welcome`/`entries`/`body_entries` are kept
+    for call-site compatibility but are no longer rendered (superseded by the
+    redesign — see docs/Homepage_Redesign_Spec.md §3)."""
     tpl = _env().get_template("index.html.j2")
     return tpl.render(
         title=title,
@@ -379,4 +386,6 @@ def render_index(
         og_description=og_description,
         jsonld_script=jsonld_script,
         body_entries=body_entries,
+        content=content or {},
+        timeline=timeline or [],
     )

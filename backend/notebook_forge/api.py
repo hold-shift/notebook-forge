@@ -39,8 +39,10 @@ def _state() -> dict[str, Any]:
     engine = make_engine(ws)
     factory = make_session_factory(engine)
     with factory() as session:
+        from .homepage import seed_homepage_content
         from .homepage_migration import ensure_homepage
         ensure_homepage(session)
+        seed_homepage_content(session)
         session.commit()
     return {"workspace": ws, "engine": engine, "factory": factory}
 
@@ -62,6 +64,11 @@ def _drive_doc_url(session: Session, doc, target: Target) -> str | None:  # noqa
 
 def _target_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
     if target.kind == "github-pages":
+        if doc.kind == "homepage":
+            base = (target.config or {}).get(
+                "base_url", "https://chris-skitch.github.io/family-history"
+            )
+            return f"{base.rstrip('/')}/index.html"
         return doc.meta.get("canonical_url") or None
     if target.kind == "local-folder":
         filename = "index.html" if doc.kind == "homepage" else f"{doc.slug}.html"
@@ -977,6 +984,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .footer import footer_setting
+    from .homepage import homepage_settings_view
     from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
@@ -990,6 +998,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
         "footer": footer_setting(session),
+        "homepage": homepage_settings_view(session),
         "secrets": {
             "gemini-api-key": bool(get_secret("gemini-api-key", env="GEMINI_API_KEY")),
             "github-pat": bool(get_secret("github-pat", env="GITHUB_PAT")),
@@ -1114,6 +1123,106 @@ def save_footer_settings(
     else:
         setting.value = value
     return {"ok": True, "footer": value}
+
+
+class BannerSlotBody(BaseModel):
+    era: str = ""
+    caption: str = ""
+    notebooklm_adapted: bool = False
+    # The Asset SHA-256 of an uploaded image, or null for the placeholder.
+    # Round-tripped by the panel; set server-side by the banner-image upload.
+    image_asset_id: str | None = None
+
+
+class HomepageSettingsBody(BaseModel):
+    subject_name: str = ""
+    subject_birth: str = ""
+    subject_place: str = ""
+    tagline: str = ""
+    dedication: str = ""
+    notebooklm_cta_title: str = ""
+    notebooklm_cta_subtitle: str = ""
+    notebooklm_url: str = ""
+    about_archive: str = ""
+    signoff: str = ""
+    about_notebooklm: str = ""
+    notebooklm_features: list[str] = []
+    banner_slots: list[BannerSlotBody] = []
+
+
+@app.put("/api/settings/homepage")
+def save_homepage_settings(
+    body: HomepageSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    url = body.notebooklm_url.strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(422, "notebooklm_url must be an http(s) URL")
+    # Merge over the existing row so legacy keys (title/welcome/footer_html)
+    # and any untouched content survive.
+    setting = session.get(Setting, "homepage")
+    value: dict[str, Any] = dict(setting.value) if (setting and setting.value) else {}
+    value.update({
+        "subject_name": body.subject_name.strip(),
+        "subject_birth": body.subject_birth.strip(),
+        "subject_place": body.subject_place.strip(),
+        "tagline": body.tagline.strip(),
+        "dedication": body.dedication.strip(),
+        "notebooklm_cta_title": body.notebooklm_cta_title.strip(),
+        "notebooklm_cta_subtitle": body.notebooklm_cta_subtitle.strip(),
+        "notebooklm_url": url,
+        "about_archive": body.about_archive,
+        "signoff": body.signoff.strip(),
+        "about_notebooklm": body.about_notebooklm,
+        "notebooklm_features": [f.strip() for f in body.notebooklm_features if f.strip()],
+        "banner_slots": [
+            {
+                "era": s.era.strip(),
+                "caption": s.caption.strip(),
+                "notebooklm_adapted": s.notebooklm_adapted,
+                "image_asset_id": s.image_asset_id,
+            }
+            for s in body.banner_slots
+        ],
+    })
+    if setting is None:
+        session.add(Setting(key="homepage", value=value))
+    else:
+        setting.value = value
+    from .homepage import homepage_settings_view
+    return {"ok": True, "homepage": homepage_settings_view(session)}
+
+
+@app.post("/api/homepage/banner-image/{slot_index}")
+def upload_banner_image(
+    slot_index: int,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Store an uploaded image as an Asset and point banner_slots[slot_index]
+    at it. Returns the resolved image_url."""
+    import shutil
+    import tempfile
+
+    from .assets import ingest_file
+    from .homepage import set_banner_image
+
+    if slot_index not in (0, 1, 2):
+        raise HTTPException(422, "slot_index must be 0, 1, or 2")
+    suffix = Path(file.filename or "upload").suffix or ".jpg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        asset = ingest_file(session, _state()["workspace"], tmp_path, "homepage")
+        asset.filename = file.filename or f"upload{suffix}"
+        image_url = set_banner_image(session, slot_index, asset.sha256)
+        session.commit()
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    # image_asset_id lets the Settings panel round-trip the slot on its next Save.
+    return {"image_url": image_url, "image_asset_id": asset.sha256}
 
 
 @app.get("/api/search")

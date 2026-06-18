@@ -237,8 +237,11 @@ def test_root_files_uses_homepage_body_when_present(
     session.flush()
 
     files, warnings = root_files(session, base_url="https://example.org/archive")
+    # The memoir appears via the group-derived timeline.
     assert "Early Years" in files["index.html"]
-    assert "Welcome to the archive" in files["index.html"]
+    # The redesign no longer renders the welcome blurb (spec §3 — superseded
+    # by tagline + about_archive).
+    assert "Welcome to the archive" not in files["index.html"]
     assert warnings == []
 
 
@@ -523,9 +526,158 @@ def test_narrative_blocks_appear_in_homepage_body(session: Session) -> None:
     assert len(narrative_entries) == 1
     assert len(narrative_entries[0]["paragraphs"]) == 2
 
-    # Rendered index HTML contains one div.narrative
+    # The redesigned homepage no longer renders narrative blocks (spec §3),
+    # but the index must still render without error.
     files, _ = root_files(session, base_url="https://example.org")
     html = files.get("index.html", "")
-    assert html.count('<div class="narrative">') == 1
-    assert "A quiet reflection" in html
-    assert "And what came after" in html
+    assert '<div class="narrative">' not in html
+
+
+# ---------------------------------------------------------------------------
+# Step 9: homepage content settings round-trip + banner upload
+# ---------------------------------------------------------------------------
+
+def _new_session(workspace: Path) -> Session:
+    from notebook_forge.db import make_engine, make_session_factory
+    return make_session_factory(make_engine(workspace))()
+
+
+def test_settings_get_includes_seeded_homepage(workspace: Path, api_client) -> None:
+    """Bootstrap seeds defaults; GET /api/settings exposes them."""
+    hp = api_client.get("/api/settings").json()["homepage"]
+    assert hp["subject_name"] == "Robert Francis Skitch"
+    assert len(hp["banner_slots"]) == 3
+    assert hp["banner_slots"][0]["notebooklm_adapted"] is True
+    # No image uploaded yet → empty image_url (placeholder rendered).
+    assert hp["banner_slots"][0]["image_url"] == ""
+
+
+def test_homepage_settings_roundtrip_to_rendered_index(workspace: Path, api_client) -> None:
+    """Edit a field → Save → rebuild → the change appears in index.html."""
+    body = api_client.get("/api/settings").json()["homepage"]
+    body["subject_name"] = "Zaphod Beeblebrox"
+    body["tagline"] = "An entirely different life."
+    resp = api_client.put("/api/settings/homepage", json=body)
+    assert resp.status_code == 200
+    assert resp.json()["homepage"]["subject_name"] == "Zaphod Beeblebrox"
+
+    # Rebuild the root files from the same workspace and confirm the edit.
+    with _new_session(workspace) as s:
+        files, _ = root_files(s, base_url="https://example.org")
+    html = files["index.html"]
+    assert "Zaphod Beeblebrox" in html
+    assert "An entirely different life." in html
+
+
+def test_homepage_settings_put_preserves_legacy_keys(workspace: Path, api_client) -> None:
+    """The PUT merges, so legacy footer_html / title survive."""
+    from notebook_forge.models import Setting
+
+    # First request triggers bootstrap (ensure_homepage + seed); only then
+    # does the "homepage" Setting row exist to inject legacy keys into.
+    body = api_client.get("/api/settings").json()["homepage"]
+    with _new_session(workspace) as s:
+        row = s.get(Setting, "homepage")
+        row.value = {**(row.value or {}), "footer_html": "LEGACY-FOOTER", "title": "Legacy Title"}
+        s.commit()
+
+    body["signoff"] = "— Someone Else"
+    api_client.put("/api/settings/homepage", json=body)
+
+    with _new_session(workspace) as s:
+        value = s.get(Setting, "homepage").value
+    assert value["footer_html"] == "LEGACY-FOOTER"
+    assert value["title"] == "Legacy Title"
+    assert value["signoff"] == "— Someone Else"
+
+
+def test_homepage_settings_rejects_bad_url(workspace: Path, api_client) -> None:
+    body = api_client.get("/api/settings").json()["homepage"]
+    body["notebooklm_url"] = "javascript:alert(1)"
+    resp = api_client.put("/api/settings/homepage", json=body)
+    assert resp.status_code == 422
+
+
+def test_banner_image_upload_roundtrip(workspace: Path, api_client) -> None:
+    """Upload → slot points at the asset → rendered banner uses <img>."""
+    resp = api_client.post(
+        "/api/homepage/banner-image/1",
+        files={"file": ("portrait.jpg", b"\xff\xd8\xff\xe0fakejpeg", "image/jpeg")},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["image_url"].startswith("/api/assets/")
+    assert payload["image_asset_id"]
+
+    # GET reflects the upload on slot 1 only; the panel thumbnail uses the dev
+    # /api/assets URL.
+    hp = api_client.get("/api/settings").json()["homepage"]
+    assert hp["banner_slots"][1]["image_asset_id"] == payload["image_asset_id"]
+    assert hp["banner_slots"][1]["image_url"].startswith("/api/assets/")
+    assert hp["banner_slots"][0]["image_asset_id"] is None
+
+    # Rendered index uses the published static path (copied next to index.html),
+    # not the dev /api/assets URL, so it works on GitHub Pages.
+    with _new_session(workspace) as s:
+        files, _ = root_files(s, base_url="https://example.org")
+    assert '<img src="homepage_assets/banner-1.jpg"' in files["index.html"]
+    assert "/api/assets/" not in files["index.html"]
+
+
+def test_homepage_publish_copies_banner_image(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """Publishing the homepage copies banner images next to index.html and the
+    page references them by relative path (so they load on the published site)."""
+    from notebook_forge.assets import ingest_file
+    from notebook_forge.homepage import seed_homepage_content, set_banner_image
+    from notebook_forge.publish import publish_document
+
+    seed_homepage_content(session)
+    hp = _hp(session, [])
+    img = tmp_path / "portrait.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0banner-bytes")
+    asset = ingest_file(session, workspace, img, "homepage")
+    set_banner_image(session, 0, asset.sha256)
+    session.flush()
+
+    out = tmp_path / "site"
+    target = Target(name="local", kind="local-folder", config={"folder": str(out)})
+    session.add(target)
+    session.flush()
+    session.commit()
+
+    publish_document(session, workspace, hp, target)
+
+    assert (out / "homepage_assets" / "banner-0.jpg").exists()
+    index = (out / "index.html").read_text()
+    assert '<img src="homepage_assets/banner-0.jpg"' in index
+    assert "/api/assets/" not in index
+
+
+def test_banner_image_bad_slot_index(workspace: Path, api_client) -> None:
+    resp = api_client.post(
+        "/api/homepage/banner-image/5",
+        files={"file": ("x.jpg", b"data", "image/jpeg")},
+    )
+    assert resp.status_code == 422
+
+
+def test_content_setting_change_marks_homepage_dirty(session: Session) -> None:
+    """Editing a homepage content field (now the only way to edit the page,
+    since the block editor is gone) changes the homepage's effective hash, so
+    it shows as needing a republish."""
+    from notebook_forge.homepage import seed_homepage_content
+    from notebook_forge.models import Setting
+    from notebook_forge.services import effective_content_hash
+
+    seed_homepage_content(session)
+    hp = _hp(session, [])
+    session.flush()
+    h1 = effective_content_hash(session, hp)
+
+    row = session.get(Setting, "homepage")
+    row.value = {**row.value, "tagline": "A completely new tagline"}
+    session.flush()
+    h2 = effective_content_hash(session, hp)
+    assert h1 != h2

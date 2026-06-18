@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .base import PublishBundle, PublishResult, PublishTarget, copy_if_changed
+from .base import BundleAsset, PublishBundle, PublishResult, PublishTarget, copy_if_changed
 
 
 class LocalFolderTarget(PublishTarget):
@@ -13,11 +13,16 @@ class LocalFolderTarget(PublishTarget):
     def __init__(self, folder: Path) -> None:
         self.folder = Path(folder)
 
-    def publish_root_files(self, root_files: dict[str, str]) -> None:
-        """Write only the site-root artefacts (Rebuild index action)."""
+    def publish_root_files(
+        self, root_files: dict[str, str], root_assets: list[BundleAsset] = (),
+    ) -> None:
+        """Write the site-root artefacts (Rebuild index action) plus any
+        root-level static assets (e.g. homepage banner images)."""
         self.folder.mkdir(parents=True, exist_ok=True)
         for name, content in root_files.items():
             (self.folder / name).write_text(content)
+        for asset in root_assets:
+            copy_if_changed(asset.path, self.folder / asset.name, asset.sha256)
 
     def publish(self, bundle: PublishBundle) -> PublishResult:
         self.folder.mkdir(parents=True, exist_ok=True)

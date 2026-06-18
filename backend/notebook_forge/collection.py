@@ -285,8 +285,6 @@ def root_files(
     """All five root artefacts, regenerated together (spec §8: rebuild on
     every publish so they can never drift from what is actually published).
     Returns (files, warnings)."""
-    from .homepage import get_homepage, homepage_body
-
     now_iso = dt.datetime.now(dt.UTC).isoformat()
     author = author_name(session)
     entries = build_entries(session, target, publishing_slug, now_iso)
@@ -298,46 +296,37 @@ def root_files(
     ]
 
     from .footer import footer_html as _footer_html
+    from .homepage import homepage_content, homepage_timeline
 
-    hp = get_homepage(session)
+    # The published homepage renders entirely from the content settings and the
+    # group-derived timeline (the homepage document's blocks are no longer a
+    # render input — see docs/Homepage_Redesign_Spec.md).
+    content = homepage_content(session)
+    timeline = homepage_timeline(session)
+    footer = _footer_html(session)
+    canonical = f"{base_url.rstrip('/')}/index.html"
+    # Subject name is the page title; tagline is the site description (meta/OG,
+    # JSON-LD, llms.txt). Dedication is content-managed in the homepage editor.
+    title = content.get("subject_name") or "The Family Archive"
+    description = (content.get("tagline") or "").strip()
     warnings: list[str] = []
-    if hp is not None:
-        body, warnings, derived = homepage_body(session, hp)
-        title = derived.get("title", "The Family Archive")
-        welcome = derived.get("welcome", "")
-        footer = _footer_html(session)
-        index_html = render_index(
-            title=title,
-            welcome=welcome,
-            dedication="",
-            entries=[],
-            footer_text=footer,
-            canonical_url=f"{base_url.rstrip('/')}/index.html",
-            og_description=(welcome or "").split("\n", 1)[0][:280],
-            jsonld_script=collection_jsonld(base_url, title, welcome, entries_with_rt, author),
-            body_entries=body,
-        )
-    else:
-        homepage_s = _setting(session, "homepage")
-        title = homepage_s.get("title", "The Family Archive")
-        welcome = homepage_s.get("welcome", "")
-        dedication = homepage_s.get("dedication", "")
-        footer = _footer_html(session)
-        index_html = render_index(
-            title=title,
-            welcome=welcome,
-            dedication=dedication,
-            entries=entries_with_rt,
-            footer_text=footer,
-            canonical_url=f"{base_url.rstrip('/')}/index.html",
-            og_description=(welcome or "").split("\n", 1)[0][:280],
-            jsonld_script=collection_jsonld(base_url, title, welcome, entries_with_rt, author),
-        )
+    index_html = render_index(
+        title=title,
+        welcome="",
+        dedication=content.get("dedication", ""),
+        entries=[],
+        footer_text=footer,
+        canonical_url=canonical,
+        og_description=description[:280],
+        jsonld_script=collection_jsonld(base_url, title, description, entries_with_rt, author),
+        content=content,
+        timeline=timeline,
+    )
 
     return {
         "index.html": index_html,
         "catalogue.json": catalogue,
         "sitemap.xml": render_sitemap(base_url, entries_with_rt, now_iso),
         "robots.txt": render_robots(base_url),
-        "llms.txt": render_llms(title, welcome, entries_with_rt),
+        "llms.txt": render_llms(title, description, entries_with_rt),
     }, warnings

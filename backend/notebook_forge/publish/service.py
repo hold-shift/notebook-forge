@@ -147,7 +147,7 @@ def publish_document(
     adapter: PublishTarget | None = None,
 ) -> dict[str, Any]:
     from ..collection import root_files
-    from ..homepage import get_homepage
+    from ..homepage import get_homepage, homepage_banner_assets
 
     base_url = (target.config or {}).get(
         "base_url", "https://chris-skitch.github.io/family-history"
@@ -163,7 +163,13 @@ def publish_document(
             raise PermissionError(
                 f"target kind '{target.kind}' cannot publish the homepage"
             )
-        commit = publish_fn(files)
+        # Banner images are copied as static files next to index.html so they
+        # resolve on the published site (not via the dev /api/assets endpoint).
+        root_assets = [
+            BundleAsset(name=name, path=path, sha256=sha)
+            for name, path, sha in homepage_banner_assets(session, workspace)
+        ]
+        commit = publish_fn(files, root_assets)
         snap = services.snapshot_document(session, doc, note=f"publish to {target.name}")
         services.mark_published(session, doc, target, snap)
         services.record_change(
