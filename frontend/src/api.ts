@@ -42,6 +42,7 @@ export interface DocSummary {
   group_position: number
   date_confirmed: boolean
   targets: TargetState[]
+  report: ReportState
 }
 
 export interface DocDetail {

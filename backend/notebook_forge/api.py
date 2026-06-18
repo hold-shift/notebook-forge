@@ -264,6 +264,7 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict[str, An
                 "group_position": d.group_position,
                 "date_confirmed": d.meta.get("date_confirmed", True) is not False,
                 "targets": _target_states(session, d),
+                "report": _report_state(session, d),
             }
         )
     return out

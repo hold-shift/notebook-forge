@@ -23,6 +23,7 @@ function doc(overrides: Partial<DocSummary> = {}): DocSummary {
     group_position: 0,
     date_confirmed: true,
     targets: [],
+    report: { exists: false, status: 'never-run', stale: false, needs_push: false },
     ...overrides,
   }
 }
