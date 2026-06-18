@@ -435,7 +435,7 @@ class TestRender:
         assert "- Places: 1" in body
         assert "- Glossary terms: 0" in body
         assert "- Chronology entries: 0" in body
-        assert "master_people.csv" in body
+        assert "master_people" in body
         # No inline CSV at all.
         assert "```csv" not in body
         assert "source,section,name,role_or_relationship" not in body
@@ -1010,10 +1010,10 @@ class TestDrivePush:
         with pytest.raises(PermissionError):
             push_report(session, workspace, doc, client=MockDriveClient(), folder_id="f")
 
-    def test_push_master_uploads_four_csvs_as_text_csv(
+    def test_push_master_uploads_four_sheets(
         self, session: Session, workspace: Path
     ) -> None:
-        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.drive import GOOGLE_SHEET_MIME, MockDriveClient
         from notebook_forge.publish.reports import push_master
 
         doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
@@ -1021,13 +1021,13 @@ class TestDrivePush:
         drive = MockDriveClient()
         results = push_master(session, workspace, client=drive, folder_id="f")
 
+        # Sheet names carry no .csv extension.
         assert {r["name"] for r in results.values()} == {
-            "master_people.csv", "master_geography.csv",
-            "master_glossary.csv", "master_chronology.csv",
+            "master_people", "master_geography", "master_glossary", "master_chronology",
         }
-        # Uploaded as CSV, never converted to a Sheet.
+        # Created as Google Sheets, with CSV bytes for Drive to convert on import.
         for call in (c for c in drive.calls if c[0] == "create"):
-            assert call[1]["body"]["mimeType"] == "text/csv"
+            assert call[1]["body"]["mimeType"] == GOOGLE_SHEET_MIME
             assert call[1]["media_mime"] == "text/csv"
 
     def test_report_push_endpoint(self, session: Session, workspace: Path) -> None:

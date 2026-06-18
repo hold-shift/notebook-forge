@@ -4,9 +4,8 @@ Two deliverables, both into the configured drive target's folder:
 - Per-doc report: a Google Doc named `report_<source_name>` (Markdown imported
   and converted, mirroring the safe edition), tracked on the Report row so a
   re-push updates the same Doc in place.
-- Master tracks: four `text/csv` files (`master_people.csv`, …) uploaded
-  verbatim — NOT converted to Sheets — so NotebookLM ingests them as Data
-  Tables.
+- Master tracks: four Google Sheets (`master_people`, …) — the CSV media is
+  imported and converted to Sheets so NotebookLM can sync them as Data Tables.
 
 The drive client + folder come from `make_adapter` on the drive Target, so the
 mock/real selection, OAuth, and "no folder configured" errors are shared with
@@ -22,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import services
 from ..models import Document, Target, utcnow
-from .drive import DriveClient, upsert_file
+from .drive import GOOGLE_DOC_MIME, GOOGLE_SHEET_MIME, DriveClient, upsert_file
 
 # The report Doc's tab name, distinguishing it from the "[NotebookLM edition]".
 REPORT_TAB_TITLE = "[Analytical report]"
@@ -65,7 +64,7 @@ def push_report(
     name = f"report_{report.source_name}"
     file_id, action = upsert_file(
         client, folder_id, name, report.body_md.encode("utf-8"), "text/markdown",
-        doc_convert=True,
+        drive_mime=GOOGLE_DOC_MIME,
     )
     # Best-effort tab rename — a Docs API hiccup must not fail a good push.
     try:
@@ -89,18 +88,19 @@ def push_master(
     client: DriveClient | None = None,
     folder_id: str | None = None,
 ) -> dict[str, dict[str, str]]:
-    """Build and upload the four master CSVs as text/csv. Returns per-track
-    {file_id, action, name}."""
-    from ..reports.master import MASTER_FILENAMES, build_master_csvs
+    """Build the four master tracks and upload each as a Google Sheet (CSV
+    media converted on import). Returns per-track {file_id, action, name}."""
+    from ..reports.master import MASTER_SHEET_NAMES, build_master_csvs
 
     if client is None or folder_id is None:
         client, folder_id = _drive_client_and_folder(session, workspace)
 
     results: dict[str, dict[str, str]] = {}
     for track_type, text in build_master_csvs(session).items():
-        name = MASTER_FILENAMES[track_type]
+        name = MASTER_SHEET_NAMES[track_type]
         file_id, action = upsert_file(
-            client, folder_id, name, text.encode("utf-8"), "text/csv", doc_convert=False
+            client, folder_id, name, text.encode("utf-8"), "text/csv",
+            drive_mime=GOOGLE_SHEET_MIME,
         )
         results[track_type] = {"file_id": file_id, "action": action, "name": name}
     return results

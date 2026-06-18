@@ -25,12 +25,14 @@ from sqlalchemy.orm import Session
 from ..models import ReportTrack
 from .csvbuild import TRACK_HEADERS, TRACK_TYPES, row_from_data, write_csv
 
-# Drive filenames per track type (note: geo → "geography").
-MASTER_FILENAMES: dict[str, str] = {
-    "people": "master_people.csv",
-    "geo": "master_geography.csv",
-    "glossary": "master_glossary.csv",
-    "chronology": "master_chronology.csv",
+# Drive Sheet names per track type (note: geo → "geography"). No ".csv"
+# extension: these are uploaded as Google Sheets (CSV media converted on
+# import), so NotebookLM ingests them as syncing Data Tables.
+MASTER_SHEET_NAMES: dict[str, str] = {
+    "people": "master_people",
+    "geo": "master_geography",
+    "glossary": "master_glossary",
+    "chronology": "master_chronology",
 }
 
 

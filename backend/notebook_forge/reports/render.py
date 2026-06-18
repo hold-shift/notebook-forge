@@ -113,8 +113,8 @@ def render_tracks_section(tracks: dict[str, list[dict[str, Any]]]) -> str:
     ]
     lines += [
         "",
-        "Full rows — each carrying its `source` column — are pooled into "
-        "master_people.csv, master_geography.csv, master_glossary.csv, and "
-        "master_chronology.csv.",
+        "Full rows — each carrying its `source` column — are pooled into the "
+        "master reference tables (master_people, master_geography, "
+        "master_glossary, master_chronology) maintained as Google Sheets in Drive.",
     ]
     return "\n".join(lines)

@@ -17,6 +17,12 @@ from .base import PublishBundle, PublishResult, PublishTarget
 # edition is clearly distinguishable from the original.
 TAB_TITLE = "[NotebookLM edition]"
 
+# Google Workspace import targets: setting one of these as a file's mimeType on
+# create makes Drive convert the uploaded media (Markdown / CSV) into a native
+# Google Doc / Sheet.
+GOOGLE_DOC_MIME = "application/vnd.google-apps.document"
+GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
+
 
 def create_request_body(name: str, folder_id: str) -> dict[str, Any]:
     """files.create metadata: import-convert to a Google Doc."""
@@ -30,12 +36,6 @@ def create_request_body(name: str, folder_id: str) -> dict[str, Any]:
 def update_request_body(name: str) -> dict[str, Any]:
     """files.update metadata (no parents on update; folder is unchanged)."""
     return {"name": name}
-
-
-def csv_request_body(name: str, folder_id: str) -> dict[str, Any]:
-    """files.create metadata for a plain text/csv file — NOT converted to a
-    Google Sheet, so NotebookLM ingests it as a Data Table."""
-    return {"name": name, "mimeType": "text/csv", "parents": [folder_id]}
 
 
 class DriveClient(Protocol):
@@ -67,13 +67,17 @@ def upsert_file(
     media: bytes,
     media_mime: str,
     *,
-    doc_convert: bool,
+    drive_mime: str,
 ) -> tuple[str, str]:
     """Create `name` in the folder, or update it in place if it already exists.
 
-    doc_convert=True imports the media as a Google Doc (the per-doc report);
-    doc_convert=False stores it verbatim as a CSV file (the master tracks).
-    Returns (file_id, "created"|"updated").
+    drive_mime is the file's Drive mimeType. A Google Workspace type
+    (GOOGLE_DOC_MIME / GOOGLE_SHEET_MIME) makes Drive convert the uploaded
+    media into a native Doc / Sheet on import; a concrete type (e.g. text/csv)
+    stores it verbatim. Returns (file_id, "created"|"updated").
+
+    On update the mimeType is left unchanged (a file's type is fixed at
+    creation); the new media is re-imported into the existing Doc/Sheet.
     """
     existing = client.find_file(name, folder_id)
     if existing:
@@ -81,11 +85,7 @@ def upsert_file(
             client.update_file(existing, update_request_body(name), media, media_mime),
             "updated",
         )
-    body = (
-        create_request_body(name, folder_id)
-        if doc_convert
-        else csv_request_body(name, folder_id)
-    )
+    body = {"name": name, "mimeType": drive_mime, "parents": [folder_id]}
     return client.create_file(body, media, media_mime), "created"
 
 
