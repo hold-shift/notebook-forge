@@ -374,6 +374,11 @@ button:disabled { opacity: 0.55; cursor: default; }
   color: var(--color-text-secondary);
   font-size: 12px;
 }
+/* Keep a field's caption and its ⓘ help on one line above the control
+   (the label is a flex column, so the text + tip must share one flex item). */
+.meta-field-label { display: inline-flex; align-items: center; gap: 5px; }
+/* Right-rail panel headers: the ⓘ prefixes the section label. */
+.panel-head-label { display: inline-flex; align-items: center; gap: 6px; }
 .meta-bar input {
   border: 0.5px solid var(--color-border-tertiary);
   border-radius: var(--border-radius-md);

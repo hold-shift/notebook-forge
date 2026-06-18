@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, SectionLabel, SerifTitle } from '../ui'
+import { Button, InfoTip, SectionLabel, SerifTitle } from '../ui'
 import { BlockNoteView } from '@blocknote/mantine'
 import {
   SuggestionMenuController,
@@ -137,7 +137,17 @@ function ReportPanel({ slug }: { slug: string }) {
       )}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Analytical report</SectionLabel></h3>
+          <span className="panel-head-label">
+            <InfoTip label="About the analytical report" align="right">
+              A derived navigational index of this document — executive summary, section-by-section
+              digest, and people / places / glossary / chronology — built by a single-source LLM
+              pass and pushed to Drive as a separate NotebookLM source (a Google Doc). It's a
+              summary, not a primary record. “Stale” means the document changed since it was
+              generated — regenerate to refresh. Push to Drive is enabled only when there are
+              changes to push.
+            </InfoTip>
+            <h3><SectionLabel>Analytical report</SectionLabel></h3>
+          </span>
         </div>
         <div className="target-rows">
           <div className="target-card">
@@ -443,7 +453,17 @@ function ImagesPanel({
   return (
     <div className="pending-panel images-panel">
       <div className="pending-panel-header">
-        <h3><SectionLabel>Images</SectionLabel></h3>
+        <span className="panel-head-label">
+          <InfoTip label="About the image tools" align="right">
+            Per-figure tools for the NotebookLM-safe edition. “Generate all sketches” makes a
+            faceless silhouette for every eligible figure (has an original photo, Safe mode is
+            “sketch”, and isn't already approved). The face gate decides what to do if a face is
+            still detected — “block” retries, “warn” flags it. “Caption” auto-writes captions for
+            figures missing one. “Approve all” marks sketches final so future batch runs skip
+            them.
+          </InfoTip>
+          <h3><SectionLabel>Images</SectionLabel></h3>
+        </span>
       </div>
 
       <div className="images-summary">
@@ -672,7 +692,16 @@ function PendingPanel({
       {showHistory && <ChangesModal changes={changes} onClose={() => setShowHistory(false)} />}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Pending changes</SectionLabel></h3>
+          <span className="panel-head-label">
+            <InfoTip label="About publishing" align="right">
+              Where this document publishes. HTML = the public GitHub Pages site (which also hosts
+              the original photos); Drive = the NotebookLM-safe Google Doc (faceless sketches);
+              Local = an offline static mirror. A filled dot and “N changes behind” mean there are
+              edits since that target was last pushed. Unpublish removes the document from a target
+              without deleting it.
+            </InfoTip>
+            <h3><SectionLabel>Pending changes</SectionLabel></h3>
+          </span>
           {edits.length > 0 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowHistory(true)}>
               History
@@ -868,8 +897,14 @@ function MetaBar({
         Years
         <input value={years} onChange={(e) => setYears(e.target.value)} className="meta-years" />
       </label>
-      <label className="meta-toc" title="Table of contents on the published HTML page. Auto = on when the document has more than 15 headings. Always rebuilt from current headings at publish.">
-        ToC
+      <label className="meta-toc">
+        <span className="meta-field-label">
+          ToC
+          <InfoTip label="About the table of contents">
+            Table of contents on the published HTML page. Auto shows it only when the document has
+            15+ headings; On/Off force it. Rebuilt from your current headings on every publish.
+          </InfoTip>
+        </span>
         <select value={toc} onChange={(e) => setToc(e.target.value)}>
           <option value="auto">Auto</option>
           <option value="on">On</option>
@@ -878,8 +913,15 @@ function MetaBar({
       </label>
       <div className="meta-second-row">
         {hasNarrativeBlocks && (
-          <label className="meta-narrative" title="Override the workspace narrative panel label for this document. Unchecked = inherit workspace default.">
-            Narrative label
+          <label className="meta-narrative">
+            <span className="meta-field-label">
+              Narrative label
+              <InfoTip label="About the narrative label">
+                Narrative panels can show a small-caps label (e.g. “From the author”). Tick to
+                override the workspace default for this document only; unticked inherits the
+                Settings value.
+              </InfoTip>
+            </span>
             <span className="meta-narrative-row">
               <input
                 type="checkbox"
@@ -896,12 +938,25 @@ function MetaBar({
           </label>
         )}
         <label className="meta-standfirst">
-          Standfirst
+          <span className="meta-field-label">
+            Standfirst
+            <InfoTip label="About the standfirst">
+              A one-line summary shown under the title on the published page and in the library
+              listings. Optional.
+            </InfoTip>
+          </span>
           <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
         </label>
       </div>
-      <label className="meta-slug" title="Internal library ID and URL path segment. Changing it makes the old URL a dead link until re-published.">
-        Slug
+      <label className="meta-slug">
+        <span className="meta-field-label">
+          Slug
+          <InfoTip label="About the slug">
+            The document's identifier — used in its public URL and as its NotebookLM/Drive source
+            name. “Update” regenerates it from the title and years. Changing it breaks the old URL
+            until you republish.
+          </InfoTip>
+        </span>
         <span className="meta-slug-row">
           <input
             value={slug}
@@ -947,7 +1002,6 @@ function MetaBar({
         <button
           type="button"
           disabled={state === 'saving'}
-          title="Re-run extraction from the archived source file"
           onClick={() => {
             if (
               !confirm(
@@ -977,14 +1031,25 @@ function MetaBar({
           ⟳ Re-ingest from source
         </button>
       )}
+      {Boolean(meta.source_asset_id) && (
+        <InfoTip label="About re-ingest">
+          Re-extracts the prose from the original imported PDF/DOCX (e.g. after correcting the
+          source). The text is rebuilt, but your figure work — sketches, approvals, caption
+          edits — carries over. A snapshot is taken first, so Restore undoes it.
+        </InfoTip>
+      )}
       <button
         type="button"
         disabled={polishing || state === 'saving'}
-        title="Run Gemini mechanical cleanup (typography, whitespace, obvious typos). A snapshot is taken first."
         onClick={onPolish}
       >
         {polishing ? '✨ Polishing…' : '✨ Polish text'}
       </button>
+      <InfoTip label="About text polish">
+        A mechanical clean-up pass — typography, whitespace, obvious typos. Safe fixes apply
+        automatically; every word-level change is held for your review with a diff. It never
+        rewrites prose, and a snapshot is taken first.
+      </InfoTip>
       {polishBadge}
       {needsConfirm && (
         <span className="confirm-hint">
@@ -1088,7 +1153,14 @@ function SnapshotsPanel({ slug }: { slug: string }) {
       )}
       <div className="pending-panel snapshots-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Snapshots</SectionLabel></h3>
+          <span className="panel-head-label">
+            <InfoTip label="About snapshots" align="right">
+              Point-in-time copies of the document, taken automatically before risky actions
+              (polish, re-ingest, publish) and on every publish. Restore rolls the document back to
+              that state.
+            </InfoTip>
+            <h3><SectionLabel>Snapshots</SectionLabel></h3>
+          </span>
           {snaps.length > 3 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowAll(true)}>
               All {snaps.length}

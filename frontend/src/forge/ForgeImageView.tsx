@@ -3,6 +3,7 @@
  * Kept editor-free so it can be unit-tested directly. */
 
 import { useRef, useState } from 'react'
+import { InfoTip } from '../ui'
 import { AutoTextarea } from './AutoTextarea'
 
 export type SafeMode = 'sketch' | 'original' | 'omit'
@@ -244,6 +245,14 @@ export function ForgeImageView({
           >
             {approval === 'approved' ? '✓ approved' : '○ pending'}
           </button>
+          <InfoTip label="About the figure tools" align="right">
+            These tools prepare this figure for the NotebookLM-safe edition. Generate/Regenerate
+            makes a faceless sketch; “✎ prompt” overrides the silhouette prompt for this figure
+            only; “Upload sketch” lets you supply your own. “Safe: sketch / original / omit”
+            chooses what the safe edition embeds — the public site always uses the original.
+            A “face flag” means a face was still detected; review before approving. Toggle
+            approval to mark the sketch final — approved figures are skipped by batch generation.
+          </InfoTip>
         </div>
       </figcaption>
       {showPrompt && (
