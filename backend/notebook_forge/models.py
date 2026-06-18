@@ -176,9 +176,10 @@ class Report(Base):
     body_md: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String, default="generated")
     drive_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    generated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    # Set explicitly on every (re)generation — NOT onupdate, so a later push
+    # (which writes pushed_at) does not bump it. pushed_at < generated_at means
+    # the current generation still needs pushing.
+    generated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     pushed_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

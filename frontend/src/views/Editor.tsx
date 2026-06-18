@@ -120,6 +120,7 @@ function ReportPanel({ slug }: { slug: string }) {
   }, [slug])
 
   const exists = report !== 'loading' && report !== null && report.exists
+  const needsPush = exists && (report as ReportState).needs_push
   const badge = computeReportBadge(report)
   const driveId = exists ? (report as ReportState).drive_file_id : null
 
@@ -165,8 +166,12 @@ function ReportPanel({ slug }: { slug: string }) {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={!exists || generating || pushing}
-                title="Push report_<source_name> to Drive"
+                disabled={!needsPush || generating || pushing}
+                title={
+                  needsPush
+                    ? 'Push report_<source_name> to Drive'
+                    : 'Already pushed — regenerate to push again'
+                }
                 onClick={onPush}
               >
                 {pushing ? 'Pushing…' : 'Push to Drive'}

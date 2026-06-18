@@ -915,6 +915,52 @@ class TestMasterApi:
 
 # ------------------------------------------------------------------ drive push
 
+class TestNeedsPush:
+    """report_needs_push: active only when the current generation is unpushed."""
+
+    def test_transitions_generate_push_regenerate(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from notebook_forge.publish.drive import MockDriveClient
+        from notebook_forge.publish.reports import push_report
+        from notebook_forge.reports.service import get_report, report_needs_push
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        runner = FakeReportRunner({"One": chapter_digest("One")})
+
+        # Generated, never pushed → needs push.
+        generate_report(session, workspace, doc, runner=runner)
+        assert report_needs_push(get_report(session, doc)) is True
+
+        # Pushed → no longer needs push.
+        push_report(session, workspace, doc, client=MockDriveClient(), folder_id="f")
+        assert report_needs_push(get_report(session, doc)) is False
+
+        # Regenerated after push → needs push again (generated_at > pushed_at).
+        generate_report(session, workspace, doc, runner=runner)
+        assert report_needs_push(get_report(session, doc)) is True
+
+    def test_never_generated_does_not_need_push(self) -> None:
+        from notebook_forge.reports.service import report_needs_push
+
+        assert report_needs_push(None) is False
+
+    def test_api_exposes_needs_push_flag(
+        self, session: Session, workspace: Path
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from notebook_forge.api import app, get_session
+
+        doc = make_doc(session, [heading(2, "One"), para("a")], slug="doc-a")
+        generate_report(
+            session, workspace, doc, runner=FakeReportRunner({"One": chapter_digest("One")})
+        )
+        app.dependency_overrides[get_session] = lambda: session
+        data = TestClient(app).get(f"/api/documents/{doc.slug}/report").json()
+        assert data["needs_push"] is True
+
+
 class TestDrivePush:
     def test_push_report_creates_doc_and_tracks_file(
         self, session: Session, workspace: Path

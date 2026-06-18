@@ -100,6 +100,9 @@ export interface ReportState {
   exists: boolean
   status: string
   stale: boolean
+  /** True when the current generation has not yet been pushed to Drive
+   * (never pushed, or regenerated since the last push). */
+  needs_push: boolean
   model?: string
   source_name?: string
   generated_at?: string | null

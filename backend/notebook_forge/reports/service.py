@@ -22,7 +22,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from .. import services
-from ..models import Document, Report, ReportTrack, Setting
+from ..models import Document, Report, ReportTrack, Setting, utcnow
 from .chunker import chunk_document
 from .csvbuild import TRACK_FIELDS, TRACK_TYPES
 from .render import ReportData, render_report
@@ -257,6 +257,11 @@ def _persist(
     report.exec_summary = exec_summary
     report.body_md = body_md
     report.content_hash = content_hash
+    # Stamp generation time explicitly (the column is no longer onupdate), so a
+    # later push doesn't bump it. pushed_at / drive_file_id are left intact —
+    # the prior Drive Doc still exists and stays linked — and the freshly bumped
+    # generated_at now exceeds pushed_at, which is what flags "needs push".
+    report.generated_at = utcnow()
     session.flush()
 
     for track_type, rows in tracks.items():
@@ -281,3 +286,13 @@ def get_report(session: Session, doc: Document) -> Report | None:
 def report_is_stale(session: Session, doc: Document, report: Report) -> bool:
     """A report is stale once the document content diverges from generation."""
     return services.effective_content_hash(session, doc) != report.content_hash
+
+
+def report_needs_push(report: Report | None) -> bool:
+    """True when the current generation has not yet been pushed to Drive —
+    never pushed, or regenerated since the last push."""
+    if report is None:
+        return False
+    if report.pushed_at is None:
+        return True
+    return report.generated_at > report.pushed_at

@@ -7,6 +7,7 @@ function makeReport(overrides: Partial<ReportState> = {}): ReportState {
     exists: true,
     status: 'generated',
     stale: false,
+    needs_push: true,
     model: 'gemini-3.5-flash',
     source_name: '1934-1945_junior',
     ...overrides,

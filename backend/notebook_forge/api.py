@@ -787,11 +787,11 @@ def polish_resolve_flags(
 def _report_state(session: Session, doc) -> dict[str, Any]:  # noqa: ANN001
     """Status payload for a document's analytical report (None → never run)."""
     from .models import ReportTrack
-    from .reports.service import get_report, report_is_stale
+    from .reports.service import get_report, report_is_stale, report_needs_push
 
     report = get_report(session, doc)
     if report is None:
-        return {"exists": False, "stale": False, "status": "never-run"}
+        return {"exists": False, "stale": False, "needs_push": False, "status": "never-run"}
     counts = dict(
         session.execute(
             select(ReportTrack.track_type, func.count())
@@ -803,6 +803,7 @@ def _report_state(session: Session, doc) -> dict[str, Any]:  # noqa: ANN001
         "exists": True,
         "status": report.status,
         "stale": report_is_stale(session, doc, report),
+        "needs_push": report_needs_push(report),
         "model": report.model,
         "source_name": report.source_name,
         "generated_at": report.generated_at.isoformat() if report.generated_at else None,
