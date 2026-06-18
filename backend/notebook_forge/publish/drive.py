@@ -17,6 +17,12 @@ from .base import PublishBundle, PublishResult, PublishTarget
 # edition is clearly distinguishable from the original.
 TAB_TITLE = "[NotebookLM edition]"
 
+# Google Workspace import targets: setting one of these as a file's mimeType on
+# create makes Drive convert the uploaded media (Markdown / CSV) into a native
+# Google Doc / Sheet.
+GOOGLE_DOC_MIME = "application/vnd.google-apps.document"
+GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
+
 
 def create_request_body(name: str, folder_id: str) -> dict[str, Any]:
     """files.create metadata: import-convert to a Google Doc."""
@@ -52,6 +58,35 @@ class DriveClient(Protocol):
     def set_tab_title(self, file_id: str, title: str) -> None:
         """Rename the Google Doc's first tab (Docs API)."""
         ...
+
+
+def upsert_file(
+    client: DriveClient,
+    folder_id: str,
+    name: str,
+    media: bytes,
+    media_mime: str,
+    *,
+    drive_mime: str,
+) -> tuple[str, str]:
+    """Create `name` in the folder, or update it in place if it already exists.
+
+    drive_mime is the file's Drive mimeType. A Google Workspace type
+    (GOOGLE_DOC_MIME / GOOGLE_SHEET_MIME) makes Drive convert the uploaded
+    media into a native Doc / Sheet on import; a concrete type (e.g. text/csv)
+    stores it verbatim. Returns (file_id, "created"|"updated").
+
+    On update the mimeType is left unchanged (a file's type is fixed at
+    creation); the new media is re-imported into the existing Doc/Sheet.
+    """
+    existing = client.find_file(name, folder_id)
+    if existing:
+        return (
+            client.update_file(existing, update_request_body(name), media, media_mime),
+            "updated",
+        )
+    body = {"name": name, "mimeType": drive_mime, "parents": [folder_id]}
+    return client.create_file(body, media, media_mime), "created"
 
 
 @dataclass

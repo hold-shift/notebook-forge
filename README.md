@@ -3,7 +3,7 @@
 # Notebook Forge
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.3.0-success)
+![Version](https://img.shields.io/badge/version-0.4.0-success)
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -167,6 +167,29 @@ state, "N changes behind", and a link to open the published output.
   sketches inlined as a Google Doc; captions link back to the originals).
 - **Local folder** — a static mirror of the site for rehearsal or offline use.
 
+### Analytical reports & master reference tracks
+
+A second, text‑only analytical artifact that sits beside the safe edition — for
+making a corpus *navigable* in NotebookLM, not just readable.
+
+- **Per‑document report** — a navigational index of one memoir: an executive
+  summary, a section‑by‑section digest, interpersonal dynamics, source
+  inconsistencies, notable verbatim anchors, and reference‑track counts. It is
+  built by a chunked, **single‑source** LLM pass (one call per chapter, so no
+  cross‑chapter or cross‑document contamination), preserves the author's exact
+  spellings, and tags every interpretive statement `[INFERENCE]`. Generate /
+  Regenerate from the editor's right rail and **Push to Drive** as a separate
+  `report_<source>` Google Doc — its own NotebookLM source. A status badge
+  (generated / stale / not generated) shows on every Library card.
+- **Master reference tracks** — a corpus‑wide builder pools every report's
+  structured rows into four **Google Sheets** (`master_people`,
+  `master_geography`, `master_glossary`, `master_chronology`) that NotebookLM
+  ingests as syncing **Data Tables**. Every row keeps a `source` column so it
+  stays traceable across documents (pooling, never cross‑document merging).
+
+The report is derived and navigational — where it and the original memoir
+differ, the original is authoritative.
+
 ### Homepage & collection index
 
 The **Homepage** is itself a first‑class document in the Library. It carries a
@@ -179,7 +202,9 @@ target.
 Workspace‑wide configuration: sketch model & silhouette prompt, face‑gate
 policy, text‑polish model & rules, the optional narrative label, the
 **footer / licence** notice printed on every published page and Google Doc,
-and connection status for each secret.
+and connection status for each secret. A **Tools** section holds the analytical
+**report** model & rules and the **master reference‑track** builder
+(Generate / Regenerate → the four Google Sheets, with a last‑built status line).
 
 ## Requirements
 

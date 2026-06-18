@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api'
+import { api, type MasterStatus } from '../api'
 import { Button } from '../ui'
 
 export function Settings({ onBack }: { onBack: () => void }) {
@@ -11,6 +11,11 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [polishModel, setPolishModel] = useState('')
   const [polishRules, setPolishRules] = useState('')
   const [polishState, setPolishState] = useState('')
+  const [reportModel, setReportModel] = useState('')
+  const [reportRules, setReportRules] = useState('')
+  const [reportState, setReportState] = useState('')
+  const [master, setMaster] = useState<MasterStatus | null>(null)
+  const [masterState, setMasterState] = useState('')
   const [narrativeLabel, setNarrativeLabel] = useState('')
   const [narrativeState, setNarrativeState] = useState('')
   const [footerNotice, setFooterNotice] = useState('')
@@ -26,11 +31,14 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setFaceGate(s.sketch.face_gate)
       setPolishModel(s.polish.model)
       setPolishRules(s.polish.extra_rules)
+      setReportModel(s.reports.model)
+      setReportRules(s.reports.rules)
       setNarrativeLabel(s.narrative.label)
       setFooterNotice(s.footer.notice)
       setFooterLicenseLabel(s.footer.license_label)
       setFooterLicenseUrl(s.footer.license_url)
     })
+    api.masterStatus().then(setMaster, () => setMaster(null))
   }, [])
 
   const saveSketch = () => {
@@ -46,6 +54,25 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.savePolishSettings({ model: polishModel, extra_rules: polishRules }).then(
       () => setPolishState('Saved'),
       (e) => setPolishState(`Failed: ${e}`),
+    )
+  }
+
+  const saveReport = () => {
+    setReportState('saving')
+    api.saveReportSettings({ model: reportModel, rules: reportRules }).then(
+      () => setReportState('Saved'),
+      (e) => setReportState(`Failed: ${e}`),
+    )
+  }
+
+  const generateMaster = () => {
+    setMasterState('Building & pushing…')
+    api.generateMaster().then(
+      (r) => {
+        setMaster(r.master)
+        setMasterState('Pushed to Drive')
+      },
+      (e) => setMasterState(`Failed: ${e}`),
     )
   }
 
@@ -162,6 +189,66 @@ export function Settings({ onBack }: { onBack: () => void }) {
             <Button variant="primary" onClick={savePolish}>Save polish settings</Button>
             {polishState && <span className="settings-state muted">{polishState}</span>}
           </div>
+        </div>
+      </section>
+
+      {/* Tools — analytical reports & master tracks */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Tools</h2>
+          <p>
+            Analytical reports — a per-document navigational index pushed to Drive as a separate
+            NotebookLM source — and the corpus-wide master reference tracks.
+          </p>
+        </div>
+        <div className="settings-fields">
+          <h3>Report configuration</h3>
+          <div className="settings-row">
+            <label htmlFor="report-model">Report model</label>
+            <div className="settings-control">
+              <input
+                id="report-model"
+                value={reportModel}
+                onChange={(e) => setReportModel(e.target.value)}
+                placeholder="gemini-3.5-flash"
+              />
+            </div>
+          </div>
+          <div className="settings-row settings-row-tall">
+            <label htmlFor="report-rules">Extra rules</label>
+            <div className="settings-control">
+              <textarea
+                id="report-rules"
+                rows={4}
+                value={reportRules}
+                onChange={(e) => setReportRules(e.target.value)}
+                placeholder="Appended after the built-in fidelity rules. Leave blank to use defaults only."
+              />
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <Button variant="primary" onClick={saveReport}>Save report settings</Button>
+            {reportState && <span className="settings-state muted">{reportState}</span>}
+          </div>
+
+          <h3 style={{ marginTop: 24 }}>Master reference tracks</h3>
+          <p className="settings-hint" style={{ marginBottom: 12 }}>
+            Pools every document's report rows into four CSVs (people · geography · glossary ·
+            chronology) and pushes them to Drive as NotebookLM Data Tables.
+          </p>
+          <div className="settings-save-row">
+            <Button variant="primary" onClick={generateMaster}>
+              {master?.built_at ? 'Regenerate master tracks' : 'Generate master tracks'}
+            </Button>
+            {masterState && <span className="settings-state muted">{masterState}</span>}
+          </div>
+          <p className="settings-hint" style={{ marginTop: 8 }}>
+            {master && master.built_at
+              ? `Last built ${new Date(master.built_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${master.documents} doc${master.documents === 1 ? '' : 's'} · ${master.rows} row${master.rows === 1 ? '' : 's'}`
+              : master
+                ? `Never built · ${master.documents} doc${master.documents === 1 ? '' : 's'} with reports · ${master.rows} row${master.rows === 1 ? '' : 's'} available`
+                : 'Master status unavailable.'}
+          </p>
         </div>
       </section>
 

@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,7 @@ def get_session():
         session.commit()
 
 
-app = FastAPI(title="Notebook Forge", version="0.3.0")
+app = FastAPI(title="Notebook Forge", version="0.4.0")
 
 # Serve the local-folder export so its pages are one click away in the UI
 # (browsers refuse file:// links from http pages).
@@ -94,6 +94,10 @@ _polish_progress: dict[str, dict] = {}
 # In-process job registry for bulk sketch generation.
 # Key: "{slug}:{job_id}" — GIL-safe dict mutations; not persisted.
 _sketch_jobs: dict[str, dict] = {}
+
+# In-process progress registry for in-flight report generation, keyed by doc
+# slug. Written by the /report/generate worker, read by /report/progress.
+_report_progress: dict[str, dict] = {}
 
 
 class SaveBlocksBody(BaseModel):
@@ -260,6 +264,7 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict[str, An
                 "group_position": d.group_position,
                 "date_confirmed": d.meta.get("date_confirmed", True) is not False,
                 "targets": _target_states(session, d),
+                "report": _report_state(session, d),
             }
         )
     return out
@@ -778,6 +783,153 @@ def polish_resolve_flags(
     return polish_last(slug, session)
 
 
+# ---------------------------------------------------------------- reports
+
+def _report_state(session: Session, doc) -> dict[str, Any]:  # noqa: ANN001
+    """Status payload for a document's analytical report (None → never run)."""
+    from .models import ReportTrack
+    from .reports.service import get_report, report_is_stale, report_needs_push
+
+    report = get_report(session, doc)
+    if report is None:
+        return {"exists": False, "stale": False, "needs_push": False, "status": "never-run"}
+    counts = dict(
+        session.execute(
+            select(ReportTrack.track_type, func.count())
+            .where(ReportTrack.document_id == doc.id)
+            .group_by(ReportTrack.track_type)
+        ).all()
+    )
+    return {
+        "exists": True,
+        "status": report.status,
+        "stale": report_is_stale(session, doc, report),
+        "needs_push": report_needs_push(report),
+        "model": report.model,
+        "source_name": report.source_name,
+        "generated_at": report.generated_at.isoformat() if report.generated_at else None,
+        "pushed_at": report.pushed_at.isoformat() if report.pushed_at else None,
+        "drive_file_id": report.drive_file_id,
+        "tracks": {tt: counts.get(tt, 0) for tt in ("people", "geo", "glossary", "chronology")},
+    }
+
+
+@app.post("/api/documents/{slug}/report/generate")
+def report_generate(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Generate (or regenerate) the analytical report and return its status.
+
+    Runs synchronously; the frontend polls /report/progress for chunk movement.
+    """
+    from .reports.service import generate_report
+
+    doc = _get_doc(session, slug)
+    if doc.kind == "homepage":
+        raise HTTPException(409, "the homepage has no analytical report")
+    prog: dict = {"running": True, "done": 0, "total": 0, "failed": 0}
+    _report_progress[slug] = prog
+    try:
+        detail = generate_report(session, _state()["workspace"], doc, progress=prog)
+    except RuntimeError as exc:  # no Gemini key configured
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        prog["running"] = False
+    return {"ok": True, "detail": detail, "report": _report_state(session, doc)}
+
+
+@app.get("/api/documents/{slug}/report/progress")
+def report_progress(slug: str) -> dict[str, Any]:
+    """Live progress for an in-flight report run (polled during generation)."""
+    p = _report_progress.get(slug)
+    if not p:
+        return {"running": False, "done": 0, "total": 0, "failed": 0}
+    return dict(p)
+
+
+@app.get("/api/documents/{slug}/report")
+def report_get(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Report status plus the rendered body (body is "" when never generated)."""
+    from .reports.service import get_report
+
+    doc = _get_doc(session, slug)
+    report = get_report(session, doc)
+    return {**_report_state(session, doc), "body_md": report.body_md if report else ""}
+
+
+@app.post("/api/documents/{slug}/report/push")
+def report_push(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Push report_<source_name> to Drive (creates or updates the Doc)."""
+    from .publish.reports import push_report
+
+    doc = _get_doc(session, slug)
+    try:
+        detail = push_report(session, _state()["workspace"], doc)
+    except PermissionError as exc:  # not generated yet / no Drive target / no auth
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "detail": detail, "report": _report_state(session, doc)}
+
+
+# ---------------------------------------------------------------- master tracks
+
+_MASTER_SETTING = "reports_master"
+
+
+def _master_status(session: Session) -> dict[str, Any]:
+    """Master track stats plus last-built / last-pushed metadata."""
+    from .models import Setting
+    from .reports.master import master_stats
+
+    row = session.get(Setting, _MASTER_SETTING)
+    meta = dict(row.value) if row else {}
+    return {
+        **master_stats(session),
+        "built_at": meta.get("built_at"),
+        "pushed_at": meta.get("pushed_at"),
+        "drive_file_ids": meta.get("drive_file_ids", {}),
+    }
+
+
+@app.get("/api/reports/master")
+def report_master_status(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Master reference-track status: N documents · N rows · last built."""
+    return _master_status(session)
+
+
+@app.post("/api/reports/master/generate")
+def report_master_generate(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Rebuild the four master CSVs from current ReportTrack rows and push them
+    to Drive as text/csv Data Tables.
+
+    Each CSV's column widths are self-checked before the push; build_at /
+    pushed_at / drive_file_ids are recorded together so a failed push records
+    nothing.
+    """
+    from .models import Setting
+    from .publish.reports import push_master
+    from .reports.csvbuild import validate_widths
+    from .reports.master import build_master_csvs
+
+    for text in build_master_csvs(session).values():
+        validate_widths(text)  # self-check — raises on a width mismatch
+
+    try:
+        pushed = push_master(session, _state()["workspace"])
+    except PermissionError as exc:  # no Drive target / no auth
+        raise HTTPException(409, str(exc)) from exc
+
+    now = utcnow().isoformat()
+    meta = {
+        "built_at": now,
+        "pushed_at": now,
+        "drive_file_ids": {tt: r["file_id"] for tt, r in pushed.items()},
+    }
+    row = session.get(Setting, _MASTER_SETTING)
+    if row is None:
+        session.add(Setting(key=_MASTER_SETTING, value=meta))
+    else:
+        row.value = {**row.value, **meta}
+    return {"ok": True, "master": _master_status(session), "pushed": pushed}
+
+
 @app.post("/api/documents/{slug}/publish/{target_name}")
 def publish(
     slug: str, target_name: str, session: Session = Depends(get_session)
@@ -828,12 +980,14 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
+    from .reports.service import report_settings
     from .secrets_store import get_secret
     from .sketch_service import sketch_settings
 
     return {
         "sketch": sketch_settings(session),
         "polish": polish_settings(session),
+        "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
         "footer": footer_setting(session),
         "secrets": {
@@ -893,6 +1047,26 @@ def save_polish_settings(
     else:
         setting.value = value
     return {"ok": True, "polish": value}
+
+
+class ReportSettingsBody(BaseModel):
+    model: str
+    rules: str = ""
+
+
+@app.put("/api/settings/reports")
+def save_report_settings(
+    body: ReportSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    value = {"model": body.model.strip(), "rules": body.rules}
+    setting = session.get(Setting, "reports")
+    if setting is None:
+        session.add(Setting(key="reports", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "reports": value}
 
 
 class NarrativeSettingsBody(BaseModel):

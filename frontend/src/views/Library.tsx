@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type DocSummary, type GroupInfo, type TargetState } from '../api'
+import { api, type DocSummary, type GroupInfo, type ReportState, type TargetState } from '../api'
 import {
   bucketDocs,
   effectiveSort,
@@ -38,6 +38,19 @@ function TargetPill({ t }: { t: TargetState }) {
   ) : (
     <StatusBadge variant="live" label={`${name} live`} />
   )
+}
+
+function ReportPill({ report }: { report?: ReportState }) {
+  if (!report || !report.exists) {
+    return <StatusBadge variant="never-run" label="No report" />
+  }
+  if (report.status === 'failed') {
+    return <StatusBadge variant="flagged" label="Report failed" />
+  }
+  if (report.stale) {
+    return <StatusBadge variant="stale" label="Report stale" />
+  }
+  return <StatusBadge variant="live" label="Report" />
 }
 
 type StatusFilter = 'all' | 'pending' | 'clean' | 'unpublished'
@@ -182,6 +195,7 @@ function DocCard({
             .map((t) => (
               <TargetPill key={t.target} t={t} />
             ))}
+          <ReportPill report={doc.report} />
         </span>
       </button>
       <KebabMenu doc={doc} groups={groups} onMove={(gid) => onMove(doc.slug, gid)} />
