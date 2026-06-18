@@ -9,7 +9,7 @@ import {
   type SortMode,
 } from '../lib/librarySort'
 import { ManageGroupsModal } from './ManageGroupsModal'
-import { Button, StatusBadge, SectionLabel, SerifTitle } from '../ui'
+import { Button, InfoTip, StatusBadge, SectionLabel, SerifTitle } from '../ui'
 
 const LS_GROUPBY = 'nf-library-groupby'
 const LS_SORT = 'nf-library-sort'
@@ -196,6 +196,12 @@ function DocCard({
               <TargetPill key={t.target} t={t} />
             ))}
           <ReportPill report={doc.report} />
+          <InfoTip label="About the status badges" align="right">
+            Status badges for this document. Publish targets — HTML (public site) and Drive
+            (the NotebookLM-safe Google Doc) — show live, changes to push, or unpublished. The
+            Report badge shows the analytical report: generated, stale (the document changed
+            since it was generated), failed, or none yet.
+          </InfoTip>
         </span>
       </button>
       <KebabMenu doc={doc} groups={groups} onMove={(gid) => onMove(doc.slug, gid)} />
@@ -403,9 +409,19 @@ export function Library({
           <option value="last_updated">Last updated</option>
           <option value="attention">Needs attention first</option>
         </select>
+        <InfoTip label="About sort order">
+          Sort order within each group. “Manual order” (drag the handle to arrange) is available
+          only when grouping by Group. “Needs attention first” surfaces documents with unpushed
+          changes, sketches awaiting review, or unconfirmed dates.
+        </InfoTip>
         <Button variant="secondary" onClick={() => setShowManageGroups(true)}>
           Manage groups
         </Button>
+        <InfoTip label="About groups">
+          Groups are colour-coded collections for organising the library; they also drive the
+          homepage's document lists. Create, rename, recolour, reorder, or delete them here —
+          deleting a group simply ungroups its documents.
+        </InfoTip>
       </div>
       {hits !== null && (
         <div className="search-hits" style={{ paddingTop: 12 }}>

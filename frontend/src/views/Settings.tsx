@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type MasterStatus } from '../api'
-import { Button } from '../ui'
+import { Button, InfoTip } from '../ui'
 
 export function Settings({ onBack }: { onBack: () => void }) {
   const [secrets, setSecrets] = useState<Record<string, boolean>>({})
@@ -114,7 +114,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
         </div>
         <div className="settings-fields">
           <div className="settings-row">
-            <label htmlFor="sketch-model">Image model</label>
+            <label htmlFor="sketch-model">
+              Image model{' '}
+              <InfoTip label="About the image model">
+                The image model used to generate every figure's faceless sketch. Override the
+                prompt per figure in the editor.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <input
                 id="sketch-model"
@@ -128,7 +134,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-row settings-row-tall">
-            <label htmlFor="sketch-prompt">Silhouette prompt</label>
+            <label htmlFor="sketch-prompt">
+              Silhouette prompt{' '}
+              <InfoTip label="About the silhouette prompt">
+                The instruction sent to the image model for every sketch — edit it to change the
+                silhouette style across all figures. Per-figure overrides live in the editor.
+              </InfoTip>
+            </label>
             <textarea
               id="sketch-prompt"
               rows={8}
@@ -137,7 +149,14 @@ export function Settings({ onBack }: { onBack: () => void }) {
             />
           </div>
           <div className="settings-row">
-            <label htmlFor="face-gate">Face gate</label>
+            <label htmlFor="face-gate">
+              Face gate{' '}
+              <InfoTip label="About the face gate">
+                What happens when a generated sketch still shows a detectable face: “block”
+                refuses it and retries; “warn” keeps it but flags it for your review before
+                approval.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <select id="face-gate" value={faceGate} onChange={(e) => setFaceGate(e.target.value)}>
                 <option value="block">block</option>
@@ -163,7 +182,12 @@ export function Settings({ onBack }: { onBack: () => void }) {
         </div>
         <div className="settings-fields">
           <div className="settings-row">
-            <label htmlFor="polish-model">Text model</label>
+            <label htmlFor="polish-model">
+              Text model{' '}
+              <InfoTip label="About the text model">
+                The model id used for the mechanical text-polish pass.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <input
                 id="polish-model"
@@ -174,7 +198,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-row settings-row-tall">
-            <label htmlFor="polish-rules">Extra rules</label>
+            <label htmlFor="polish-rules">
+              Extra rules{' '}
+              <InfoTip label="About polish extra rules">
+                Extra guidance appended after the built-in polish scope rules. Leave blank to use
+                the defaults only.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <textarea
                 id="polish-rules"
@@ -204,7 +234,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
         <div className="settings-fields">
           <h3>Report configuration</h3>
           <div className="settings-row">
-            <label htmlFor="report-model">Report model</label>
+            <label htmlFor="report-model">
+              Report model{' '}
+              <InfoTip label="About the report model">
+                The model id used to generate analytical reports (default gemini-3.5-flash).
+                The chunked, single-source pass means one call per chapter.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <input
                 id="report-model"
@@ -215,7 +251,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="settings-row settings-row-tall">
-            <label htmlFor="report-rules">Extra rules</label>
+            <label htmlFor="report-rules">
+              Extra rules{' '}
+              <InfoTip label="About report extra rules">
+                Extra guidance appended after the built-in report fidelity rules. Leave blank to
+                use the defaults only.
+              </InfoTip>
+            </label>
             <div className="settings-control">
               <textarea
                 id="report-rules"
@@ -231,10 +273,18 @@ export function Settings({ onBack }: { onBack: () => void }) {
             {reportState && <span className="settings-state muted">{reportState}</span>}
           </div>
 
-          <h3 style={{ marginTop: 24 }}>Master reference tracks</h3>
+          <h3 style={{ marginTop: 24 }}>
+            Master reference tracks{' '}
+            <InfoTip label="About master reference tracks">
+              Pools every document's report rows (people, geography, glossary, chronology) into
+              four Google Sheets that NotebookLM ingests as syncing Data Tables. Generate a
+              per-document report first; regenerate here after reports change. Each row keeps a
+              source column so it stays traceable across documents.
+            </InfoTip>
+          </h3>
           <p className="settings-hint" style={{ marginBottom: 12 }}>
-            Pools every document's report rows into four CSVs (people · geography · glossary ·
-            chronology) and pushes them to Drive as NotebookLM Data Tables.
+            Pools every document's report rows into four Google Sheets (people · geography ·
+            glossary · chronology) and pushes them to Drive as NotebookLM Data Tables.
           </p>
           <div className="settings-save-row">
             <Button variant="primary" onClick={generateMaster}>
