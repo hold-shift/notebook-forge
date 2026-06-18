@@ -196,12 +196,6 @@ function DocCard({
               <TargetPill key={t.target} t={t} />
             ))}
           <ReportPill report={doc.report} />
-          <InfoTip label="About the status badges" align="right">
-            Status badges for this document. Publish targets — HTML (public site) and Drive
-            (the NotebookLM-safe Google Doc) — show live, changes to push, or unpublished. The
-            Report badge shows the analytical report: generated, stale (the document changed
-            since it was generated), failed, or none yet.
-          </InfoTip>
         </span>
       </button>
       <KebabMenu doc={doc} groups={groups} onMove={(gid) => onMove(doc.slug, gid)} />

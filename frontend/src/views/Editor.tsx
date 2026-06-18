@@ -137,15 +137,17 @@ function ReportPanel({ slug }: { slug: string }) {
       )}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Analytical report</SectionLabel></h3>
-          <InfoTip label="About the analytical report" align="right">
-            A derived navigational index of this document — executive summary, section-by-section
-            digest, and people / places / glossary / chronology — built by a single-source LLM
-            pass and pushed to Drive as a separate NotebookLM source (a Google Doc). It's a
-            summary, not a primary record. “Stale” means the document changed since it was
-            generated — regenerate to refresh. Push to Drive is enabled only when there are
-            changes to push.
-          </InfoTip>
+          <span className="panel-head-label">
+            <InfoTip label="About the analytical report" align="right">
+              A derived navigational index of this document — executive summary, section-by-section
+              digest, and people / places / glossary / chronology — built by a single-source LLM
+              pass and pushed to Drive as a separate NotebookLM source (a Google Doc). It's a
+              summary, not a primary record. “Stale” means the document changed since it was
+              generated — regenerate to refresh. Push to Drive is enabled only when there are
+              changes to push.
+            </InfoTip>
+            <h3><SectionLabel>Analytical report</SectionLabel></h3>
+          </span>
         </div>
         <div className="target-rows">
           <div className="target-card">
@@ -451,14 +453,17 @@ function ImagesPanel({
   return (
     <div className="pending-panel images-panel">
       <div className="pending-panel-header">
-        <h3><SectionLabel>Images</SectionLabel></h3>
-        <InfoTip label="About the image tools" align="right">
-          Per-figure tools for the NotebookLM-safe edition. “Generate all sketches” makes a
-          faceless silhouette for every eligible figure (has an original photo, Safe mode is
-          “sketch”, and isn't already approved). The face gate decides what to do if a face is
-          still detected — “block” retries, “warn” flags it. “Caption” auto-writes captions for
-          figures missing one. “Approve all” marks sketches final so future batch runs skip them.
-        </InfoTip>
+        <span className="panel-head-label">
+          <InfoTip label="About the image tools" align="right">
+            Per-figure tools for the NotebookLM-safe edition. “Generate all sketches” makes a
+            faceless silhouette for every eligible figure (has an original photo, Safe mode is
+            “sketch”, and isn't already approved). The face gate decides what to do if a face is
+            still detected — “block” retries, “warn” flags it. “Caption” auto-writes captions for
+            figures missing one. “Approve all” marks sketches final so future batch runs skip
+            them.
+          </InfoTip>
+          <h3><SectionLabel>Images</SectionLabel></h3>
+        </span>
       </div>
 
       <div className="images-summary">
@@ -687,14 +692,16 @@ function PendingPanel({
       {showHistory && <ChangesModal changes={changes} onClose={() => setShowHistory(false)} />}
       <div className="pending-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Pending changes</SectionLabel></h3>
-          <InfoTip label="About publishing" align="right">
-            Where this document publishes. HTML = the public GitHub Pages site (which also hosts
-            the original photos); Drive = the NotebookLM-safe Google Doc (faceless sketches);
-            Local = an offline static mirror. A filled dot and “N changes behind” mean there are
-            edits since that target was last pushed. Unpublish removes the document from a target
-            without deleting it.
-          </InfoTip>
+          <span className="panel-head-label">
+            <InfoTip label="About publishing" align="right">
+              Where this document publishes. HTML = the public GitHub Pages site (which also hosts
+              the original photos); Drive = the NotebookLM-safe Google Doc (faceless sketches);
+              Local = an offline static mirror. A filled dot and “N changes behind” mean there are
+              edits since that target was last pushed. Unpublish removes the document from a target
+              without deleting it.
+            </InfoTip>
+            <h3><SectionLabel>Pending changes</SectionLabel></h3>
+          </span>
           {edits.length > 0 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowHistory(true)}>
               History
@@ -1146,12 +1153,14 @@ function SnapshotsPanel({ slug }: { slug: string }) {
       )}
       <div className="pending-panel snapshots-panel">
         <div className="pending-panel-header">
-          <h3><SectionLabel>Snapshots</SectionLabel></h3>
-          <InfoTip label="About snapshots" align="right">
-            Point-in-time copies of the document, taken automatically before risky actions
-            (polish, re-ingest, publish) and on every publish. Restore rolls the document back to
-            that state.
-          </InfoTip>
+          <span className="panel-head-label">
+            <InfoTip label="About snapshots" align="right">
+              Point-in-time copies of the document, taken automatically before risky actions
+              (polish, re-ingest, publish) and on every publish. Restore rolls the document back to
+              that state.
+            </InfoTip>
+            <h3><SectionLabel>Snapshots</SectionLabel></h3>
+          </span>
           {snaps.length > 3 && (
             <button type="button" className="changes-history-btn" onClick={() => setShowAll(true)}>
               All {snaps.length}
