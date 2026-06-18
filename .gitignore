@@ -29,8 +29,10 @@ frontend/dist/
 # Internal planning docs & operator notes (kept local, not published)
 docs/
 
-# Generated validation/coverage output (recreated by tests & CLI)
-reports/
+# Generated validation/coverage output (recreated by tests & CLI).
+# Anchored so the backend/notebook_forge/reports/ source package is tracked.
+/reports/
+/backend/reports/
 
 # Internal planning notes (kept local, not published)
 /SPRINT_REPORT.md
