@@ -120,22 +120,23 @@ def render_safe_markdown(
     blocks: list[dict[str, Any]],
     sketch_src: Any,  # Callable[[dict, int], str] — figure block, n → image src
 ) -> str:
-    """Render the safe edition. Layout matches MemoirForge's document.md.j2:
-    H1 + byline + standfirst header, ---, body with co-located footnote
-    blockquotes and sketch figures whose captions link to the live anchors."""
+    """Render the safe edition. A labelled metadata block (Title / Standfirst /
+    Author / Years covered / Source name), a rule, then the body with
+    co-located footnote blockquotes and sketch figures whose captions link to
+    the live anchors."""
     doc_url = meta.get("canonical_url", "")
-    lines: list[str] = [f"# {meta.get('title', '')}", ""]
 
-    byline = " · ".join(
-        part
-        for part in (meta.get("author", ""), meta.get("year_display", ""), meta.get("place", ""))
-        if part
-    )
-    if byline:
-        lines += [f"*{byline}*", ""]
-    if meta.get("standfirst"):
-        lines += [f"*{meta['standfirst']}*", ""]
-    lines += ["---", ""]
+    # Metadata header — one bold-labelled line each, hard-broken so they stack
+    # tightly (two trailing spaces = a Markdown line break within one block).
+    fields = [
+        ("Title", meta.get("title", "")),
+        ("Standfirst", meta.get("standfirst", "")),
+        ("Author", meta.get("author", "")),
+        ("Years covered", meta.get("year_display", "")),
+        ("Source name", meta.get("slug", "") or meta.get("source_file", "")),
+    ]
+    lines: list[str] = [f"**{label}:** {value}  " for label, value in fields if value]
+    lines += ["", "---", ""]
 
     fig_n = 0
     prev_narrative = False

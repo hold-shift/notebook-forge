@@ -48,6 +48,7 @@ def test_render_safe_markdown_structure() -> None:
         "author": "R.F. Skitch",
         "year_display": "1953–1954",
         "standfirst": "A recollection.",
+        "slug": "1953-1954_in-the-navy",
         "canonical_url": "https://example.test/rfs/in-the-navy.html",
     }
     blocks = [
@@ -64,9 +65,14 @@ def test_render_safe_markdown_structure() -> None:
     ]
     md = render_safe_markdown(meta, blocks, lambda b, n: f"sketch-{n}.png")
 
-    assert md.startswith("# In The Navy\n")
-    assert "*R.F. Skitch · 1953–1954*" in md
-    assert "*A recollection.*" in md
+    # labelled metadata header (no H1), then a rule
+    assert md.startswith("**Title:** In The Navy  \n")
+    assert "**Standfirst:** A recollection.  " in md
+    assert "**Author:** R.F. Skitch  " in md
+    assert "**Years covered:** 1953–1954  " in md
+    assert "**Source name:** 1953-1954_in-the-navy  " in md
+    assert md.split("---")[0].count("\n# ") == 0  # no H1 title line
+    assert "\n---\n" in md
     # figure: sketch image + caption linking to the live anchor
     assert "![Plaque](sketch-1.png)" in md
     assert (
@@ -113,7 +119,7 @@ def test_drive_publish_uploads_safe_markdown(
     [(file_id, entry)] = client.files.items()
     assert entry["media_mime"] == "text/markdown"
     md = entry["media"].decode("utf-8")
-    assert md.startswith("# In The Navy")
+    assert md.startswith("**Title:** In The Navy")
     # all 15 figures embedded as data URIs (fixture bytes → raw fallback)
     assert md.count("![") == 15
     assert md.count("](data:") == 15
@@ -123,6 +129,9 @@ def test_drive_publish_uploads_safe_markdown(
     assert "> **[" in md
     assert "[^" not in md
     assert "Contents" not in md  # no ToC in the safe edition
+    # the Google Doc's tab is named the NotebookLM edition
+    assert entry["tab_title"] == "[NotebookLM edition]"
+    assert ("set_tab_title", {"file_id": file_id, "title": "[NotebookLM edition]"}) in client.calls
 
 
 def test_safe_markdown_falls_back_to_original_when_no_sketch(

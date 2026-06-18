@@ -13,6 +13,10 @@ from typing import Any, Protocol
 
 from .base import PublishBundle, PublishResult, PublishTarget
 
+# The Google Doc's tab name (square brackets included), so the NotebookLM-safe
+# edition is clearly distinguishable from the original.
+TAB_TITLE = "[NotebookLM edition]"
+
 
 def create_request_body(name: str, folder_id: str) -> dict[str, Any]:
     """files.create metadata: import-convert to a Google Doc."""
@@ -43,6 +47,10 @@ class DriveClient(Protocol):
 
     def update_file(self, file_id: str, body: dict[str, Any], media: bytes, media_mime: str) -> str:
         """files.update with new media → same file id."""
+        ...
+
+    def set_tab_title(self, file_id: str, title: str) -> None:
+        """Rename the Google Doc's first tab (Docs API)."""
         ...
 
 
@@ -79,6 +87,10 @@ class MockDriveClient:
         self.calls.append(("update", {"file_id": file_id, "body": body}))
         return file_id
 
+    def set_tab_title(self, file_id: str, title: str) -> None:
+        self.files[file_id]["tab_title"] = title
+        self.calls.append(("set_tab_title", {"file_id": file_id, "title": title}))
+
 
 class DriveTarget(PublishTarget):
     kind = "drive"
@@ -107,7 +119,19 @@ class DriveTarget(PublishTarget):
                 create_request_body(bundle.slug, self.folder_id), media, mime
             )
             action = "created"
+        # Name the document's tab so it's clearly the NotebookLM edition.
+        # Best-effort: a tab failure must not fail an otherwise-good publish.
+        tab_set = False
+        if mime == "text/markdown":
+            try:
+                self.client.set_tab_title(file_id, TAB_TITLE)
+                tab_set = True
+            except Exception:  # noqa: BLE001 — Docs API is non-critical
+                tab_set = False
         return PublishResult(
             ok=True,
-            detail={"file_id": file_id, "action": action, "media_mime": mime},
+            detail={
+                "file_id": file_id, "action": action,
+                "media_mime": mime, "tab_titled": tab_set,
+            },
         )

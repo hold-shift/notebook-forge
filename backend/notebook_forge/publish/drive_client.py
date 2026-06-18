@@ -71,7 +71,9 @@ class GoogleDriveClient:
             )
         from googleapiclient.discovery import build
 
+        self._creds = creds
         self.service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        self._docs = None  # Docs API, built lazily for tab renaming
 
     def find_file(self, name: str, folder_id: str) -> str | None:
         safe_name = name.replace("'", "\\'")
@@ -112,6 +114,37 @@ class GoogleDriveClient:
             .execute()
         )
         return updated["id"]
+
+    def set_tab_title(self, file_id: str, title: str) -> None:
+        """Rename the document's (single) tab via the Docs API. The Docs API
+        accepts the same `drive.file` scope for app-created docs, so no extra
+        consent is needed. No-op if the doc somehow exposes no tab."""
+        if self._docs is None:
+            from googleapiclient.discovery import build
+
+            self._docs = build("docs", "v1", credentials=self._creds, cache_discovery=False)
+        doc = (
+            self._docs.documents()
+            .get(documentId=file_id, includeTabsContent=True, fields="tabs.tabProperties.tabId")
+            .execute()
+        )
+        tabs = doc.get("tabs", [])
+        if not tabs:
+            return
+        tab_id = tabs[0]["tabProperties"]["tabId"]
+        self._docs.documents().batchUpdate(
+            documentId=file_id,
+            body={
+                "requests": [
+                    {
+                        "updateDocumentTabProperties": {
+                            "tabProperties": {"tabId": tab_id, "title": title},
+                            "fields": "title",
+                        }
+                    }
+                ]
+            },
+        ).execute()
 
     def file_link(self, file_id: str) -> str:
         return f"https://docs.google.com/document/d/{file_id}/edit"
