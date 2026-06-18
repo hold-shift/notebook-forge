@@ -891,11 +891,13 @@ function MetaBar({
         <input value={years} onChange={(e) => setYears(e.target.value)} className="meta-years" />
       </label>
       <label className="meta-toc">
-        ToC{' '}
-        <InfoTip label="About the table of contents">
-          Table of contents on the published HTML page. Auto shows it only when the document has
-          15+ headings; On/Off force it. Rebuilt from your current headings on every publish.
-        </InfoTip>
+        <span className="meta-field-label">
+          ToC
+          <InfoTip label="About the table of contents">
+            Table of contents on the published HTML page. Auto shows it only when the document has
+            15+ headings; On/Off force it. Rebuilt from your current headings on every publish.
+          </InfoTip>
+        </span>
         <select value={toc} onChange={(e) => setToc(e.target.value)}>
           <option value="auto">Auto</option>
           <option value="on">On</option>
@@ -905,12 +907,14 @@ function MetaBar({
       <div className="meta-second-row">
         {hasNarrativeBlocks && (
           <label className="meta-narrative">
-            Narrative label{' '}
-            <InfoTip label="About the narrative label">
-              Narrative panels can show a small-caps label (e.g. “From the author”). Tick to
-              override the workspace default for this document only; unticked inherits the
-              Settings value.
-            </InfoTip>
+            <span className="meta-field-label">
+              Narrative label
+              <InfoTip label="About the narrative label">
+                Narrative panels can show a small-caps label (e.g. “From the author”). Tick to
+                override the workspace default for this document only; unticked inherits the
+                Settings value.
+              </InfoTip>
+            </span>
             <span className="meta-narrative-row">
               <input
                 type="checkbox"
@@ -927,21 +931,25 @@ function MetaBar({
           </label>
         )}
         <label className="meta-standfirst">
-          Standfirst{' '}
-          <InfoTip label="About the standfirst">
-            A one-line summary shown under the title on the published page and in the library
-            listings. Optional.
-          </InfoTip>
+          <span className="meta-field-label">
+            Standfirst
+            <InfoTip label="About the standfirst">
+              A one-line summary shown under the title on the published page and in the library
+              listings. Optional.
+            </InfoTip>
+          </span>
           <input value={standfirst} onChange={(e) => setStandfirst(e.target.value)} />
         </label>
       </div>
       <label className="meta-slug">
-        Slug{' '}
-        <InfoTip label="About the slug">
-          The document's identifier — used in its public URL and as its NotebookLM/Drive source
-          name. “Update” regenerates it from the title and years. Changing it breaks the old URL
-          until you republish.
-        </InfoTip>
+        <span className="meta-field-label">
+          Slug
+          <InfoTip label="About the slug">
+            The document's identifier — used in its public URL and as its NotebookLM/Drive source
+            name. “Update” regenerates it from the title and years. Changing it breaks the old URL
+            until you republish.
+          </InfoTip>
+        </span>
         <span className="meta-slug-row">
           <input
             value={slug}
