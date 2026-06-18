@@ -96,6 +96,34 @@ export interface ChangeEntry {
   created_at: string | null
 }
 
+export interface ReportState {
+  exists: boolean
+  status: string
+  stale: boolean
+  model?: string
+  source_name?: string
+  generated_at?: string | null
+  pushed_at?: string | null
+  drive_file_id?: string | null
+  tracks?: { people: number; geo: number; glossary: number; chronology: number }
+}
+
+export interface ReportProgress {
+  running: boolean
+  done: number
+  total: number
+  failed: number
+}
+
+export interface MasterStatus {
+  documents: number
+  rows: number
+  by_track: { people: number; geo: number; glossary: number; chronology: number }
+  built_at: string | null
+  pushed_at: string | null
+  drive_file_ids: Record<string, string>
+}
+
 async function json<T>(resp: Response): Promise<T> {
   if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`)
   return resp.json() as Promise<T>
@@ -209,11 +237,39 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(polish),
     }).then((r) => json<{ ok: boolean }>(r)),
+  generateReport: (slug: string) =>
+    fetch(`/api/documents/${slug}/report/generate`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean; detail: Record<string, unknown>; report: ReportState }>(r),
+    ),
+  reportProgress: (slug: string) =>
+    fetch(`/api/documents/${slug}/report/progress`, { cache: 'no-store' }).then((r) =>
+      json<ReportProgress>(r),
+    ),
+  report: (slug: string) =>
+    fetch(`/api/documents/${slug}/report`).then((r) =>
+      json<ReportState & { body_md: string }>(r),
+    ),
+  pushReport: (slug: string) =>
+    fetch(`/api/documents/${slug}/report/push`, { method: 'POST' }).then((r) =>
+      json<{ ok: boolean; detail: Record<string, unknown>; report: ReportState }>(r),
+    ),
+  masterStatus: () => fetch('/api/reports/master').then((r) => json<MasterStatus>(r)),
+  generateMaster: () =>
+    fetch('/api/reports/master/generate', { method: 'POST' }).then((r) =>
+      json<{ ok: boolean; master: MasterStatus; pushed: Record<string, unknown> }>(r),
+    ),
+  saveReportSettings: (reports: { model: string; rules: string }) =>
+    fetch('/api/settings/reports', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reports),
+    }).then((r) => json<{ ok: boolean }>(r)),
   settings: () =>
     fetch('/api/settings').then((r) =>
       json<{
         sketch: { model: string; default_prompt: string; face_gate: string }
         polish: { model: string; extra_rules: string }
+        reports: { model: string; rules: string }
         narrative: { label: string }
         footer: { notice: string; license_label: string; license_url: string }
         secrets: Record<string, boolean>
