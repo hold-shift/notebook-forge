@@ -536,3 +536,89 @@ class TestService:
 
         services.save_blocks(session, doc, [*doc.blocks, para("A new paragraph.")])
         assert report_is_stale(session, doc, report) is True
+
+
+# ------------------------------------------------------------------ API
+
+class GenericFakeRunner:
+    """A runner returning a digest for any chapter title (for endpoint tests)."""
+
+    model = "fake-report-model"
+
+    def digest_chapter(
+        self, chunk: ReportChunk, source_name: str, *, extra_rules: str = ""
+    ) -> dict[str, Any]:
+        return chapter_digest(
+            chunk.title,
+            people=[{"section": chunk.title, "name": "Tiger", "role": "stepfather"}],
+        )
+
+    def consolidate(
+        self, source_name: str, years: str, chapters_data, *, extra_rules: str = ""
+    ) -> dict[str, Any]:
+        return {"executive_summary": "Overview.", "anchors": []}
+
+
+class TestReportApi:
+    def _client(self, session: Session):  # noqa: ANN202
+        from fastapi.testclient import TestClient
+
+        from notebook_forge.api import app, get_session
+
+        app.dependency_overrides[get_session] = lambda: session
+        return TestClient(app)
+
+    def test_get_report_never_run(self, session: Session) -> None:
+        doc = make_doc(session, [heading(2, "One"), para("Body.")])
+        client = self._client(session)
+        data = client.get(f"/api/documents/{doc.slug}/report").json()
+        assert data["exists"] is False
+        assert data["body_md"] == ""
+
+    def test_progress_zero_shape_for_unknown(self, session: Session) -> None:
+        client = self._client(session)
+        data = client.get("/api/documents/whatever/report/progress").json()
+        assert data == {"running": False, "done": 0, "total": 0, "failed": 0}
+
+    def test_settings_round_trip(self, session: Session) -> None:
+        client = self._client(session)
+        resp = client.put(
+            "/api/settings/reports", json={"model": "gemini-3.5-flash", "rules": "Be terse."}
+        )
+        assert resp.status_code == 200
+        settings = client.get("/api/settings").json()
+        assert settings["reports"] == {"model": "gemini-3.5-flash", "rules": "Be terse."}
+
+    def test_generate_409_without_key(self, session: Session, monkeypatch) -> None:
+        # No Gemini key in the test env → make_runner raises RuntimeError → 409.
+        def no_key(*_a: Any, **_k: Any) -> None:
+            raise RuntimeError("report generation is not configured")
+
+        monkeypatch.setattr("notebook_forge.reports.runner.make_runner", no_key)
+        doc = make_doc(session, [heading(2, "One"), para("Body.")])
+        client = self._client(session)
+        resp = client.post(f"/api/documents/{doc.slug}/report/generate")
+        assert resp.status_code == 409
+
+    def test_generate_happy_path_with_injected_runner(
+        self, session: Session, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "notebook_forge.reports.runner.make_runner",
+            lambda *_a, **_k: GenericFakeRunner(),
+        )
+        doc = make_doc(
+            session,
+            [heading(2, "One"), para("Body."), heading(2, "Two"), para("More.")],
+        )
+        client = self._client(session)
+        resp = client.post(f"/api/documents/{doc.slug}/report/generate")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["ok"] is True
+        assert payload["report"]["exists"] is True
+        assert payload["report"]["stale"] is False
+        assert payload["report"]["tracks"]["people"] == 1  # Tiger deduped across chapters
+
+        body = client.get(f"/api/documents/{doc.slug}/report").json()["body_md"]
+        assert "### 6. Reference tracks" in body
