@@ -218,6 +218,7 @@ def generate_report(
             "failed_chapters": len(failed_chapters),
             "tracks": n_tracks,
             "status": status,
+            "consolidation_error": consolidated.get("consolidation_error"),
         },
     )
 
@@ -229,6 +230,7 @@ def generate_report(
         "failed_chapters": failed_chapters,
         "tracks": n_tracks,
         "anchors": len(consolidated.get("anchors", [])),
+        "consolidation_error": consolidated.get("consolidation_error"),
     }
 
 

@@ -35,7 +35,11 @@ GEMINI_ENDPOINT = (
 REPORT_MODEL = "gemini-3.5-flash"
 
 _MAX_TOKENS_CHAPTER = 20_000
-_MAX_TOKENS_CONSOLIDATE = 4_000
+# Generous headroom: the consolidation now emits the executive summary, anchors,
+# AND the curated §3/§4 lists, and gemini-3.5-flash also spends output tokens on
+# thinking. At 4k the JSON was truncated mid-object, so the parse failed and the
+# whole consolidation silently fell back to the raw per-chapter concatenation.
+_MAX_TOKENS_CONSOLIDATE = 16_000
 
 
 class GeminiReportRunner:
@@ -125,14 +129,19 @@ class GeminiReportRunner:
         try:
             raw = self._call(system, prompt, _MAX_TOKENS_CONSOLIDATE)
             return parse_consolidate_json(raw, candidates, stated, inference, inconsistencies)
-        except ReportParseError:
-            # Consolidation is non-fatal: fall back to the raw pooled material.
+        except (ReportParseError, RuntimeError) as exc:
+            # Consolidation is non-fatal — fall back to the raw pooled material —
+            # but surface it: a silent fallback drops the executive summary AND
+            # all §3/§4 curation with no signal.
+            import sys
+            print(f"[reports] consolidation fell back to raw: {exc}", file=sys.stderr)
             return {
                 "executive_summary": "",
                 "anchors": candidates[:8],
                 "interpersonal_stated": stated,
                 "interpersonal_inference": inference,
                 "inconsistencies": inconsistencies,
+                "consolidation_error": str(exc),
             }
 
 

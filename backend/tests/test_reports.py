@@ -352,6 +352,22 @@ class TestRunner:
         assert "RAW PER-CHAPTER MATERIAL TO SYNTHESISE" in user
         assert "raw stated" in user
 
+    def test_consolidate_surfaces_fallback_on_unparseable_reply(self) -> None:
+        calls: list = []
+        runner = GeminiReportRunner(
+            "test-key", transport=gemini_transport(["not json at all"], calls)
+        )
+        chapters = [("One", {"digest_md": "**One**\nx", "anchors": []})]
+        out = runner.consolidate(
+            "src", "1955", chapters,
+            stated=["raw s"], inference=["raw i"], inconsistencies=["raw c"],
+        )
+        # Falls back to raw material, but the failure is no longer silent.
+        assert out["consolidation_error"]
+        assert out["executive_summary"] == ""
+        assert out["interpersonal_stated"] == ["raw s"]
+        assert out["inconsistencies"] == ["raw c"]
+
 
 # ------------------------------------------------------------------ render
 
