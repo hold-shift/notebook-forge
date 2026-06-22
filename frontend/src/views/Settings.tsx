@@ -351,7 +351,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
           <h2>Audio narration</h2>
           <p>
             Master switch for text-to-speech narration. When on, every document
-            gains a Narration panel for exporting SSML and pasting the audio URL,
+            gains a Narration panel for exporting a manifest and pasting the audio URL,
             and any document with a published audio URL renders a listen-along
             player on its page. NotebookForge produces no audio itself — the
             forge-narrator tool on the Mac does (ElevenLabs), from the exported manifest.

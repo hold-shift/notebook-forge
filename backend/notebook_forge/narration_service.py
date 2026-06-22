@@ -42,7 +42,8 @@ def narration_view(session: Session, doc: Document) -> dict[str, Any]:
     """Narration record + live sync status for the panel."""
     rec = get_or_create(session, doc)
     live = narration.live_hashes(
-        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or []
+        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or [],
+        meta=doc.meta,
     )
     status = narration.sync_status(rec.audio_base_url, rec.exported_hashes or [], live)
     return {
@@ -87,7 +88,8 @@ def export_manifest(session: Session, doc: Document) -> tuple[bytes, str]:
     record the change. Returns (zip_bytes, download_filename)."""
     rec = get_or_create(session, doc)
     blocks = narration.extract_blocks(
-        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or []
+        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or [],
+        meta=doc.meta,
     )
     slug = doc.meta.get("slug", doc.slug)
     manifest = narration.build_manifest(
@@ -148,7 +150,8 @@ def audio_state(session: Session, doc: Document) -> dict[str, bool]:
     if rec is None or not (rec.audio_base_url or "").strip():
         return {"has_audio": False, "audio_stale": False}
     live = narration.live_hashes(
-        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or []
+        doc.blocks, voice=rec.voice, model=rec.model, lexicon=rec.lexicon or [],
+        meta=doc.meta,
     )
     stale = set(rec.exported_hashes or []) != set(live)
     return {"has_audio": True, "audio_stale": stale}

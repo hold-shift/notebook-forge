@@ -31,6 +31,7 @@ natural pacing / to avoid seam clipping.
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 from .blocks import (
@@ -39,7 +40,6 @@ from .blocks import (
     FORGE_FOOTNOTE,
     FORGE_IMAGE,
     FORGE_NARRATIVE,
-    inline_text,
 )
 
 # ElevenLabs voice_id (LOCKED — chosen by audition) + model.
@@ -60,6 +60,30 @@ _PARAGRAPH_TYPES = {
     "numberedListItem",
 }
 _STRIP_TYPES = {FORGE_IMAGE, FORGE_DOC_GROUP, "divider", "table"}
+
+
+def spoken_inline_text(content: list[dict[str, Any]] | str | None) -> str:
+    """Flatten inline content to spoken text, like blocks.inline_text BUT
+    skipping footnote-marker runs (``styles.fnRef``).
+
+    The prose carries an inline superscript marker (e.g. "1") at each footnote
+    reference; the footnote's actual text is a separate ``forgeFootnote`` block
+    spoken as its own "Footnote. …" unit. So the marker digit must NOT be read
+    aloud mid-sentence — strip it here. Links recurse."""
+    if not content:
+        return ""
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    for item in content:
+        kind = item.get("type")
+        if kind == "text":
+            if (item.get("styles") or {}).get("fnRef"):
+                continue  # footnote marker — not spoken inline
+            parts.append(item.get("text", ""))
+        elif kind == "link":
+            parts.append(spoken_inline_text(item.get("content")))
+    return "".join(parts)
 
 
 def tts_enabled(session: Any) -> bool:
@@ -124,6 +148,56 @@ def build_ssml(
     return f"{inner}{PARAGRAPH_BREAK}"
 
 
+# Year range "1934–1945" (en/em-dash or hyphen) → "1934 to 1945" so it is read
+# as a span, not a single mashed-together number.
+_YEAR_RANGE = re.compile(r"(\d{4})\s*[-‒–—―]\s*(\d{4})")
+
+
+def spoken_years(year_display: str) -> str:
+    return _YEAR_RANGE.sub(r"\1 to \2", year_display)
+
+
+def title_block(
+    meta: dict[str, Any],
+    *,
+    lexicon: list[dict[str, Any]] | None = None,
+    payload_mode: str = "breaks",
+) -> dict[str, Any] | None:
+    """Build the spoken masthead preamble from document meta, e.g.
+    "Junior. The boy I once knew but now remember. 1934 to 1945. By R.F Skitch."
+    with pauses between segments. The masthead lives in meta (title / standfirst /
+    year_display / author), not the block tree, so it would otherwise never be
+    announced. Returns a heading-type block, or None when there is no title."""
+    title = str((meta or {}).get("title", "")).strip()
+    if not title:
+        return None
+    subtitle = str(meta.get("standfirst", "")).strip()
+    years = spoken_years(str(meta.get("year_display", "")).strip())
+    author = str(meta.get("author", "")).strip()
+
+    segments = [title]
+    if subtitle:
+        segments.append(subtitle)
+    if years:
+        segments.append(years)
+    if author:
+        segments.append(f"By {author}")
+    segments = [apply_lexicon(s, lexicon) for s in segments]
+
+    text = ". ".join(segments) + "."
+    if payload_mode == "plain":
+        ssml = text
+    else:
+        # Pause between masthead segments, with a longer pause before the body.
+        ssml = '<break time="0.5s"/> '.join(f"{s}." for s in segments) + '<break time="0.7s"/>'
+    return {
+        "type": "heading",
+        "text": text,
+        "ssml": ssml,
+        "highlightable": True,
+    }
+
+
 def block_hash(ssml: str, voice: str, model: str) -> str:
     """sha256 over {ssml, voice, model} — the spine of the whole system.
 
@@ -144,16 +218,20 @@ def extract_blocks(
     model: str = DEFAULT_MODEL,
     lexicon: list[dict[str, Any]] | None = None,
     payload_mode: str = "breaks",
+    meta: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Walk a block tree in reading order and emit one export block per
     narratable unit.
 
     Each export block is ``{index, type, text, ssml, hash, highlightable}``.
-    Footnotes are emitted in place (they already sit in reading order in the
-    tree, immediately after the prose that references them) as their own
-    ``footnote`` block, ``highlightable: False``. A dedication is spoken once,
-    up front. Images, doc-groups, dividers and tables are stripped; empty text
-    blocks are skipped (matching the renderer/plain_text walker)."""
+    When ``meta`` is given, a spoken masthead preamble (title / subtitle / dates /
+    author) is announced first (see ``title_block``) — the masthead lives in meta,
+    not the block tree, so it is otherwise never narrated. Footnotes are emitted
+    in place (they already sit in reading order in the tree, immediately after the
+    prose that references them) as their own ``footnote`` block,
+    ``highlightable: False``. A dedication is spoken once, up front. Images,
+    doc-groups, dividers and tables are stripped; empty text blocks are skipped
+    (matching the renderer/plain_text walker)."""
 
     def emit(narr_type: str, text: str) -> dict[str, Any]:
         ssml = build_ssml(narr_type, text, lexicon=lexicon, payload_mode=payload_mode)
@@ -164,6 +242,13 @@ def extract_blocks(
             "hash": block_hash(ssml, voice, model),
             "highlightable": narr_type != "footnote",
         }
+
+    preamble: dict[str, Any] | None = None
+    if meta:
+        title = title_block(meta, lexicon=lexicon, payload_mode=payload_mode)
+        if title is not None:
+            title["hash"] = block_hash(title["ssml"], voice, model)
+            preamble = title
 
     dedication: dict[str, Any] | None = None
     body: list[dict[str, Any]] = []
@@ -184,19 +269,23 @@ def extract_blocks(
                 body.append(emit("footnote", text))
             continue
         if btype == "heading":
-            text = inline_text(block.get("content")).strip()
+            text = spoken_inline_text(block.get("content")).strip()
             if text:
                 body.append(emit("heading", text))
             continue
         if btype in _PARAGRAPH_TYPES:
-            text = inline_text(block.get("content")).strip()
+            text = spoken_inline_text(block.get("content")).strip()
             if text:
                 body.append(emit("paragraph", text))
             continue
         # Unknown block type: strip (stay conservative — narrate nothing we
         # don't understand rather than risk garbled audio).
 
-    ordered = ([dedication] if dedication else []) + body
+    ordered = (
+        ([preamble] if preamble else [])
+        + ([dedication] if dedication else [])
+        + body
+    )
     for i, b in enumerate(ordered):
         b["index"] = i
     return ordered
@@ -236,13 +325,15 @@ def live_hashes(
     model: str = DEFAULT_MODEL,
     lexicon: list[dict[str, Any]] | None = None,
     payload_mode: str = "breaks",
+    meta: dict[str, Any] | None = None,
 ) -> list[str]:
     """The current block-hash list for a document (extraction without writing
     the zip) — cheap enough to run on every panel load."""
     return [
         b["hash"]
         for b in extract_blocks(
-            blocks, voice=voice, model=model, lexicon=lexicon, payload_mode=payload_mode
+            blocks, voice=voice, model=model, lexicon=lexicon,
+            payload_mode=payload_mode, meta=meta,
         )
     ]
 

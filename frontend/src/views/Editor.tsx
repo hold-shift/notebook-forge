@@ -280,9 +280,9 @@ function NarrationPanel({ slug }: { slug: string }) {
             <span
               className={`dot ${view.status === 'in_sync' ? 'clean' : view.status === 'stale' ? 'dirty' : ''}`}
             />
-            <span className="pending-name" title="SSML manifest">Manifest</span>
+            <span className="pending-name" title="Audio narration manifest">Manifest</span>
             <Button variant="secondary" size="sm" disabled={exporting} onClick={onExport}>
-              {exporting ? 'Exporting…' : 'Export SSML'}
+              {exporting ? 'Exporting…' : 'Export manifest'}
             </Button>
           </div>
           <div className="target-card-status">

@@ -103,6 +103,61 @@ def test_lexicon_applied_in_payload():
     assert out[0]["ssml"] == 'We marched to Noo-ee Dat<break time="0.3s"/>'
 
 
+def test_title_preamble_announced_from_meta():
+    """The masthead (title/subtitle/dates/author) is announced first, built from
+    meta — it lives outside the block tree so would otherwise never be spoken."""
+    meta = {
+        "title": "Junior",
+        "standfirst": "The boy I once knew but now remember",
+        "year_display": "1934–1945",  # en-dash
+        "author": "R.F Skitch",
+    }
+    blocks = narration.extract_blocks(_doc_blocks(), meta=meta)
+    head = blocks[0]
+    assert head["index"] == 0
+    assert head["type"] == "heading"
+    assert head["highlightable"] is True
+    # Segments present, en-dash year range spoken as a span, author lead-in.
+    assert "Junior." in head["ssml"]
+    assert "The boy I once knew but now remember." in head["ssml"]
+    assert "1934 to 1945." in head["ssml"]
+    assert "By R.F Skitch." in head["ssml"]
+    assert '<break time="0.5s"/>' in head["ssml"]   # pauses between segments
+    assert head["ssml"].endswith('<break time="0.7s"/>')
+    # Preamble is additive: the 5 body blocks still follow.
+    assert len(blocks) == 6
+    assert [b["type"] for b in blocks[1:]] == ["paragraph", "heading", "paragraph", "footnote", "paragraph"]
+
+
+def test_no_title_preamble_without_meta_or_title():
+    assert narration.extract_blocks(_doc_blocks()) [0]["type"] == "paragraph"  # dedication
+    assert narration.extract_blocks(_doc_blocks(), meta={"title": ""})[0]["type"] == "paragraph"
+
+
+def test_spoken_years_variants():
+    assert narration.spoken_years("1934–1945") == "1934 to 1945"
+    assert narration.spoken_years("1934-1945") == "1934 to 1945"
+    assert narration.spoken_years("2004") == "2004"  # single year unchanged
+
+
+def test_inline_footnote_marker_not_spoken():
+    """The superscript footnote marker run (styles.fnRef) in the prose is NOT
+    read aloud — only the separate footnote block speaks the note."""
+    para = make_block(
+        "paragraph",
+        content=[
+            text_run("It was a poor image of the base"),
+            text_run("1", {"fnRef": True}),
+            text_run("."),
+        ],
+    )
+    out = narration.extract_blocks([para])
+    assert out[0]["type"] == "paragraph"
+    assert out[0]["text"] == "It was a poor image of the base."
+    assert out[0]["ssml"] == 'It was a poor image of the base.<break time="0.3s"/>'
+    assert "1" not in out[0]["text"]
+
+
 def test_sync_status():
     assert narration.sync_status("", [], []) == "no_audio"
     assert narration.sync_status("https://s3/x", ["a", "b"], ["b", "a"]) == "in_sync"
