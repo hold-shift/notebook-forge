@@ -22,6 +22,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [footerLicenseLabel, setFooterLicenseLabel] = useState('')
   const [footerLicenseUrl, setFooterLicenseUrl] = useState('')
   const [footerState, setFooterState] = useState('')
+  const [ttsEnabled, setTtsEnabled] = useState(false)
+  const [ttsState, setTtsState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -34,6 +36,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setReportModel(s.reports.model)
       setReportRules(s.reports.rules)
       setNarrativeLabel(s.narrative.label)
+      setTtsEnabled(s.tts.enabled)
       setFooterNotice(s.footer.notice)
       setFooterLicenseLabel(s.footer.license_label)
       setFooterLicenseUrl(s.footer.license_url)
@@ -81,6 +84,15 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.saveNarrativeSettings({ label: narrativeLabel }).then(
       () => setNarrativeState('Saved'),
       (e) => setNarrativeState(`Failed: ${e}`),
+    )
+  }
+
+  const onToggleTts = (enabled: boolean) => {
+    setTtsEnabled(enabled)
+    setTtsState('saving')
+    api.saveTtsSetting(enabled).then(
+      () => setTtsState('Saved'),
+      (e) => setTtsState(`Failed: ${e}`),
     )
   }
 
@@ -329,6 +341,45 @@ export function Settings({ onBack }: { onBack: () => void }) {
               Save narrative settings
             </Button>
             {narrativeState && <span className="settings-state muted">{narrativeState}</span>}
+          </div>
+        </div>
+      </section>
+
+      {/* Audio narration (TTS) */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Audio narration</h2>
+          <p>
+            Master switch for text-to-speech narration. When on, every document
+            gains a Narration panel for exporting SSML and pasting the audio URL,
+            and any document with a published audio URL renders a listen-along
+            player on its page. NotebookForge produces no audio itself — the
+            forge-narrator tool on the Mac does (ElevenLabs), from the exported manifest.
+          </p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row">
+            <label htmlFor="tts-enabled">
+              Enable narration{' '}
+              <InfoTip label="About audio narration">
+                Turns on the whole TTS feature. Export a manifest from a document's Narration
+                panel, generate the audio with the forge-narrator tool on the Mac (ElevenLabs),
+                upload the three files to S3, and paste the base URL back into the panel. The
+                published page then shows a synced listen-along player.
+              </InfoTip>
+            </label>
+            <div className="settings-control">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  id="tts-enabled"
+                  type="checkbox"
+                  checked={ttsEnabled}
+                  onChange={(e) => onToggleTts(e.target.checked)}
+                />
+                <span>{ttsEnabled ? 'On' : 'Off'}</span>
+                {ttsState && <span className="settings-state muted">{ttsState}</span>}
+              </label>
+            </div>
           </div>
         </div>
       </section>

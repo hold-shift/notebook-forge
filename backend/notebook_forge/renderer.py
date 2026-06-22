@@ -352,6 +352,7 @@ def render_document(
         nav_prev=meta.get("nav_prev"),
         nav_next=meta.get("nav_next"),
         narrative_label=meta.get("narrative_label", ""),
+        tts=meta.get("tts"),
     )
 
 

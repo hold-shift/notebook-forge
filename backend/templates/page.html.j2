@@ -643,7 +643,9 @@
   </nav>
   {% endif %}
 
-  <article>
+  {% if tts %}{% include "_tts_player.html.j2" %}{% endif %}
+
+  <article{% if tts %} id="forge-article"{% endif %}>
     {% for block in body %}
       {% if block.kind == 'h2' %}
         <h2{% if block.anchor %} id="{{ block.anchor }}"{% endif %}>{{ block.text_html|safe if block.text_html else block.text }}</h2>

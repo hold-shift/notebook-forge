@@ -285,7 +285,21 @@ button:disabled { opacity: 0.55; cursor: default; }
   border-radius: var(--border-radius-md);
   padding: 12px 0;
 }
-.editor-side { display: flex; flex-direction: column; gap: 12px; align-self: start; position: sticky; top: 12px; }
+.editor-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: start;
+  position: sticky;
+  top: 12px;
+  /* Cap to the viewport and scroll internally — without this a tall rail
+     (e.g. once the Audio narration panel is added) overflows past the bottom
+     of the screen with no way to reach it, since the sticky element is pinned. */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  /* Room for the scrollbar / focus rings so panel content isn't clipped. */
+  padding-right: 4px;
+}
 .scroll-top-btn {
   position: fixed;
   bottom: 28px;

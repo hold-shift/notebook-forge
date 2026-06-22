@@ -43,6 +43,28 @@ export interface DocSummary {
   date_confirmed: boolean
   targets: TargetState[]
   report: ReportState
+  /** TTS audio available (global toggle on AND audio_base_url populated). */
+  has_audio: boolean
+  /** Audio present but the document changed since last SSML export. */
+  audio_stale: boolean
+}
+
+export interface LexiconEntry {
+  phrase: string
+  replacement: string
+}
+
+export interface NarrationView {
+  audio_base_url: string
+  voice: string
+  model: string
+  lexicon: LexiconEntry[]
+  exported_hashes: string[]
+  last_exported_at: string | null
+  /** 'no_audio' (grey) | 'in_sync' (green) | 'stale' (amber). */
+  status: 'no_audio' | 'in_sync' | 'stale'
+  live_block_count: number
+  tts_enabled: boolean
 }
 
 export interface DocDetail {
@@ -301,6 +323,7 @@ export const api = {
         polish: { model: string; extra_rules: string }
         reports: { model: string; rules: string }
         narrative: { label: string }
+        tts: { enabled: boolean }
         footer: { notice: string; license_label: string; license_url: string }
         homepage: HomepageSettings
         secrets: Record<string, boolean>
@@ -326,6 +349,36 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then((r) => json<{ ok: boolean }>(r)),
+  saveTtsSetting: (enabled: boolean) =>
+    fetch('/api/settings/tts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).then((r) => json<{ ok: boolean; enabled: boolean }>(r)),
+  narration: (slug: string) =>
+    fetch(`/api/documents/${slug}/narration`).then((r) => json<NarrationView>(r)),
+  saveNarration: (slug: string, body: { audio_base_url?: string; lexicon?: LexiconEntry[] }) =>
+    fetch(`/api/documents/${slug}/narration`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<NarrationView>(r)),
+  exportNarration: async (slug: string) => {
+    const resp = await fetch(`/api/documents/${slug}/narration/export`, { method: 'POST' })
+    if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`)
+    const blob = await resp.blob()
+    const disp = resp.headers.get('Content-Disposition') || ''
+    const m = /filename="([^"]+)"/.exec(disp)
+    const filename = m ? m[1] : `${slug}.manifest.zip`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
   saveFooterSettings: (body: { notice: string; license_label: string; license_url: string }) =>
     fetch('/api/settings/footer', {
       method: 'PUT',

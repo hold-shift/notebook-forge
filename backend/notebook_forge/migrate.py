@@ -27,21 +27,51 @@ def _columns(conn, table: str) -> set[str]:
     return {r["name"] for r in rows}
 
 
-def run_migrations(engine: Engine, db_file: Path) -> None:
-    with engine.connect() as conn:
-        existing = _columns(conn, "documents")
+def _table_exists(conn, table: str) -> bool:
+    row = conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t").bindparams(t=table)
+    ).first()
+    return row is not None
 
-    pending = [
-        ddl for ddl in _DOCUMENTS_MIGRATIONS if _COLUMN_FOR[ddl] not in existing
-    ]
-    if not pending:
-        return
 
+def _backup_once(db_file: Path, suffix: str) -> None:
     if db_file.exists():
-        backup = db_file.with_name("forge.db.bak-pre-groups")
+        backup = db_file.with_name(f"forge.db.bak-{suffix}")
         if not backup.exists():
             shutil.copy2(db_file, backup)
 
-    with engine.begin() as conn:
-        for ddl in pending:
-            conn.execute(text(ddl))
+
+def run_migrations(engine: Engine, db_file: Path) -> None:
+    with engine.connect() as conn:
+        existing = _columns(conn, "documents")
+        narration_exists = _table_exists(conn, "document_narration")
+        narration_cols = _columns(conn, "document_narration") if narration_exists else set()
+
+    pending = [ddl for ddl in _DOCUMENTS_MIGRATIONS if _COLUMN_FOR[ddl] not in existing]
+
+    if pending:
+        _backup_once(db_file, "pre-groups")
+        with engine.begin() as conn:
+            for ddl in pending:
+                conn.execute(text(ddl))
+
+    # TTS narration: the table is created by create_all() with the current
+    # schema on fresh DBs, so this only fires on a workspace whose table predates
+    # the Polly→ElevenLabs switch — add the `model` column the ORM now reads, and
+    # normalise the old "Brian" voice default to the locked ElevenLabs voice_id.
+    # (The orphaned legacy `engine` column is left in place; SQLite can't easily
+    # drop columns and a nullable extra column is harmless.)
+    if narration_exists and "model" not in narration_cols:
+        _backup_once(db_file, "pre-tts-elevenlabs")
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE document_narration "
+                    "ADD COLUMN model TEXT NOT NULL DEFAULT 'eleven_v3'"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE document_narration SET voice = :v WHERE voice = 'Brian'"
+                ).bindparams(v="fjnwTZkKtQOJaYzGLa6n")
+            )

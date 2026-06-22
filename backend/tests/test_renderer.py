@@ -329,3 +329,32 @@ def test_soft_break_round_trip_narrative() -> None:
     runs = parse_inline(div)
     text = "".join(r.get("text", "") for r in runs if r.get("type") == "text")
     assert "\n" in text
+
+
+def test_tts_player_injected_only_when_tts_present():
+    """The listen-along player renders only when meta['tts'] is set, and the
+    static <article> gains its id only then (so non-TTS pages stay byte-faithful
+    to the published corpus)."""
+    blocks = [make_block("paragraph", content=[text_run("Hello world.")])]
+    src = lambda b, n: "x.jpg"  # noqa: E731
+
+    with_tts = render_document(
+        {
+            "title": "Junior",
+            "tts": {
+                "audio_base_url": "https://b.s3/junior",
+                "slug": "junior",
+                "title": "Junior",
+                "author": "R.F. Skitch",
+            },
+        },
+        blocks,
+        src,
+    )
+    assert 'class="tts"' in with_tts
+    assert "document.marks.json" in with_tts
+    assert 'id="forge-article"' in with_tts
+
+    without = render_document({"title": "Junior"}, blocks, src)
+    assert 'class="tts"' not in without
+    assert 'id="forge-article"' not in without

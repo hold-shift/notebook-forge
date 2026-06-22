@@ -246,7 +246,10 @@ def homepage_timeline(session: Session) -> list[dict[str, Any]]:
     existing order. Each group → {name, rows:[{period,title,reading_time,url}]}.
     Empty groups are omitted; ungrouped documents never appear (§1d/§3)."""
     from .groups import list_groups
+    from .narration import tts_enabled
+    from .narration_service import has_audio
 
+    tts_on = tts_enabled(session)
     timeline: list[dict[str, Any]] = []
     for group in list_groups(session):
         rows = []
@@ -258,6 +261,8 @@ def homepage_timeline(session: Session) -> list[dict[str, Any]]:
                 # Mockup shows "~2 hr" (no "read" suffix) in the timeline meta.
                 "reading_time": reading_time(wc).replace(" read", "") if wc else "",
                 "url": m.meta.get("canonical_url", ""),
+                # Indicative speaker glyph on the published index (§7a).
+                "has_audio": tts_on and has_audio(session, m),
             })
         if rows:
             timeline.append({"name": group.name, "rows": rows})

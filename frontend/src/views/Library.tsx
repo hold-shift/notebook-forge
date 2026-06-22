@@ -182,6 +182,18 @@ function DocCard({
           <SerifTitle as="p" className="doc-title">
             {doc.title}
             {doc.year_display ? ` · ${doc.year_display}` : ''}
+            {doc.has_audio && (
+              <i
+                className="ti ti-volume"
+                aria-hidden
+                title={doc.audio_stale ? 'Audio available (stale — re-export & regenerate)' : 'Audio available'}
+                style={{
+                  marginLeft: 8,
+                  fontSize: '0.85em',
+                  color: doc.audio_stale ? 'var(--color-tan)' : 'var(--color-khaki, #6b6b3a)',
+                }}
+              />
+            )}
           </SerifTitle>
           <p className="doc-meta">
             {doc.source_type} · {doc.figures} images · {doc.sketched} sketched

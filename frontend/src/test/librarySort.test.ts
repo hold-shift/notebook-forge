@@ -24,6 +24,8 @@ function doc(overrides: Partial<DocSummary> = {}): DocSummary {
     date_confirmed: true,
     targets: [],
     report: { exists: false, status: 'never-run', stale: false, needs_push: false },
+    has_audio: false,
+    audio_stale: false,
     ...overrides,
   }
 }

@@ -80,6 +80,12 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..narrative import effective_narrative_label
     meta["narrative_label"] = effective_narrative_label(session, doc)
 
+    # TTS player context — present only when the global toggle is on and the
+    # document has an audio base URL (narration_service decides). The renderer
+    # injects the player partial when this key is set.
+    from ..narration_service import player_context
+    meta["tts"] = player_context(session, doc)
+
     # Workspace-wide footer / licence notice, authoritative across all docs.
     from ..footer import footer_html
     meta["footer_html"] = footer_html(session)

@@ -16,7 +16,7 @@ import type { PartialBlock } from '@blocknote/core'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
-import { api, type DocDetail, type PolishLastRun, type PolishReport, type ReportState, type TargetState } from '../api'
+import { api, type DocDetail, type LexiconEntry, type NarrationView, type PolishLastRun, type PolishReport, type ReportState, type TargetState } from '../api'
 import { StatusBadge, type BadgeVariant } from '../ui'
 import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
@@ -196,6 +196,179 @@ function ReportPanel({ slug }: { slug: string }) {
         </div>
       </div>
     </>
+  )
+}
+
+function NarrationPanel({ slug }: { slug: string }) {
+  const [view, setView] = useState<NarrationView | null | 'loading'>('loading')
+  const [url, setUrl] = useState('')
+  const [lexicon, setLexicon] = useState<LexiconEntry[]>([])
+  const [exporting, setExporting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const sync = (v: NarrationView) => {
+    setView(v)
+    setUrl(v.audio_base_url)
+    setLexicon(v.lexicon)
+  }
+
+  useEffect(() => {
+    let live = true
+    api.narration(slug).then(
+      (v) => { if (live) sync(v) },
+      () => { if (live) setView(null) },
+    )
+    return () => { live = false }
+  }, [slug])
+
+  const onExport = useCallback(() => {
+    setError('')
+    setExporting(true)
+    api
+      .exportNarration(slug)
+      .then(() => api.narration(slug))
+      .then(sync, (e) => setError(String(e)))
+      .finally(() => setExporting(false))
+  }, [slug])
+
+  const onSave = useCallback(() => {
+    setError('')
+    setSaving(true)
+    api
+      .saveNarration(slug, { audio_base_url: url, lexicon })
+      .then(sync, (e) => setError(String(e)))
+      .finally(() => setSaving(false))
+  }, [slug, url, lexicon])
+
+  // Hidden entirely while loading/errored and whenever the global TTS toggle
+  // is off (the panel only exists once narration is enabled).
+  if (view === 'loading' || view === null || !view.tts_enabled) return null
+
+  const badge: { variant: BadgeVariant; label: string } =
+    view.status === 'in_sync'
+      ? { variant: 'live', label: 'In sync' }
+      : view.status === 'stale'
+        ? { variant: 'stale', label: 'Stale' }
+        : { variant: 'never-run', label: 'No audio' }
+
+  const lastExported = view.last_exported_at
+    ? new Date(view.last_exported_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null
+
+  const updateRow = (i: number, patch: Partial<LexiconEntry>) =>
+    setLexicon((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const removeRow = (i: number) => setLexicon((rows) => rows.filter((_, j) => j !== i))
+  const addRow = () => setLexicon((rows) => [...rows, { phrase: '', replacement: '' }])
+
+  return (
+    <div className="pending-panel">
+      <div className="pending-panel-header">
+        <span className="panel-head-label">
+          <InfoTip label="About audio narration" align="right">
+            Export the manifest for this document, generate the audio with the forge-narrator
+            tool on the Mac (ElevenLabs), upload the three files to S3, then paste the base URL
+            here. “Stale” means the document changed since the last export — re-export and
+            regenerate the audio. NotebookForge produces no audio itself.
+          </InfoTip>
+          <h3><SectionLabel>Audio narration</SectionLabel></h3>
+        </span>
+      </div>
+      <div className="target-rows">
+        <div className="target-card">
+          <div className="target-card-head">
+            <span
+              className={`dot ${view.status === 'in_sync' ? 'clean' : view.status === 'stale' ? 'dirty' : ''}`}
+            />
+            <span className="pending-name" title="SSML manifest">Manifest</span>
+            <Button variant="secondary" size="sm" disabled={exporting} onClick={onExport}>
+              {exporting ? 'Exporting…' : 'Export SSML'}
+            </Button>
+          </div>
+          <div className="target-card-status">
+            <StatusBadge variant={badge.variant} label={badge.label} />
+            <span className="pending-state muted">
+              {view.live_block_count} block{view.live_block_count === 1 ? '' : 's'}
+              {lastExported ? ` · exported ${lastExported}` : ' · never exported'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+        <label style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Audio base URL (S3)</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://bucket.s3.eu-west-2.amazonaws.com/junior"
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <Button variant="secondary" size="sm" disabled={saving} onClick={onSave}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+          Voice {view.voice} · model {view.model}
+        </span>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Pronunciation lexicon</span>
+          <InfoTip label="About the pronunciation lexicon">
+            Optional phrase → replacement pairs applied when building the manifest — a plain-text
+            substitution, e.g. spell a place name phonetically (“Nui Dat” → “Noo-ee Dat”) so
+            ElevenLabs pronounces it correctly. Add entries as you hear mispronunciations, then
+            re-export.
+          </InfoTip>
+        </div>
+        {lexicon.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input
+              value={row.phrase}
+              onChange={(e) => updateRow(i, { phrase: e.target.value })}
+              placeholder="Nui Dat"
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <input
+              value={row.replacement}
+              onChange={(e) => updateRow(i, { replacement: e.target.value })}
+              placeholder="Noo-ee Dat"
+              style={{ flex: 2, minWidth: 0, fontSize: 12 }}
+            />
+            <button
+              type="button"
+              onClick={() => removeRow(i)}
+              title="Remove entry"
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)' }}
+            >
+              <i className="ti ti-x" aria-hidden />
+            </button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+          <button
+            type="button"
+            onClick={addRow}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--color-text-info)' }}
+          >
+            + Add entry
+          </button>
+          <Button variant="secondary" size="sm" disabled={saving} onClick={onSave}>
+            {saving ? 'Saving…' : 'Save lexicon'}
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <span className="pending-state" style={{ color: 'var(--color-danger, #b00)' }}>{error}</span>
+      )}
+      <p className="images-helper" style={{ marginTop: 10 }}>
+        Generate audio with the forge-narrator tool on the Mac, upload the 3 files to S3, paste
+        the base URL above.
+      </p>
+    </div>
   )
 }
 
@@ -1763,6 +1936,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
               hideUnpublish={isHomepage}
             />
             {!isHomepage && <ReportPanel slug={doc.slug} />}
+            {!isHomepage && <NarrationPanel slug={doc.slug} />}
             <SnapshotsPanel slug={doc.slug} />
             {!isHomepage && (
               <div className="danger-panel">

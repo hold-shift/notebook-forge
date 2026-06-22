@@ -1,0 +1,356 @@
+{# Listen-along TTS player (TTS Spec A §7). Rendered only when the global TTS
+   toggle is on AND the document has an audio base URL. Fetches three files from
+   the S3 base — document.mp3 / document.marks.json / document.blocks.json —
+   renders the readable text from blocks.json with per-word spans aligned to the
+   marks by a running word index, and highlights the spoken word with auto-scroll.
+   Footnote blocks (highlightable:false) are rendered set-apart and are narrated
+   but never visually tracked. Progressive enhancement: on a successful blocks
+   load the static <article> is hidden in favour of this synced view; if the
+   marks/blocks fail to load we fall back to plain audio playback (no highlight),
+   leaving the static article visible. Design tokens match the khaki/white POC. #}
+<section class="tts" id="ttsPlayer"
+         data-base="{{ tts.audio_base_url }}"
+         data-slug="{{ tts.slug }}"
+         data-title="{{ tts.title }}"
+         data-author="{{ tts.author }}"
+         aria-label="Listen to this document">
+  <style>
+    /* Self-contained khaki/white palette (docs/mockup_b3_final.html) — the
+       player does NOT inherit the published page's sepia tokens. */
+    .tts{
+      --tts-khaki:#6b6b3a; --tts-khaki-light:#e8e7d8; --tts-khaki-mid:#b5b48a;
+      --tts-khaki-dark:#4a4a26; --tts-ink:#111110; --tts-ink-2:#444440;
+      --tts-ink-3:#888880; --tts-rule:#e0dfd8; --tts-bg:#ffffff;
+      --tts-bg-offset:#f8f8f5; --tts-spoken:#e8e7d8; --tts-current:#cfca8a;
+      border:1px solid var(--tts-rule); border-radius:6px;
+      background:var(--tts-bg); margin:0 0 2.4rem; overflow:hidden;
+      color:var(--tts-ink);
+      font-family:Georgia,"Times New Roman",serif;
+    }
+    .tts *{ box-sizing:border-box; }
+    .tts-sans{ font-family:system-ui,sans-serif; }
+    .tts-bar{
+      display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
+      padding:.85rem 1.1rem; background:var(--tts-bg-offset);
+      border-bottom:1px solid var(--tts-rule); position:sticky; top:0; z-index:5;
+    }
+    .tts-bar .tts-head{
+      font-family:system-ui,sans-serif; font-weight:600; font-size:.7rem;
+      letter-spacing:.14em; text-transform:uppercase; color:var(--tts-khaki);
+      margin-right:.2rem;
+    }
+    .tts-btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      width:40px; height:40px; border-radius:50%; cursor:pointer;
+      border:1px solid var(--tts-rule); background:var(--tts-bg); color:var(--tts-khaki-dark);
+      font-size:1.05rem; line-height:1; transition:background .15s, border-color .15s;
+    }
+    .tts-btn:hover{ background:var(--tts-bg-offset); border-color:var(--tts-khaki-mid); }
+    .tts-btn:focus-visible{ outline:2px solid var(--tts-khaki); outline-offset:2px; }
+    .tts-progress{
+      flex:1; min-width:120px; height:8px; border-radius:6px;
+      background:var(--tts-rule); cursor:pointer; position:relative; overflow:hidden;
+    }
+    .tts-progress-fill{ position:absolute; inset:0 100% 0 0; background:var(--tts-khaki); }
+    .tts-time{ font-family:system-ui,sans-serif; font-size:.74rem; color:var(--tts-ink-3); font-variant-numeric:tabular-nums; min-width:84px; text-align:right; }
+    .tts-speed{ font-family:system-ui,sans-serif; display:flex; align-items:center; gap:.4rem; font-size:.72rem; color:var(--tts-ink-2); }
+    .tts-speed input{ accent-color:var(--tts-khaki); width:84px; }
+    .tts-speed b{ font-weight:600; min-width:38px; }
+    .tts-resume{
+      flex-basis:100%; display:none; align-items:center; gap:.6rem;
+      font-family:system-ui,sans-serif; font-size:.8rem; color:var(--tts-ink-2);
+    }
+    .tts-resume.show{ display:flex; }
+    .tts-resume button{
+      font-family:system-ui,sans-serif; font-weight:600; font-size:.76rem;
+      color:var(--tts-khaki-dark); background:var(--tts-bg); border:1px solid var(--tts-rule);
+      border-radius:6px; padding:.3rem .7rem; cursor:pointer;
+    }
+    .tts-status{ flex-basis:100%; font-family:system-ui,sans-serif; font-size:.72rem; color:var(--tts-ink-3); }
+    .tts-body{ padding:1.3rem 1.4rem 1.6rem; line-height:1.85; font-size:1.05rem; }
+    .tts-body[hidden]{ display:none; }
+    .tts-h{ font-weight:700; color:var(--tts-ink);
+      font-size:1.35rem; line-height:1.2; margin:1.6rem 0 .7rem; }
+    .tts-h:first-child{ margin-top:0; }
+    .tts-p{ margin:0 0 1.1rem; }
+    .tts-fn{
+      margin:.4rem 0 1.1rem; padding:.2rem 0 .2rem 1rem;
+      border-left:2px solid var(--tts-khaki-mid); font-size:.9rem; color:var(--tts-ink-2);
+    }
+    .tts-fn .tts-fn-label{
+      font-family:system-ui,sans-serif; font-weight:600; color:var(--tts-khaki);
+      margin-right:.4rem; font-size:.7rem; letter-spacing:.06em; text-transform:uppercase;
+    }
+    .tts-w{ border-radius:3px; cursor:pointer; transition:background .08s; padding:0 .02em; }
+    .tts-w.spoken{ background:var(--tts-spoken); }
+    .tts-w.current{ background:var(--tts-current); }
+    .tts-err{ font-family:system-ui,sans-serif; font-size:.85rem; color:#a33; }
+    @media (prefers-reduced-motion:reduce){ .tts-w{ transition:none; } }
+    @media (max-width:520px){ .tts-time{ min-width:0; } .tts-bar{ gap:.5rem; } }
+  </style>
+
+  <div class="tts-bar">
+    <span class="tts-head">Listen</span>
+    <button type="button" class="tts-btn" id="ttsPlay" aria-label="Play">▶</button>
+    <button type="button" class="tts-btn" id="ttsStop" aria-label="Stop">■</button>
+    <div class="tts-progress" id="ttsProgress" role="slider" tabindex="0"
+         aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="tts-progress-fill" id="ttsFill"></div>
+    </div>
+    <span class="tts-time" id="ttsTime">0:00 / 0:00</span>
+    <label class="tts-speed">Speed
+      <input type="range" id="ttsSpeed" min="0.75" max="1.75" step="0.05" value="1.25"
+             aria-label="Playback speed">
+      <b id="ttsSpeedLabel">1.25×</b>
+    </label>
+    <div class="tts-resume" id="ttsResume">
+      <span>Resume where you left off?</span>
+      <button type="button" id="ttsResumeBtn">Resume</button>
+      <button type="button" id="ttsResumeDismiss" style="border:none;background:none;color:var(--ink-faint)">Start over</button>
+    </div>
+    <div class="tts-status" id="ttsStatus">Loading audio…</div>
+  </div>
+
+  <audio id="ttsAudio" preload="metadata" src="{{ tts.audio_base_url }}/document.mp3"></audio>
+  <div class="tts-body" id="ttsText"></div>
+
+<script>
+(function(){
+  var root = document.getElementById('ttsPlayer');
+  if(!root) return;
+  var base = root.dataset.base;
+  var slug = root.dataset.slug || 'doc';
+  var audio = document.getElementById('ttsAudio');
+  var textEl = document.getElementById('ttsText');
+  var statusEl = document.getElementById('ttsStatus');
+  var playBtn = document.getElementById('ttsPlay');
+  var stopBtn = document.getElementById('ttsStop');
+  var progress = document.getElementById('ttsProgress');
+  var fill = document.getElementById('ttsFill');
+  var timeEl = document.getElementById('ttsTime');
+  var speed = document.getElementById('ttsSpeed');
+  var speedLabel = document.getElementById('ttsSpeedLabel');
+  var resumeWrap = document.getElementById('ttsResume');
+  var resumeBtn = document.getElementById('ttsResumeBtn');
+  var resumeDismiss = document.getElementById('ttsResumeDismiss');
+
+  var marks = [], spans = [], lastIdx = -1, lastHl = -1, docHash = '';
+  var LS_KEY = 'tts_pos_' + slug;
+
+  function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function fmt(s){ if(!isFinite(s)) return '0:00'; s=Math.max(0,Math.floor(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+  // ---- load the three S3 files ----
+  function fetchJson(name){ return fetch(base + '/' + name).then(function(r){ if(!r.ok) throw new Error(name+' HTTP '+r.status); return r.json(); }); }
+
+  Promise.all([
+    fetchJson('document.blocks.json').catch(function(){ return null; }),
+    fetchJson('document.marks.json').catch(function(){ return null; })
+  ]).then(function(res){
+    var blocks = res[0], m = res[1];
+    if(!m){
+      // Graceful degradation: no marks → plain audio, keep the static article.
+      statusEl.textContent = 'Word highlighting unavailable — audio only.';
+      return;
+    }
+    marks = m;
+    docHash = marks.length + ':' + ((marks[0]||{}).word||'') + ':' + ((marks[marks.length-1]||{}).word||'');
+    if(blocks && blocks.length){
+      render(blocks);
+      var staticArticle = document.getElementById('forge-article');
+      if(staticArticle) staticArticle.hidden = true; // synced view supersedes it
+    } else {
+      // Marks but no blocks → flat word list, no block structure.
+      renderFlat();
+    }
+    statusEl.textContent = marks.length + ' words · press play';
+    maybeOfferResume();
+  }).catch(function(e){
+    statusEl.innerHTML = '<span class="tts-err">Could not load narration: ' + e.message + '</span>';
+  });
+
+  function makeWordSpan(mark, gi, highlightable){
+    var span = document.createElement('span');
+    span.className = 'tts-w';
+    span.textContent = mark.word;
+    span.dataset.i = gi;
+    if(highlightable) span.dataset.hl = '1';
+    span.addEventListener('click', function(){ seekToMark(gi); });
+    spans[gi] = span;
+    return span;
+  }
+
+  // Assign marks to blocks by stitch-offset time windows (the documented
+  // contract: whispermlx re-segments, so block boundaries are recovered from
+  // the <break> silence gaps, not segment index). Words flow in identical order.
+  function render(blocks){
+    textEl.innerHTML = '';
+    var ptr = 0;
+    blocks.forEach(function(b){
+      var el = document.createElement(b.type === 'heading' ? 'div' : (b.type === 'footnote' ? 'aside' : 'p'));
+      el.className = b.type === 'heading' ? 'tts-h' : (b.type === 'footnote' ? 'tts-fn' : 'tts-p');
+      var hl = b.highlightable !== false && b.type !== 'footnote';
+      if(b.type === 'footnote'){
+        var lab = document.createElement('span'); lab.className = 'tts-fn-label'; lab.textContent = 'Footnote:';
+        el.appendChild(lab); el.appendChild(document.createTextNode(' '));
+      }
+      var end = (typeof b.time_end === 'number') ? b.time_end : Infinity;
+      var consumed = false;
+      while(ptr < marks.length && (b === blocks[blocks.length-1] || marks[ptr].start < end)){
+        el.appendChild(makeWordSpan(marks[ptr], ptr, hl));
+        el.appendChild(document.createTextNode(' '));
+        ptr++; consumed = true;
+      }
+      if(consumed) textEl.appendChild(el);
+    });
+    // Any trailing marks the windows didn't claim — append as a paragraph.
+    if(ptr < marks.length){
+      var tail = document.createElement('p'); tail.className = 'tts-p';
+      while(ptr < marks.length){ tail.appendChild(makeWordSpan(marks[ptr], ptr, true)); tail.appendChild(document.createTextNode(' ')); ptr++; }
+      textEl.appendChild(tail);
+    }
+  }
+
+  function renderFlat(){
+    textEl.innerHTML = '';
+    var p = document.createElement('p'); p.className = 'tts-p';
+    marks.forEach(function(mk, i){ p.appendChild(makeWordSpan(mk, i, true)); p.appendChild(document.createTextNode(' ')); });
+    textEl.appendChild(p);
+  }
+
+  function seekToMark(i){
+    if(!marks[i]) return;
+    audio.currentTime = marks[i].start + 0.01;
+    lastIdx = -1;
+    if(audio.paused) audio.play().catch(function(){});
+    updateHighlight();
+  }
+
+  function findIdx(t){
+    for(var i=0;i<marks.length;i++){
+      if(t >= marks[i].start && t <= marks[i].end) return i;
+      if(t < marks[i].start) return i - 1;
+    }
+    return marks.length - 1;
+  }
+
+  function updateHighlight(){
+    if(!marks.length) return;
+    var idx = findIdx(audio.currentTime);
+    if(idx === lastIdx) return;
+    lastIdx = idx;
+    for(var i=0;i<spans.length;i++){
+      var s = spans[i]; if(!s) continue;
+      s.classList.remove('current','spoken');
+      if(!s.dataset.hl) continue;          // footnote word: narrated, never tracked
+      if(i < idx) s.classList.add('spoken');
+      else if(i === idx) s.classList.add('current');
+    }
+    var cur = spans[idx];
+    if(cur && cur.dataset.hl){
+      lastHl = idx;
+    } else {
+      // Inside a non-highlightable (footnote) block — hold focus on the last
+      // prose word and pause auto-scroll until the next highlightable block.
+      if(spans[lastHl]) spans[lastHl].classList.add('current');
+    }
+    var focus = (cur && cur.dataset.hl) ? cur : spans[lastHl];
+    if(focus && !reduced()) focus.scrollIntoView({behavior:'smooth', block:'center'});
+    savePos();
+  }
+
+  // ---- transport ----
+  function setPlayIcon(){ playBtn.textContent = audio.paused ? '▶' : '⏸'; playBtn.setAttribute('aria-label', audio.paused ? 'Play' : 'Pause'); }
+  playBtn.addEventListener('click', function(){ if(audio.paused) audio.play().catch(function(){}); else audio.pause(); });
+  stopBtn.addEventListener('click', function(){ audio.pause(); audio.currentTime = 0; lastIdx = -1; updateHighlight(); });
+  audio.addEventListener('play', setPlayIcon);
+  audio.addEventListener('pause', function(){ setPlayIcon(); savePos(); });
+  audio.addEventListener('timeupdate', function(){ updateHighlight(); updateProgress(); });
+  audio.addEventListener('seeked', updateHighlight);
+
+  function updateProgress(){
+    var d = audio.duration || 0, t = audio.currentTime || 0;
+    var pct = d ? (t/d*100) : 0;
+    fill.style.right = (100 - pct) + '%';
+    timeEl.textContent = fmt(t) + ' / ' + fmt(d);
+    progress.setAttribute('aria-valuenow', Math.round(pct));
+  }
+  audio.addEventListener('loadedmetadata', updateProgress);
+
+  function seekFromEvent(e){
+    var rect = progress.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width;
+    if(audio.duration) { audio.currentTime = Math.max(0, Math.min(1, x)) * audio.duration; lastIdx = -1; updateHighlight(); }
+  }
+  progress.addEventListener('click', seekFromEvent);
+  progress.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowLeft'){ audio.currentTime = Math.max(0, audio.currentTime - 10); e.preventDefault(); }
+    else if(e.key === 'ArrowRight'){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); e.preventDefault(); }
+  });
+
+  // ---- speed (default 1.25×, operator preference) ----
+  function applySpeed(){ var v = parseFloat(speed.value); audio.playbackRate = v; speedLabel.textContent = v.toFixed(2) + '×'; }
+  speed.addEventListener('input', applySpeed);
+  audio.addEventListener('loadedmetadata', applySpeed);
+  applySpeed();
+
+  // ---- keyboard: space = play/pause, ←/→ = ±10s (when not typing) ----
+  document.addEventListener('keydown', function(e){
+    var tag = (e.target && e.target.tagName) || '';
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+    if(e.code === 'Space'){ e.preventDefault(); if(audio.paused) audio.play().catch(function(){}); else audio.pause(); }
+    else if(e.code === 'ArrowLeft'){ audio.currentTime = Math.max(0, audio.currentTime - 10); }
+    else if(e.code === 'ArrowRight'){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); }
+  });
+
+  // ---- resume memory (localStorage, keyed per document) ----
+  var saveThrottle = 0;
+  function savePos(){
+    var now = Date.now();
+    if(now - saveThrottle < 1500) return;
+    saveThrottle = now;
+    try{ localStorage.setItem(LS_KEY, JSON.stringify({ word_index: Math.max(0,lastIdx), doc_hash: docHash, ts: now })); }catch(_){}
+  }
+  window.addEventListener('beforeunload', function(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ word_index: Math.max(0,lastIdx), doc_hash: docHash, ts: Date.now() })); }catch(_){}});
+
+  function maybeOfferResume(){
+    var raw; try{ raw = localStorage.getItem(LS_KEY); }catch(_){ return; }
+    if(!raw) return;
+    var saved; try{ saved = JSON.parse(raw); }catch(_){ return; }
+    if(!saved || !saved.word_index) return;
+    var target = saved.word_index;
+    if(saved.doc_hash !== docHash){
+      // Audio was regenerated — index no longer trustworthy; fall back to the
+      // start of the nearest paragraph at/just before the saved index.
+      target = nearestParagraphStart(Math.min(target, marks.length - 1));
+      if(!target) return; // nothing useful to resume to
+    }
+    resumeWrap.classList.add('show');
+    resumeBtn.addEventListener('click', function(){ resumeWrap.classList.remove('show'); seekToMark(target); });
+    resumeDismiss.addEventListener('click', function(){ resumeWrap.classList.remove('show'); });
+  }
+
+  function nearestParagraphStart(i){
+    // First highlightable word of the block containing span i (spans carry no
+    // block id, so walk back to the first word after a non-contiguous gap is
+    // overkill; approximate with the start of the current highlightable run).
+    for(var j=i; j>0; j--){ if(spans[j] && spans[j].dataset.hl && spans[j-1] && !spans[j-1].dataset.hl) return j; }
+    return 0;
+  }
+
+  // ---- Media Session (lock-screen controls; audio survives screen lock) ----
+  if('mediaSession' in navigator){
+    try{
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: root.dataset.title || document.title,
+        artist: root.dataset.author || ''
+      });
+      navigator.mediaSession.setActionHandler('play', function(){ audio.play().catch(function(){}); });
+      navigator.mediaSession.setActionHandler('pause', function(){ audio.pause(); });
+      navigator.mediaSession.setActionHandler('seekbackward', function(){ audio.currentTime = Math.max(0, audio.currentTime - 10); });
+      navigator.mediaSession.setActionHandler('seekforward', function(){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); });
+    }catch(_){}
+  }
+})();
+</script>
+</section>

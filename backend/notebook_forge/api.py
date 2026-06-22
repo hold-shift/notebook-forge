@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -246,9 +246,16 @@ def set_positions_route(
 
 @app.get("/api/documents")
 def list_documents(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    from .narration import tts_enabled
+    from .narration_service import audio_state
+
     docs = [d for d in services.list_documents(session) if d.kind == "memoir"]
+    tts_on = tts_enabled(session)
     out = []
     for d in docs:
+        # Audio indicator only when the global TTS toggle is on (§7a). When off,
+        # the icon never shows, so don't pay the live-hash cost.
+        audio = audio_state(session, d) if tts_on else {"has_audio": False, "audio_stale": False}
         figs = [b for b in d.blocks if b.get("type") == "forgeImage"]
         source_file = d.meta.get("source_file", "")
         source_type = Path(source_file).suffix.lstrip(".").upper() if source_file else "HTML"
@@ -272,6 +279,8 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict[str, An
                 "date_confirmed": d.meta.get("date_confirmed", True) is not False,
                 "targets": _target_states(session, d),
                 "report": _report_state(session, d),
+                "has_audio": audio["has_audio"],
+                "audio_stale": audio["audio_stale"],
             }
         )
     return out
@@ -985,6 +994,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .footer import footer_setting
     from .homepage import homepage_settings_view
+    from .narration import tts_enabled
     from .narrative import narrative_label_setting
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
@@ -997,6 +1007,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "polish": polish_settings(session),
         "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
+        "tts": {"enabled": tts_enabled(session)},
         "footer": footer_setting(session),
         "homepage": homepage_settings_view(session),
         "secrets": {
@@ -1095,6 +1106,74 @@ def save_narrative_settings(
     else:
         setting.value = value
     return {"ok": True, "narrative": value}
+
+
+@app.get("/api/settings/tts")
+def get_tts_setting(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .narration import tts_enabled
+
+    return {"enabled": tts_enabled(session)}
+
+
+class TtsSettingsBody(BaseModel):
+    enabled: bool = False
+
+
+@app.put("/api/settings/tts")
+def save_tts_setting(
+    body: TtsSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .models import Setting
+
+    value = {"enabled": bool(body.enabled)}
+    setting = session.get(Setting, "tts")
+    if setting is None:
+        session.add(Setting(key="tts", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "enabled": value["enabled"]}
+
+
+@app.get("/api/documents/{slug}/narration")
+def get_narration(slug: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .narration_service import narration_view
+
+    doc = _get_doc(session, slug)
+    return narration_view(session, doc)
+
+
+class NarrationBody(BaseModel):
+    audio_base_url: str | None = None
+    lexicon: list[dict[str, Any]] | None = None
+
+
+@app.post("/api/documents/{slug}/narration")
+def save_narration_route(
+    slug: str, body: NarrationBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    from .narration_service import save_narration
+
+    url = (body.audio_base_url or "").strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(422, "audio_base_url must be an http(s) URL")
+    doc = _get_doc(session, slug)
+    return save_narration(
+        session, doc, audio_base_url=body.audio_base_url, lexicon=body.lexicon
+    )
+
+
+@app.post("/api/documents/{slug}/narration/export")
+def export_narration(slug: str, session: Session = Depends(get_session)) -> Response:
+    """Build the SSML manifest.zip, store the exported hash set, download it."""
+    from .narration_service import export_manifest
+
+    doc = _get_doc(session, slug)
+    data, filename = export_manifest(session, doc)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class FooterSettingsBody(BaseModel):

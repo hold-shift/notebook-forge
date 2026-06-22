@@ -187,6 +187,42 @@ class Report(Base):
     document: Mapped[Document] = relationship()
 
 
+class DocumentNarration(Base):
+    """Per-document TTS narration record. NotebookForge produces NO audio —
+    this row holds the operator-pasted S3 base URL, the block-hash set last
+    exported (for the staleness dot), and the voice/model/lexicon used to build
+    the manifest. The actual mp3/marks/blocks files live on S3 (made by the
+    forge-narrator tool via ElevenLabs) and are fetched by the published-page
+    player; only `audio_base_url` is entered by hand. One row per document
+    (created lazily on first access)."""
+
+    __tablename__ = "document_narration"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id"), unique=True, index=True
+    )
+    # S3 base, e.g. https://bucket.s3.../junior/ — the player fetches
+    # {audio_base_url}/document.{mp3,marks.json,blocks.json}.
+    audio_base_url: Mapped[str] = mapped_column(String, default="")
+    # Block hashes at the last export — compared against live hashes to show
+    # the in-sync / stale dot.
+    exported_hashes: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    last_exported_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ElevenLabs voice_id (LOCKED) + model. Both feed the block hash, so changing
+    # either invalidates the generator's cache. Display/config here, not secrets.
+    voice: Mapped[str] = mapped_column(String, default="fjnwTZkKtQOJaYzGLa6n")
+    model: Mapped[str] = mapped_column(String, default="eleven_v3")
+    # Pronunciation fixes: list[{phrase, replacement}] — plain-text substitution
+    # applied during payload construction so the generator stays dumb. Empty by
+    # default.
+    lexicon: Mapped[list[Any]] = mapped_column(JSON, default=list)
+
+    document: Mapped[Document] = relationship()
+
+
 class ReportTrack(Base):
     """One structured reference-track row (people | geo | glossary |
     chronology) extracted from a document. These rows are the single source

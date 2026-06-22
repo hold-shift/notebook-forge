@@ -70,6 +70,8 @@
   .memoir-title { font-size: 15px; color: var(--ink); flex: 1; }
   .memoir-meta { font-family: system-ui, sans-serif; font-size: 11px; color: var(--ink-tertiary); flex-shrink: 0; margin-right: 6px; }
   .memoir-arrow { color: var(--khaki-mid); font-size: 14px; }
+  .memoir-audio { display: inline-flex; align-items: center; color: var(--khaki); flex-shrink: 0; margin-right: 2px; }
+  .memoir-audio svg { width: 15px; height: 15px; }
 
   .closing { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
   .closing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1.5rem; }
@@ -165,7 +167,7 @@
       </div>
       {% for row in group.rows %}
       <a class="memoir-item" href="{{ row.url }}">
-        <span class="memoir-period">{{ row.period }}</span><span class="memoir-title">{{ row.title }}</span>{% if row.reading_time %}<span class="memoir-meta">{{ row.reading_time }}</span>{% endif %}<span class="memoir-arrow">→</span>
+        <span class="memoir-period">{{ row.period }}</span><span class="memoir-title">{{ row.title }}</span>{% if row.has_audio %}<span class="memoir-audio" title="Audio narration available" aria-label="Audio narration available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></span>{% endif %}{% if row.reading_time %}<span class="memoir-meta">{{ row.reading_time }}</span>{% endif %}<span class="memoir-arrow">→</span>
       </a>
       {% endfor %}
     </div>
