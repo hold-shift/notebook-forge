@@ -643,8 +643,6 @@
   </nav>
   {% endif %}
 
-  {% if tts %}{% include "_tts_player.html.j2" %}{% endif %}
-
   <article{% if tts %} id="forge-article"{% endif %}>
     {% for block in body %}
       {% if block.kind == 'h2' %}
@@ -853,5 +851,6 @@
   totop.addEventListener('click', toTop);
 })();
 </script>
+{% if tts %}{% include "_tts_player.html.j2" %}{% endif %}
 </body>
 </html>

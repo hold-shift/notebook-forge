@@ -1,356 +1,353 @@
-{# Listen-along TTS player (TTS Spec A §7). Rendered only when the global TTS
-   toggle is on AND the document has an audio base URL. Fetches three files from
-   the S3 base — document.mp3 / document.marks.json / document.blocks.json —
-   renders the readable text from blocks.json with per-word spans aligned to the
-   marks by a running word index, and highlights the spoken word with auto-scroll.
-   Footnote blocks (highlightable:false) are rendered set-apart and are narrated
-   but never visually tracked. Progressive enhancement: on a successful blocks
-   load the static <article> is hidden in favour of this synced view; if the
-   marks/blocks fail to load we fall back to plain audio playback (no highlight),
-   leaving the static article visible. Design tokens match the khaki/white POC. #}
-<section class="tts" id="ttsPlayer"
-         data-base="{{ tts.audio_base_url }}"
-         data-slug="{{ tts.slug }}"
-         data-title="{{ tts.title }}"
-         data-author="{{ tts.author }}"
-         aria-label="Listen to this document">
+{# Listen-along TTS player (TTS Spec A §7), redesigned as a sticky bottom bar.
+   Rendered only when the global TTS toggle is on AND the document has an audio
+   base URL. The player NO LONGER replaces the article — the published page
+   (masthead, prose, figures + captions, footnotes, ToC) renders untouched. This
+   bar fetches document.mp3 / .marks.json / .blocks.json from the S3/R2 base and
+   highlights the spoken word IN PLACE within the existing <article>, auto-scrolling
+   to follow. Word-level highlighting where the printed text and the spoken words
+   line up 1:1; otherwise it falls back to highlighting the current block. Footnotes
+   and the synthetic title preamble are narrated but not visually tracked. Uses the
+   page's own sepia tokens so it reads as part of the memoir page. Graceful
+   degradation: if marks/blocks are unreachable, audio still plays (no highlight). #}
+<div class="tts" id="ttsPlayer"
+     data-base="{{ tts.audio_base_url }}"
+     data-slug="{{ tts.slug }}"
+     data-title="{{ tts.title }}"
+     data-author="{{ tts.author }}"
+     role="region" aria-label="Listen to this document">
   <style>
-    /* Self-contained khaki/white palette (docs/mockup_b3_final.html) — the
-       player does NOT inherit the published page's sepia tokens. */
     .tts{
-      --tts-khaki:#6b6b3a; --tts-khaki-light:#e8e7d8; --tts-khaki-mid:#b5b48a;
-      --tts-khaki-dark:#4a4a26; --tts-ink:#111110; --tts-ink-2:#444440;
-      --tts-ink-3:#888880; --tts-rule:#e0dfd8; --tts-bg:#ffffff;
-      --tts-bg-offset:#f8f8f5; --tts-spoken:#e8e7d8; --tts-current:#cfca8a;
-      border:1px solid var(--tts-rule); border-radius:6px;
-      background:var(--tts-bg); margin:0 0 2.4rem; overflow:hidden;
-      color:var(--tts-ink);
-      font-family:Georgia,"Times New Roman",serif;
+      position:fixed; left:0; right:0; bottom:0; z-index:90;
+      background:var(--paper-edge); border-top:1px solid var(--rule);
+      box-shadow:0 -8px 24px -18px rgba(42,37,32,.5);
+      font-family:"Newsreader",Georgia,serif;
     }
-    .tts *{ box-sizing:border-box; }
-    .tts-sans{ font-family:system-ui,sans-serif; }
-    .tts-bar{
+    /* Reserve space so the fixed bar never hides the end of the document, and
+       lift the existing floating controls clear of it. */
+    body{ padding-bottom:64px; }
+    .totop{ bottom:78px!important; } .toc-fab{ bottom:78px!important; }
+    /* The sticky ToC rail / drawer are full-height, so the bar would cover their
+       last entries — pad the scroll area so everything can scroll clear of it. */
+    aside.toc-rail{ padding-bottom:76px!important; }
+    .toc-dlist{ padding-bottom:120px!important; }
+    @media (max-width:520px){
+      body{ padding-bottom:104px; }
+      .totop{ bottom:118px!important; } .toc-fab{ bottom:118px!important; }
+    }
+    .tts-inner{
+      max-width:980px; margin:0 auto; padding:.6rem 1rem;
       display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
-      padding:.85rem 1.1rem; background:var(--tts-bg-offset);
-      border-bottom:1px solid var(--tts-rule); position:sticky; top:0; z-index:5;
     }
-    .tts-bar .tts-head{
-      font-family:system-ui,sans-serif; font-weight:600; font-size:.7rem;
-      letter-spacing:.14em; text-transform:uppercase; color:var(--tts-khaki);
-      margin-right:.2rem;
+    .tts-head{
+      font-family:system-ui,sans-serif; font-size:.68rem; letter-spacing:.14em;
+      text-transform:uppercase; color:var(--accent); font-weight:600; flex:none;
     }
     .tts-btn{
-      display:inline-flex; align-items:center; justify-content:center;
+      display:inline-flex; align-items:center; justify-content:center; flex:none;
       width:40px; height:40px; border-radius:50%; cursor:pointer;
-      border:1px solid var(--tts-rule); background:var(--tts-bg); color:var(--tts-khaki-dark);
-      font-size:1.05rem; line-height:1; transition:background .15s, border-color .15s;
+      border:1px solid var(--rule); background:#fff; color:var(--accent-deep);
+      font-size:1.1rem; line-height:1; transition:background .15s,border-color .15s;
     }
-    .tts-btn:hover{ background:var(--tts-bg-offset); border-color:var(--tts-khaki-mid); }
-    .tts-btn:focus-visible{ outline:2px solid var(--tts-khaki); outline-offset:2px; }
-    .tts-progress{
-      flex:1; min-width:120px; height:8px; border-radius:6px;
-      background:var(--tts-rule); cursor:pointer; position:relative; overflow:hidden;
+    .tts-btn.stop{ width:34px; height:34px; font-size:1rem; }
+    .tts-btn:hover{ background:#fffdf9; border-color:var(--accent); }
+    .tts-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+    .tts-mid{ flex:1 1 200px; display:flex; align-items:center; gap:.7rem; min-width:140px; }
+    .tts-progress{ flex:1; height:7px; border-radius:6px; background:var(--rule);
+      position:relative; cursor:pointer; }
+    .tts-progress:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+    .tts-fill{ position:absolute; left:0; top:0; bottom:0; width:0; background:var(--accent);
+      border-radius:6px; }
+    .tts-time{ font-family:system-ui,sans-serif; font-size:.74rem; color:var(--ink-faint);
+      font-variant-numeric:tabular-nums; white-space:nowrap; flex:none; }
+    .tts-speedwrap{ display:flex; align-items:center; gap:.45rem; flex:none; }
+    .tts-splabel{ font-family:system-ui,sans-serif; font-size:.7rem; color:var(--ink-soft); }
+    .tts-speed{ width:78px; accent-color:var(--accent); }
+    .tts-chip{
+      font-family:system-ui,sans-serif; font-size:.74rem; font-weight:600;
+      color:var(--ink-soft); background:#fff; border:1px solid var(--rule);
+      border-radius:999px; padding:.2rem .55rem; cursor:pointer; min-width:48px;
     }
-    .tts-progress-fill{ position:absolute; inset:0 100% 0 0; background:var(--tts-khaki); }
-    .tts-time{ font-family:system-ui,sans-serif; font-size:.74rem; color:var(--tts-ink-3); font-variant-numeric:tabular-nums; min-width:84px; text-align:right; }
-    .tts-speed{ font-family:system-ui,sans-serif; display:flex; align-items:center; gap:.4rem; font-size:.72rem; color:var(--tts-ink-2); }
-    .tts-speed input{ accent-color:var(--tts-khaki); width:84px; }
-    .tts-speed b{ font-weight:600; min-width:38px; }
     .tts-resume{
-      flex-basis:100%; display:none; align-items:center; gap:.6rem;
-      font-family:system-ui,sans-serif; font-size:.8rem; color:var(--tts-ink-2);
+      flex:none; display:none; align-items:center; gap:.4rem;
+      font-family:system-ui,sans-serif; font-size:.74rem; color:var(--ink-soft);
     }
-    .tts-resume.show{ display:flex; }
+    .tts-resume.show{ display:inline-flex; }
     .tts-resume button{
-      font-family:system-ui,sans-serif; font-weight:600; font-size:.76rem;
-      color:var(--tts-khaki-dark); background:var(--tts-bg); border:1px solid var(--tts-rule);
-      border-radius:6px; padding:.3rem .7rem; cursor:pointer;
+      font-family:system-ui,sans-serif; font-weight:600; font-size:.72rem;
+      color:var(--accent-deep); background:#fff; border:1px solid var(--rule);
+      border-radius:8px; padding:.22rem .55rem; cursor:pointer;
     }
-    .tts-status{ flex-basis:100%; font-family:system-ui,sans-serif; font-size:.72rem; color:var(--tts-ink-3); }
-    .tts-body{ padding:1.3rem 1.4rem 1.6rem; line-height:1.85; font-size:1.05rem; }
-    .tts-body[hidden]{ display:none; }
-    .tts-h{ font-weight:700; color:var(--tts-ink);
-      font-size:1.35rem; line-height:1.2; margin:1.6rem 0 .7rem; }
-    .tts-h:first-child{ margin-top:0; }
-    .tts-p{ margin:0 0 1.1rem; }
-    .tts-fn{
-      margin:.4rem 0 1.1rem; padding:.2rem 0 .2rem 1rem;
-      border-left:2px solid var(--tts-khaki-mid); font-size:.9rem; color:var(--tts-ink-2);
+    .tts-resume .x{ border:none; background:none; color:var(--ink-faint); cursor:pointer;
+      font-size:.72rem; text-decoration:underline; padding:0; }
+    .tts-status{ font-family:system-ui,sans-serif; font-size:.72rem; color:var(--ink-faint);
+      flex:none; }
+    /* In-article highlight (applied to spans the player injects into the prose).
+       Literal colours — these spans live inside <article>, NOT inside .tts, so a
+       CSS variable scoped to .tts would not inherit down to them. */
+    .tts-w{ border-radius:3px; padding:0 .04em; cursor:pointer; transition:background .1s; }
+    .tts-w.spoken{ background:#f4eddf; }
+    .tts-w.current{ background:#f1cf6a; box-shadow:0 0 0 2px #f1cf6a; }
+    .tts-blk-active{ background:#f4eddf; border-radius:4px; }
+    /* Mobile: two rows — controls+progress on top, label+time below; speed = chip. */
+    @media (max-width:520px){
+      .tts-inner{ gap:.5rem .6rem; padding:.55rem .8rem; }
+      .tts-splabel, .tts-speed{ display:none; }
+      .tts-mid{ order:1; flex:1 1 100%; }
+      .tts-head{ order:2; }
+      .tts-time{ order:3; margin-left:auto; }
+      .tts-btn{ order:0; }
     }
-    .tts-fn .tts-fn-label{
-      font-family:system-ui,sans-serif; font-weight:600; color:var(--tts-khaki);
-      margin-right:.4rem; font-size:.7rem; letter-spacing:.06em; text-transform:uppercase;
-    }
-    .tts-w{ border-radius:3px; cursor:pointer; transition:background .08s; padding:0 .02em; }
-    .tts-w.spoken{ background:var(--tts-spoken); }
-    .tts-w.current{ background:var(--tts-current); }
-    .tts-err{ font-family:system-ui,sans-serif; font-size:.85rem; color:#a33; }
-    @media (prefers-reduced-motion:reduce){ .tts-w{ transition:none; } }
-    @media (max-width:520px){ .tts-time{ min-width:0; } .tts-bar{ gap:.5rem; } }
   </style>
 
-  <div class="tts-bar">
+  <audio id="ttsAudio" preload="metadata" src="{{ tts.audio_base_url }}/document.mp3"></audio>
+  <div class="tts-inner">
+    <button type="button" class="tts-btn" id="ttsPlay" aria-label="Play">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button type="button" class="tts-btn stop" id="ttsStop" aria-label="Stop">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+    </button>
     <span class="tts-head">Listen</span>
-    <button type="button" class="tts-btn" id="ttsPlay" aria-label="Play">▶</button>
-    <button type="button" class="tts-btn" id="ttsStop" aria-label="Stop">■</button>
-    <div class="tts-progress" id="ttsProgress" role="slider" tabindex="0"
-         aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <div class="tts-progress-fill" id="ttsFill"></div>
+    <div class="tts-mid">
+      <div class="tts-progress" id="ttsProgress" role="slider" tabindex="0"
+           aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="tts-fill" id="ttsFill"></div>
+      </div>
     </div>
     <span class="tts-time" id="ttsTime">0:00 / 0:00</span>
-    <label class="tts-speed">Speed
-      <input type="range" id="ttsSpeed" min="0.75" max="1.75" step="0.05" value="1.25"
-             aria-label="Playback speed">
-      <b id="ttsSpeedLabel">1.25×</b>
-    </label>
-    <div class="tts-resume" id="ttsResume">
-      <span>Resume where you left off?</span>
-      <button type="button" id="ttsResumeBtn">Resume</button>
-      <button type="button" id="ttsResumeDismiss" style="border:none;background:none;color:var(--ink-faint)">Start over</button>
+    <div class="tts-speedwrap">
+      <span class="tts-splabel">Speed</span>
+      <input type="range" class="tts-speed" id="ttsSpeed" min="0.75" max="1.75" step="0.05"
+             value="1.25" aria-label="Playback speed">
+      <button type="button" class="tts-chip" id="ttsChip" aria-label="Playback speed">1.25×</button>
     </div>
-    <div class="tts-status" id="ttsStatus">Loading audio…</div>
+    <span class="tts-resume" id="ttsResume">
+      <button type="button" id="ttsResumeBtn">Resume</button>
+      <button type="button" class="x" id="ttsResumeDismiss">start over</button>
+    </span>
+    <span class="tts-status" id="ttsStatus">Loading…</span>
   </div>
-
-  <audio id="ttsAudio" preload="metadata" src="{{ tts.audio_base_url }}/document.mp3"></audio>
-  <div class="tts-body" id="ttsText"></div>
 
 <script>
 (function(){
-  var root = document.getElementById('ttsPlayer');
-  if(!root) return;
-  var base = root.dataset.base;
-  var slug = root.dataset.slug || 'doc';
-  var audio = document.getElementById('ttsAudio');
-  var textEl = document.getElementById('ttsText');
-  var statusEl = document.getElementById('ttsStatus');
-  var playBtn = document.getElementById('ttsPlay');
-  var stopBtn = document.getElementById('ttsStop');
-  var progress = document.getElementById('ttsProgress');
-  var fill = document.getElementById('ttsFill');
-  var timeEl = document.getElementById('ttsTime');
-  var speed = document.getElementById('ttsSpeed');
-  var speedLabel = document.getElementById('ttsSpeedLabel');
-  var resumeWrap = document.getElementById('ttsResume');
-  var resumeBtn = document.getElementById('ttsResumeBtn');
-  var resumeDismiss = document.getElementById('ttsResumeDismiss');
+  var root=document.getElementById('ttsPlayer'); if(!root) return;
+  var base=root.dataset.base, slug=root.dataset.slug||'doc';
+  var audio=document.getElementById('ttsAudio');
+  var playBtn=document.getElementById('ttsPlay'), stopBtn=document.getElementById('ttsStop');
+  var progress=document.getElementById('ttsProgress'), fill=document.getElementById('ttsFill');
+  var timeEl=document.getElementById('ttsTime'), statusEl=document.getElementById('ttsStatus');
+  var speed=document.getElementById('ttsSpeed'), chip=document.getElementById('ttsChip');
+  var resumeWrap=document.getElementById('ttsResume'),
+      resumeBtn=document.getElementById('ttsResumeBtn'),
+      resumeDismiss=document.getElementById('ttsResumeDismiss');
+  var article=document.getElementById('forge-article');
 
-  var marks = [], spans = [], lastIdx = -1, lastHl = -1, docHash = '';
-  var LS_KEY = 'tts_pos_' + slug;
+  var marks=[], wordSpans=[], leafFor=[], blockLeaves=[], docHash='';
+  var lastIdx=-1, activeLeaf=null, LS='tts_pos_'+slug;
 
   function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-  function fmt(s){ if(!isFinite(s)) return '0:00'; s=Math.max(0,Math.floor(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  function fmt(s){ if(!isFinite(s)||s<0) s=0; s=Math.floor(s); var m=Math.floor(s/60); return m+':'+String(s%60).padStart(2,'0'); }
+  function norm(t){ return (t||'').replace(/\s+/g,' ').trim().toLowerCase(); }
 
-  // ---- load the three S3 files ----
-  function fetchJson(name){ return fetch(base + '/' + name).then(function(r){ if(!r.ok) throw new Error(name+' HTTP '+r.status); return r.json(); }); }
+  function fetchJson(name){ return fetch(base+'/'+name).then(function(r){ if(!r.ok) throw new Error(name+' '+r.status); return r.json(); }); }
 
   Promise.all([
-    fetchJson('document.blocks.json').catch(function(){ return null; }),
-    fetchJson('document.marks.json').catch(function(){ return null; })
+    fetchJson('document.marks.json').catch(function(){ return null; }),
+    fetchJson('document.blocks.json').catch(function(){ return null; })
   ]).then(function(res){
-    var blocks = res[0], m = res[1];
-    if(!m){
-      // Graceful degradation: no marks → plain audio, keep the static article.
-      statusEl.textContent = 'Word highlighting unavailable — audio only.';
-      return;
-    }
-    marks = m;
-    docHash = marks.length + ':' + ((marks[0]||{}).word||'') + ':' + ((marks[marks.length-1]||{}).word||'');
-    if(blocks && blocks.length){
-      render(blocks);
-      var staticArticle = document.getElementById('forge-article');
-      if(staticArticle) staticArticle.hidden = true; // synced view supersedes it
-    } else {
-      // Marks but no blocks → flat word list, no block structure.
-      renderFlat();
-    }
-    statusEl.textContent = marks.length + ' words · press play';
-    maybeOfferResume();
-  }).catch(function(e){
-    statusEl.innerHTML = '<span class="tts-err">Could not load narration: ' + e.message + '</span>';
-  });
+    marks=res[0]; var blocks=res[1];
+    if(!marks){ statusEl.textContent='Audio only — highlighting unavailable.'; return; }
+    docHash=marks.length+':'+((marks[0]||{}).word||'')+':'+((marks[marks.length-1]||{}).word||'');
+    if(article && blocks && blocks.length){ try{ mapToArticle(blocks); }catch(e){ /* highlight off, audio still plays */ } }
+    statusEl.textContent=marks.length.toLocaleString()+' words';
+    maybeResume();
+  }).catch(function(e){ statusEl.textContent='Could not load narration.'; });
 
-  function makeWordSpan(mark, gi, highlightable){
-    var span = document.createElement('span');
-    span.className = 'tts-w';
-    span.textContent = mark.word;
-    span.dataset.i = gi;
-    if(highlightable) span.dataset.hl = '1';
-    span.addEventListener('click', function(){ seekToMark(gi); });
-    spans[gi] = span;
-    return span;
-  }
-
-  // Assign marks to blocks by stitch-offset time windows (the documented
-  // contract: whispermlx re-segments, so block boundaries are recovered from
-  // the <break> silence gaps, not segment index). Words flow in identical order.
-  function render(blocks){
-    textEl.innerHTML = '';
-    var ptr = 0;
-    blocks.forEach(function(b){
-      var el = document.createElement(b.type === 'heading' ? 'div' : (b.type === 'footnote' ? 'aside' : 'p'));
-      el.className = b.type === 'heading' ? 'tts-h' : (b.type === 'footnote' ? 'tts-fn' : 'tts-p');
-      var hl = b.highlightable !== false && b.type !== 'footnote';
-      if(b.type === 'footnote'){
-        var lab = document.createElement('span'); lab.className = 'tts-fn-label'; lab.textContent = 'Footnote:';
-        el.appendChild(lab); el.appendChild(document.createTextNode(' '));
-      }
-      var end = (typeof b.time_end === 'number') ? b.time_end : Infinity;
-      var consumed = false;
-      while(ptr < marks.length && (b === blocks[blocks.length-1] || marks[ptr].start < end)){
-        el.appendChild(makeWordSpan(marks[ptr], ptr, hl));
-        el.appendChild(document.createTextNode(' '));
-        ptr++; consumed = true;
-      }
-      if(consumed) textEl.appendChild(el);
+  // ---- map narration blocks onto the existing article text ----
+  function collectLeaves(){
+    // Highlightable prose containers in reading order; figures + footnote asides
+    // are intentionally excluded (footnotes are narrated but not tracked).
+    var out=[];
+    article.querySelectorAll('h2, h3, p, li, blockquote').forEach(function(el){
+      if(el.closest('figure')) return;
+      if(el.closest('aside.footnote')) return;
+      if(el.tagName==='BLOCKQUOTE') return;            // its inner <p> is collected instead
+      if(el.tagName==='P' && el.closest('blockquote')){ /* keep */ }
+      if(!el.textContent.trim()) return;
+      out.push(el);
     });
-    // Any trailing marks the windows didn't claim — append as a paragraph.
-    if(ptr < marks.length){
-      var tail = document.createElement('p'); tail.className = 'tts-p';
-      while(ptr < marks.length){ tail.appendChild(makeWordSpan(marks[ptr], ptr, true)); tail.appendChild(document.createTextNode(' ')); ptr++; }
-      textEl.appendChild(tail);
+    return out;
+  }
+
+  function tokenize(leaf){
+    // Wrap each whitespace-delimited word in a span, preserving inline markup and
+    // SKIPPING footnote-marker superscripts (sup.fn-ref) — they aren't spoken.
+    var walker=document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT, {
+      acceptNode:function(n){
+        if(!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        if(n.parentElement && n.parentElement.closest('sup.fn-ref')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var textNodes=[], n; while((n=walker.nextNode())) textNodes.push(n);
+    var spans=[];
+    textNodes.forEach(function(tn){
+      var frag=document.createDocumentFragment();
+      tn.nodeValue.split(/(\s+)/).forEach(function(part){
+        if(part===''){ return; }
+        if(/^\s+$/.test(part)){ frag.appendChild(document.createTextNode(part)); return; }
+        var s=document.createElement('span'); s.className='tts-w'; s.textContent=part;
+        frag.appendChild(s); spans.push(s);
+      });
+      tn.parentNode.replaceChild(frag, tn);
+    });
+    return spans;
+  }
+
+  function mapToArticle(blocks){
+    var hl=blocks.filter(function(b){ return b.highlightable; });   // includes synthetic title at front
+    var leaves=collectLeaves();
+    wordSpans=new Array(marks.length);
+    // Align from the end so the leading title block (which has no article element)
+    // falls off the front when there is one extra highlightable block.
+    var offset=hl.length-leaves.length;
+    for(var i=0;i<leaves.length;i++){
+      var b=hl[i+offset]; if(!b) continue;
+      var leaf=leaves[i];
+      var spans=tokenize(leaf);
+      var n=(b.word_end!=null?b.word_end:b.word_start)-(b.word_start!=null?b.word_start:0);
+      var entry={el:leaf, t0:b.time_start, t1:b.time_end, w0:b.word_start, w1:b.word_end, mode:'block'};
+      // Word-level only when the printed tokens line up 1:1 with the spoken words
+      // AND the texts agree; otherwise fall back to block-level for this leaf.
+      if(spans.length===n && n>0 && norm(leaf.textContent)===norm(b.text)){
+        entry.mode='word'; entry.spans=spans;
+        for(var k=0;k<spans.length;k++){ spans[k].dataset.i=b.word_start+k; wordSpans[b.word_start+k]=spans[k]; }
+      }
+      blockLeaves.push(entry);
     }
+    blockLeaves.sort(function(a,b){ return (a.t0||0)-(b.t0||0); });
   }
 
-  function renderFlat(){
-    textEl.innerHTML = '';
-    var p = document.createElement('p'); p.className = 'tts-p';
-    marks.forEach(function(mk, i){ p.appendChild(makeWordSpan(mk, i, true)); p.appendChild(document.createTextNode(' ')); });
-    textEl.appendChild(p);
-  }
-
-  function seekToMark(i){
-    if(!marks[i]) return;
-    audio.currentTime = marks[i].start + 0.01;
-    lastIdx = -1;
-    if(audio.paused) audio.play().catch(function(){});
-    updateHighlight();
-  }
-
-  function findIdx(t){
-    for(var i=0;i<marks.length;i++){
-      if(t >= marks[i].start && t <= marks[i].end) return i;
-      if(t < marks[i].start) return i - 1;
+  function leafAt(t){
+    var lo=0, hi=blockLeaves.length-1, hit=null;
+    for(var i=0;i<blockLeaves.length;i++){
+      var L=blockLeaves[i];
+      if(t>=(L.t0||0) && (L.t1==null || t<L.t1)){ hit=L; break; }
     }
-    return marks.length - 1;
+    return hit;
   }
 
-  function updateHighlight(){
+  function wordIndex(t){
+    var lo=0, hi=marks.length-1, ans=-1;
+    while(lo<=hi){ var m=(lo+hi)>>1; if(marks[m].start<=t){ ans=m; lo=m+1; } else hi=m-1; }
+    if(ans>=0 && t>marks[ans].end && ans+1<marks.length && t<marks[ans+1].start) return ans; // in a gap → stay
+    return ans;
+  }
+
+  function clearLeaf(L){
+    if(!L) return;
+    L.el.classList.remove('tts-blk-active');
+    if(L.spans) L.spans.forEach(function(s){ s.classList.remove('spoken','current'); });
+  }
+
+  function update(){
     if(!marks.length) return;
-    var idx = findIdx(audio.currentTime);
-    if(idx === lastIdx) return;
-    lastIdx = idx;
-    for(var i=0;i<spans.length;i++){
-      var s = spans[i]; if(!s) continue;
-      s.classList.remove('current','spoken');
-      if(!s.dataset.hl) continue;          // footnote word: narrated, never tracked
-      if(i < idx) s.classList.add('spoken');
-      else if(i === idx) s.classList.add('current');
-    }
-    var cur = spans[idx];
-    if(cur && cur.dataset.hl){
-      lastHl = idx;
+    var t=audio.currentTime, idx=wordIndex(t);
+    if(idx===lastIdx) return; lastIdx=idx;
+    var L=leafAt(t);
+    if(!L){ return; }                       // title/footnote window → hold focus
+    if(L!==activeLeaf){ clearLeaf(activeLeaf); activeLeaf=L; }
+    var focus=null;
+    if(L.mode==='word'){
+      for(var k=0;k<L.spans.length;k++){
+        var gi=L.w0+k, s=L.spans[k];
+        s.classList.remove('spoken','current');
+        if(gi<idx) s.classList.add('spoken');
+        else if(gi===idx){ s.classList.add('current'); focus=s; }
+      }
+      if(!focus){ focus=L.spans[Math.max(0,Math.min(L.spans.length-1, idx-L.w0))]; }
     } else {
-      // Inside a non-highlightable (footnote) block — hold focus on the last
-      // prose word and pause auto-scroll until the next highlightable block.
-      if(spans[lastHl]) spans[lastHl].classList.add('current');
+      L.el.classList.add('tts-blk-active'); focus=L.el;
     }
-    var focus = (cur && cur.dataset.hl) ? cur : spans[lastHl];
     if(focus && !reduced()) focus.scrollIntoView({behavior:'smooth', block:'center'});
-    savePos();
+    save();
   }
 
   // ---- transport ----
-  function setPlayIcon(){ playBtn.textContent = audio.paused ? '▶' : '⏸'; playBtn.setAttribute('aria-label', audio.paused ? 'Play' : 'Pause'); }
+  var SVG_PLAY='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  var SVG_PAUSE='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  function syncPlay(){ if(audio.paused){ playBtn.innerHTML=SVG_PLAY; playBtn.setAttribute('aria-label','Play'); }
+                       else { playBtn.innerHTML=SVG_PAUSE; playBtn.setAttribute('aria-label','Pause'); } }
   playBtn.addEventListener('click', function(){ if(audio.paused) audio.play().catch(function(){}); else audio.pause(); });
-  stopBtn.addEventListener('click', function(){ audio.pause(); audio.currentTime = 0; lastIdx = -1; updateHighlight(); });
-  audio.addEventListener('play', setPlayIcon);
-  audio.addEventListener('pause', function(){ setPlayIcon(); savePos(); });
-  audio.addEventListener('timeupdate', function(){ updateHighlight(); updateProgress(); });
-  audio.addEventListener('seeked', updateHighlight);
+  stopBtn.addEventListener('click', function(){ audio.pause(); audio.currentTime=0; lastIdx=-1; clearLeaf(activeLeaf); activeLeaf=null; });
+  audio.addEventListener('play', syncPlay);
+  audio.addEventListener('pause', function(){ syncPlay(); save(); });
+  audio.addEventListener('timeupdate', function(){ update(); progressUpdate(); });
+  audio.addEventListener('seeked', update);
 
-  function updateProgress(){
-    var d = audio.duration || 0, t = audio.currentTime || 0;
-    var pct = d ? (t/d*100) : 0;
-    fill.style.right = (100 - pct) + '%';
-    timeEl.textContent = fmt(t) + ' / ' + fmt(d);
-    progress.setAttribute('aria-valuenow', Math.round(pct));
-  }
-  audio.addEventListener('loadedmetadata', updateProgress);
+  // Click any word in the prose to jump the audio there (POC seek-with-catch).
+  if(article) article.addEventListener('click', function(e){
+    var w=e.target.closest('.tts-w'); if(!w || w.dataset.i==null) return;
+    var i=+w.dataset.i; if(!marks[i]) return;
+    audio.currentTime=marks[i].start+0.01; lastIdx=-1;
+    if(audio.paused) audio.play().catch(function(){});
+    update();
+  });
 
-  function seekFromEvent(e){
-    var rect = progress.getBoundingClientRect();
-    var x = (e.clientX - rect.left) / rect.width;
-    if(audio.duration) { audio.currentTime = Math.max(0, Math.min(1, x)) * audio.duration; lastIdx = -1; updateHighlight(); }
+  function progressUpdate(){
+    var d=audio.duration||0, t=audio.currentTime||0, p=d?(t/d*100):0;
+    fill.style.width=p+'%'; timeEl.textContent=fmt(t)+' / '+fmt(d);
+    progress.setAttribute('aria-valuenow', Math.round(p));
   }
-  progress.addEventListener('click', seekFromEvent);
+  audio.addEventListener('loadedmetadata', progressUpdate);
+  function seekFrom(e){ var r=progress.getBoundingClientRect(), x=(e.clientX-r.left)/r.width;
+    if(audio.duration){ audio.currentTime=Math.max(0,Math.min(1,x))*audio.duration; lastIdx=-1; update(); } }
+  progress.addEventListener('click', seekFrom);
   progress.addEventListener('keydown', function(e){
-    if(e.key === 'ArrowLeft'){ audio.currentTime = Math.max(0, audio.currentTime - 10); e.preventDefault(); }
-    else if(e.key === 'ArrowRight'){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); e.preventDefault(); }
-  });
+    if(e.key==='ArrowLeft'){ audio.currentTime=Math.max(0,audio.currentTime-10); e.preventDefault(); }
+    else if(e.key==='ArrowRight'){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10); e.preventDefault(); } });
 
-  // ---- speed (default 1.25×, operator preference) ----
-  function applySpeed(){ var v = parseFloat(speed.value); audio.playbackRate = v; speedLabel.textContent = v.toFixed(2) + '×'; }
-  speed.addEventListener('input', applySpeed);
-  audio.addEventListener('loadedmetadata', applySpeed);
-  applySpeed();
+  // ---- speed (slider on desktop, tap-to-cycle chip on mobile) ----
+  var STEPS=[1,1.25,1.5,1.75];
+  function setSpeed(v){ v=Math.round(v*100)/100; audio.playbackRate=v; speed.value=v; chip.textContent=v+'×'; }
+  speed.addEventListener('input', function(){ setSpeed(parseFloat(speed.value)); });
+  chip.addEventListener('click', function(){ var i=STEPS.indexOf(Math.round(audio.playbackRate*100)/100);
+    setSpeed(STEPS[(i+1)%STEPS.length]); });
+  audio.addEventListener('loadedmetadata', function(){ setSpeed(parseFloat(speed.value)); });
+  setSpeed(1.25);
 
-  // ---- keyboard: space = play/pause, ←/→ = ±10s (when not typing) ----
+  // ---- keyboard (space play/pause, ←/→ ±10s) ----
   document.addEventListener('keydown', function(e){
-    var tag = (e.target && e.target.tagName) || '';
-    if(tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
-    if(e.code === 'Space'){ e.preventDefault(); if(audio.paused) audio.play().catch(function(){}); else audio.pause(); }
-    else if(e.code === 'ArrowLeft'){ audio.currentTime = Math.max(0, audio.currentTime - 10); }
-    else if(e.code === 'ArrowRight'){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); }
-  });
+    var tag=(e.target&&e.target.tagName)||'';
+    if(tag==='INPUT'||tag==='TEXTAREA'||(e.target&&e.target.isContentEditable)) return;
+    if(e.code==='Space'){ e.preventDefault(); if(audio.paused) audio.play().catch(function(){}); else audio.pause(); }
+    else if(e.code==='ArrowLeft'){ audio.currentTime=Math.max(0,audio.currentTime-10); }
+    else if(e.code==='ArrowRight'){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10); } });
 
-  // ---- resume memory (localStorage, keyed per document) ----
-  var saveThrottle = 0;
-  function savePos(){
-    var now = Date.now();
-    if(now - saveThrottle < 1500) return;
-    saveThrottle = now;
-    try{ localStorage.setItem(LS_KEY, JSON.stringify({ word_index: Math.max(0,lastIdx), doc_hash: docHash, ts: now })); }catch(_){}
-  }
-  window.addEventListener('beforeunload', function(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ word_index: Math.max(0,lastIdx), doc_hash: docHash, ts: Date.now() })); }catch(_){}});
-
-  function maybeOfferResume(){
-    var raw; try{ raw = localStorage.getItem(LS_KEY); }catch(_){ return; }
-    if(!raw) return;
-    var saved; try{ saved = JSON.parse(raw); }catch(_){ return; }
-    if(!saved || !saved.word_index) return;
-    var target = saved.word_index;
-    if(saved.doc_hash !== docHash){
-      // Audio was regenerated — index no longer trustworthy; fall back to the
-      // start of the nearest paragraph at/just before the saved index.
-      target = nearestParagraphStart(Math.min(target, marks.length - 1));
-      if(!target) return; // nothing useful to resume to
-    }
+  // ---- resume (localStorage per document) ----
+  var thr=0;
+  function save(){ var now=Date.now(); if(now-thr<1500) return; thr=now;
+    try{ localStorage.setItem(LS, JSON.stringify({word_index:Math.max(0,lastIdx), doc_hash:docHash, ts:now})); }catch(_){} }
+  window.addEventListener('beforeunload', function(){ try{ localStorage.setItem(LS, JSON.stringify({word_index:Math.max(0,lastIdx), doc_hash:docHash, ts:Date.now()})); }catch(_){} });
+  function maybeResume(){
+    var raw; try{ raw=localStorage.getItem(LS); }catch(_){ return; } if(!raw) return;
+    var s; try{ s=JSON.parse(raw); }catch(_){ return; } if(!s||!s.word_index) return;
+    if(s.doc_hash!==docHash) return;            // audio regenerated → ignore stale position
+    if(!marks[s.word_index]) return;
     resumeWrap.classList.add('show');
-    resumeBtn.addEventListener('click', function(){ resumeWrap.classList.remove('show'); seekToMark(target); });
+    resumeBtn.addEventListener('click', function(){ resumeWrap.classList.remove('show');
+      audio.currentTime=marks[s.word_index].start+0.01; lastIdx=-1; if(audio.paused) audio.play().catch(function(){}); update(); });
     resumeDismiss.addEventListener('click', function(){ resumeWrap.classList.remove('show'); });
   }
 
-  function nearestParagraphStart(i){
-    // First highlightable word of the block containing span i (spans carry no
-    // block id, so walk back to the first word after a non-contiguous gap is
-    // overkill; approximate with the start of the current highlightable run).
-    for(var j=i; j>0; j--){ if(spans[j] && spans[j].dataset.hl && spans[j-1] && !spans[j-1].dataset.hl) return j; }
-    return 0;
-  }
-
-  // ---- Media Session (lock-screen controls; audio survives screen lock) ----
-  if('mediaSession' in navigator){
-    try{
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: root.dataset.title || document.title,
-        artist: root.dataset.author || ''
-      });
-      navigator.mediaSession.setActionHandler('play', function(){ audio.play().catch(function(){}); });
-      navigator.mediaSession.setActionHandler('pause', function(){ audio.pause(); });
-      navigator.mediaSession.setActionHandler('seekbackward', function(){ audio.currentTime = Math.max(0, audio.currentTime - 10); });
-      navigator.mediaSession.setActionHandler('seekforward', function(){ audio.currentTime = Math.min(audio.duration||0, audio.currentTime + 10); });
-    }catch(_){}
-  }
+  // ---- Media Session (lock-screen controls) ----
+  if('mediaSession' in navigator){ try{
+    navigator.mediaSession.metadata=new MediaMetadata({ title:root.dataset.title||document.title, artist:root.dataset.author||'' });
+    navigator.mediaSession.setActionHandler('play', function(){ audio.play().catch(function(){}); });
+    navigator.mediaSession.setActionHandler('pause', function(){ audio.pause(); });
+    navigator.mediaSession.setActionHandler('seekbackward', function(){ audio.currentTime=Math.max(0,audio.currentTime-10); });
+    navigator.mediaSession.setActionHandler('seekforward', function(){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10); });
+  }catch(_){} }
 })();
 </script>
-</section>
+</div>
