@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -215,6 +216,10 @@ class DocumentNarration(Base):
     # either invalidates the generator's cache. Display/config here, not secrets.
     voice: Mapped[str] = mapped_column(String, default="fjnwTZkKtQOJaYzGLa6n")
     model: Mapped[str] = mapped_column(String, default="eleven_v3")
+    # Total recording length in seconds, captured (best-effort) from the audio's
+    # blocks.json when the base URL is saved — drives the homepage tile's length
+    # label. Null when unknown (URL empty / file unreachable).
+    audio_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Pronunciation fixes: list[{phrase, replacement}] — plain-text substitution
     # applied during payload construction so the generator stays dumb. Empty by
     # default.

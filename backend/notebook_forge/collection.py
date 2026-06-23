@@ -72,6 +72,25 @@ def count_words(blocks: list[dict[str, Any]]) -> int:
     return total
 
 
+def format_audio_length(seconds: float | None) -> str:
+    """Recording length for the homepage tile, e.g. '3h5m' / '45m' (nearest min)."""
+    if not seconds or seconds <= 0:
+        return ""
+    minutes = round(seconds / 60)
+    h, m = divmod(minutes, 60)
+    if h and m:
+        return f"{h}h{m}m"
+    return f"{h}h" if h else f"{m}m"
+
+
+def format_word_count(words: int) -> str:
+    """Word count to the nearest 1000, e.g. '31k words'."""
+    if words <= 0:
+        return ""
+    k = round(words / 1000)
+    return "<1k words" if k == 0 else f"{k}k words"
+
+
 def reading_time(words: int, wpm: int = 200) -> str:
     """'~25 min read' under an hour; '~2½ hr read' above (ported verbatim)."""
     if not words or words <= 0:
@@ -143,6 +162,7 @@ def build_entries(
             {
                 "stem": doc.slug,
                 "title": doc.meta.get("title", doc.title),
+                "short_title": doc.meta.get("short_title", ""),
                 "years": doc.meta.get("year_display", ""),
                 "description": description,
                 "url": doc.meta.get("canonical_url", ""),
@@ -165,7 +185,8 @@ def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
         return None, None
 
     def ref(e: dict[str, Any]) -> dict[str, Any]:
-        return {"url": e["url"], "title": e["title"]}
+        # Prev/next nav uses the short title when set (the long titles overflow).
+        return {"url": e["url"], "title": e.get("short_title") or e["title"]}
 
     prev_e = ref(entries[idx - 1]) if idx > 0 else None
     next_e = ref(entries[idx + 1]) if idx < len(entries) - 1 else None

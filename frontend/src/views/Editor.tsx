@@ -982,6 +982,7 @@ function MetaBar({
 }) {
   const meta = doc.meta as Record<string, string | boolean>
   const [title, setTitle] = useState(String(meta.title ?? ''))
+  const [shortTitle, setShortTitle] = useState(String(meta.short_title ?? ''))
   const [author, setAuthor] = useState(String(meta.author ?? ''))
   const [years, setYears] = useState(String(meta.year_display ?? ''))
   const [standfirst, setStandfirst] = useState(String(meta.standfirst ?? ''))
@@ -1025,6 +1026,7 @@ function MetaBar({
 
   const dirty =
     title !== String(meta.title ?? '') ||
+    shortTitle !== String(meta.short_title ?? '') ||
     author !== String(meta.author ?? '') ||
     years !== String(meta.year_display ?? '') ||
     standfirst !== String(meta.standfirst ?? '') ||
@@ -1037,6 +1039,7 @@ function MetaBar({
     const updated: Record<string, unknown> = {
       ...doc.meta,
       title,
+      short_title: shortTitle,
       author,
       year_display: years,
       standfirst,
@@ -1111,6 +1114,21 @@ function MetaBar({
             </span>
           </label>
         )}
+        <label className="meta-shorttitle">
+          <span className="meta-field-label">
+            Short title
+            <InfoTip label="About the short title">
+              A compact title used only on the homepage tile and the prev/next links at the foot
+              of each page (where long titles overflow). Leave blank to use the full title. Not
+              used anywhere else — the page heading and the Google Doc keep the full title.
+            </InfoTip>
+          </span>
+          <input
+            value={shortTitle}
+            onChange={(e) => setShortTitle(e.target.value)}
+            placeholder="(defaults to the full title)"
+          />
+        </label>
         <label className="meta-standfirst">
           <span className="meta-field-label">
             Standfirst

@@ -75,3 +75,10 @@ def run_migrations(engine: Engine, db_file: Path) -> None:
                     "UPDATE document_narration SET voice = :v WHERE voice = 'Brian'"
                 ).bindparams(v="fjnwTZkKtQOJaYzGLa6n")
             )
+
+    # Recording-length column (homepage tile label), added later than `model`.
+    if narration_exists and "audio_duration_seconds" not in narration_cols:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE document_narration ADD COLUMN audio_duration_seconds REAL")
+            )

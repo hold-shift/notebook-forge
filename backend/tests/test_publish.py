@@ -90,7 +90,9 @@ def test_local_folder_full_cycle(tmp_path: Path, workspace: Path, session: Sessi
     assert not services.is_dirty(session, doc, target)
 
 
-def test_publish_all_pending_local_folder(tmp_path: Path, workspace: Path, session: Session) -> None:
+def test_publish_all_pending_local_folder(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
     """Bulk-publish writes every dirty memoir and goes clean; a second run with
     nothing dirty publishes nothing; --force re-publishes everything."""
     from notebook_forge.publish.service import publish_all_pending

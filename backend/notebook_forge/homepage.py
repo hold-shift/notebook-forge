@@ -245,24 +245,31 @@ def homepage_timeline(session: Session) -> list[dict[str, Any]]:
     """The memoir timeline, derived live from the library Group model in its
     existing order. Each group → {name, rows:[{period,title,reading_time,url}]}.
     Empty groups are omitted; ungrouped documents never appear (§1d/§3)."""
+    from .collection import format_audio_length, format_word_count
     from .groups import list_groups
     from .narration import tts_enabled
-    from .narration_service import has_audio
+    from .narration_service import audio_duration, has_audio
 
     tts_on = tts_enabled(session)
     timeline: list[dict[str, Any]] = []
     for group in list_groups(session):
         rows = []
         for m in resolve_members(session, group.id, "date_range"):
-            wc = count_words(m.blocks)
+            audio = tts_on and has_audio(session, m)
+            duration = audio_duration(session, m) if audio else None
+            # Tile meta: recording length when narrated, else word count (≈1000s).
+            if duration:
+                meta_label = format_audio_length(duration)
+            else:
+                meta_label = format_word_count(count_words(m.blocks))
             rows.append({
                 "period": m.meta.get("year_display", ""),
-                "title": m.meta.get("title") or m.title,
-                # Mockup shows "~2 hr" (no "read" suffix) in the timeline meta.
-                "reading_time": reading_time(wc).replace(" read", "") if wc else "",
+                # Short title (if set) on the tile; long titles overflow.
+                "title": m.meta.get("short_title") or m.meta.get("title") or m.title,
+                "reading_time": meta_label,
                 "url": m.meta.get("canonical_url", ""),
                 # Indicative speaker glyph on the published index (§7a).
-                "has_audio": tts_on and has_audio(session, m),
+                "has_audio": audio,
             })
         if rows:
             timeline.append({"name": group.name, "rows": rows})

@@ -66,10 +66,12 @@ def save_narration(
     audio_base_url: str | None = None,
     lexicon: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Persist the operator-entered audio base URL and/or lexicon."""
+    """Persist the operator-entered audio base URL and/or lexicon. When the URL
+    is set, capture the recording length (best-effort) for the homepage tile."""
     rec = get_or_create(session, doc)
     if audio_base_url is not None:
         rec.audio_base_url = audio_base_url.strip()
+        rec.audio_duration_seconds = _fetch_audio_duration(rec.audio_base_url)
     if lexicon is not None:
         rec.lexicon = [
             {
@@ -125,6 +127,37 @@ def has_audio(session: Session, doc: Document) -> bool:
     the global toggle — callers gate on tts_enabled separately)."""
     rec = _get(session, doc)
     return bool(rec and (rec.audio_base_url or "").strip())
+
+
+def _fetch_audio_duration(base_url: str) -> float | None:
+    """Best-effort total recording length (seconds) from the audio's blocks.json
+    (its last block's time_end). NotebookForge makes no audio, but it reads this
+    one small public file the operator pointed at so the homepage can show a
+    length. Any failure (empty URL, unreachable, bad JSON) → None, never raises."""
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return None
+    import json as _json
+    import urllib.request as _req
+
+    # A custom UA is required: Cloudflare R2's public r2.dev endpoint returns 403
+    # to the default "Python-urllib" agent.
+    req = _req.Request(
+        f"{base}/document.blocks.json", headers={"User-Agent": "NotebookForge/1.0"}
+    )
+    try:
+        with _req.urlopen(req, timeout=10) as resp:  # noqa: S310
+            blocks = _json.loads(resp.read().decode("utf-8"))
+        end = blocks[-1].get("time_end") if blocks else None
+        return float(end) if end is not None else None
+    except Exception:  # noqa: BLE001 — best-effort; absence just hides the label
+        return None
+
+
+def audio_duration(session: Session, doc: Document) -> float | None:
+    """Stored recording length in seconds, or None."""
+    rec = _get(session, doc)
+    return rec.audio_duration_seconds if rec else None
 
 
 def player_context(session: Session, doc: Document) -> dict[str, Any] | None:
