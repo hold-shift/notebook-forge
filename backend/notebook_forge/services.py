@@ -91,6 +91,20 @@ def effective_content_hash(session: Session, doc: Document) -> str:
     if any(b.get("type") == FORGE_NARRATIVE for b in doc.blocks):
         from .narrative import effective_narrative_label
         meta["__narrative_label__"] = effective_narrative_label(session, doc)
+    # The published page renders the audio player iff TTS is on AND an audio base
+    # URL is set; that changes the HTML, so fold the URL into the hash under the
+    # same condition. (Only when the player actually renders — so merely toggling
+    # TTS, or an empty URL, never marks documents dirty.)
+    if doc.kind != "homepage":
+        from .models import DocumentNarration
+        from .narration import tts_enabled
+        if tts_enabled(session):
+            rec = session.scalar(
+                select(DocumentNarration).where(DocumentNarration.document_id == doc.id)
+            )
+            url = (rec.audio_base_url or "").strip() if rec else ""
+            if url:
+                meta["__tts__"] = url
     return content_hash(doc.blocks, meta)
 
 

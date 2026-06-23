@@ -223,6 +223,29 @@ def test_save_and_staleness_flow(session):
     assert narration_service.audio_state(session, doc)["audio_stale"] is True
 
 
+def test_audio_url_marks_document_dirty_only_when_player_renders(session):
+    """Setting the audio base URL (with TTS on) changes the rendered page, so it
+    must change the effective content hash — otherwise the Push button stays grey.
+    Toggling TTS alone, or an empty URL, must NOT change the hash."""
+    from notebook_forge.models import Setting
+
+    doc = services.create_document(session, "junior", "Junior", blocks=_doc_blocks())
+    base = services.effective_content_hash(session, doc)
+
+    # TTS off → no effect even with a URL saved.
+    narration_service.save_narration(session, doc, audio_base_url="https://b.s3/junior/")
+    assert services.effective_content_hash(session, doc) == base
+
+    # TTS on, URL set → hash changes (player will render).
+    session.add(Setting(key="tts", value={"enabled": True}))
+    session.flush()
+    assert services.effective_content_hash(session, doc) != base
+
+    # TTS on but URL cleared → back to base (no player renders).
+    narration_service.save_narration(session, doc, audio_base_url="")
+    assert services.effective_content_hash(session, doc) == base
+
+
 def test_save_narration_filters_empty_lexicon_rows(session):
     doc = services.create_document(session, "junior", "Junior", blocks=_doc_blocks())
     view = narration_service.save_narration(
