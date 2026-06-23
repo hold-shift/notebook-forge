@@ -7,25 +7,23 @@ hashes each block so the generator (forge-narrator, on the Mac) can cache by has
 and so the panel can show an in-sync / stale dot. The generator stays dumb — it
 just runs the payload it's given through ElevenLabs `/with-timestamps`.
 
-Provider note (switched from Amazon Polly after A/B testing): ElevenLabs does NOT
-honour `<prosody>`, and `<break>` support is light/model-dependent. So the payload
-is essentially CLEAN TEXT plus an optional light `<break time="0.3s"/>` for
-pacing — NOT a `<speak>`/`<prosody>` SSML document. Prosody/emphasis come from the
-voice + model (`eleven_v3`), not from tags. The exact dialect is verified in the
-forge-narrator build (`forge-narrator/docs/SSML_FINDINGS.md`); this module mirrors
-it via the single `payload_mode` flag. The manifest field is still named `ssml`
-for contract stability, but it holds the ElevenLabs-dialect string.
+Payload dialect = PLAIN TEXT (LOCKED for eleven_v3 — see docs/SSML_FINDINGS.md).
+Provider switched from Amazon Polly to ElevenLabs. Production-confirmed: eleven_v3
+does NOT strip unknown SSML — any `<break>` / `<speak>` / `<prosody>` leaks verbatim
+into the `/with-timestamps` character alignment (and risks being read aloud),
+producing garbage word marks like `Junior.<break` / `time="0.5s"/>`. So a block's
+payload is the plain spoken text ONLY: no tags, no self-closing elements, no XML
+entities — just words and ordinary sentence punctuation. Prosody/pacing come from
+the voice + model and from sentence punctuation; ElevenLabs pauses naturally at
+periods, and the generator synthesises each block separately and stitches the seams,
+so the inter-block break is not load-bearing. The manifest field is still named
+`ssml` for contract stability, but it holds plain text.
 
 Reconciliation note: the spec text refers to headings coming from `forgeNarrative`
 blocks "with a heading level". In this codebase headings are plain `heading` blocks
 (props.level 2/3) and `forgeNarrative` is the author's reflective-voice paragraph
 (props {}, see narrative.py). We narrate accordingly: `heading` → heading payload,
 `forgeNarrative` → paragraph payload (it is spoken prose).
-
-The inter-block `<break>` is NO LONGER load-bearing for word→block mapping: the
-generator synthesises each block independently and shifts word times by the block's
-stitch offset, so words map to blocks by construction. The break is kept only for
-natural pacing / to avoid seam clipping.
 """
 
 from __future__ import annotations
@@ -45,11 +43,6 @@ from .blocks import (
 # ElevenLabs voice_id (LOCKED — chosen by audition) + model.
 DEFAULT_VOICE = "fjnwTZkKtQOJaYzGLa6n"
 DEFAULT_MODEL = "eleven_v3"
-
-# Light pacing breaks (ElevenLabs honours these on eleven_v3; seconds form).
-HEADING_BREAK = '<break time="0.4s"/>'
-PARAGRAPH_BREAK = '<break time="0.3s"/>'
-FOOTNOTE_BREAK = '<break time="0.3s"/>'
 
 # Block-type → narration treatment. Anything not listed is stripped.
 _PARAGRAPH_TYPES = {
@@ -122,30 +115,18 @@ def build_ssml(
     text: str,
     *,
     lexicon: list[dict[str, Any]] | None = None,
-    payload_mode: str = "breaks",
 ) -> str:
-    """Build one block's ElevenLabs-dialect payload.
+    """Build one block's payload: PLAIN spoken text, no markup (locked for
+    eleven_v3 — see module docstring / docs/SSML_FINDINGS.md).
 
     ``block_type`` is the narration type ("heading" | "paragraph" | "footnote").
-    The single ``payload_mode`` flag mirrors the verified dialect from
-    ``SSML_FINDINGS.md``:
-      - ``"breaks"`` (default): clean text + a light trailing ``<break>``.
-      - ``"plain"``: clean text only (the generator inserts seam silence).
-    No ``<speak>`` wrapper and no ``<prosody>`` — ElevenLabs ignores both.
-    Returned text is natural UTF-8 (not XML-escaped); the only markup is the
-    optional break tag we append.
-    """
+    Heading and paragraph are the text verbatim (after lexicon substitution);
+    a footnote leads with the spoken cue "Footnote. ". No ``<break>`` /
+    ``<speak>`` / ``<prosody>`` and no XML escaping — natural UTF-8 only."""
     inner = apply_lexicon(text, lexicon)
     if block_type == "footnote":
-        # Spoken cue works regardless of dialect; plain text leads it.
-        inner = f"Footnote. {inner}"
-    if payload_mode == "plain":
-        return inner
-    if block_type == "heading":
-        return f"{inner}{HEADING_BREAK}"
-    if block_type == "footnote":
-        return f"{inner}{FOOTNOTE_BREAK}"
-    return f"{inner}{PARAGRAPH_BREAK}"
+        return f"Footnote. {inner}"
+    return inner
 
 
 # Year range "1934–1945" (en/em-dash or hyphen) → "1934 to 1945" so it is read
@@ -161,13 +142,13 @@ def title_block(
     meta: dict[str, Any],
     *,
     lexicon: list[dict[str, Any]] | None = None,
-    payload_mode: str = "breaks",
 ) -> dict[str, Any] | None:
     """Build the spoken masthead preamble from document meta, e.g.
     "Junior. The boy I once knew but now remember. 1934 to 1945. By R.F Skitch."
-    with pauses between segments. The masthead lives in meta (title / standfirst /
-    year_display / author), not the block tree, so it would otherwise never be
-    announced. Returns a heading-type block, or None when there is no title."""
+    The masthead lives in meta (title / standfirst / year_display / author), not
+    the block tree, so it would otherwise never be announced. Plain text — the
+    sentence periods give the natural pauses between lines (no markup). Returns a
+    heading-type block, or None when there is no title."""
     title = str((meta or {}).get("title", "")).strip()
     if not title:
         return None
@@ -185,15 +166,10 @@ def title_block(
     segments = [apply_lexicon(s, lexicon) for s in segments]
 
     text = ". ".join(segments) + "."
-    if payload_mode == "plain":
-        ssml = text
-    else:
-        # Pause between masthead segments, with a longer pause before the body.
-        ssml = '<break time="0.5s"/> '.join(f"{s}." for s in segments) + '<break time="0.7s"/>'
     return {
         "type": "heading",
         "text": text,
-        "ssml": ssml,
+        "ssml": text,
         "highlightable": True,
     }
 
@@ -217,7 +193,6 @@ def extract_blocks(
     voice: str = DEFAULT_VOICE,
     model: str = DEFAULT_MODEL,
     lexicon: list[dict[str, Any]] | None = None,
-    payload_mode: str = "breaks",
     meta: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Walk a block tree in reading order and emit one export block per
@@ -234,7 +209,7 @@ def extract_blocks(
     (matching the renderer/plain_text walker)."""
 
     def emit(narr_type: str, text: str) -> dict[str, Any]:
-        ssml = build_ssml(narr_type, text, lexicon=lexicon, payload_mode=payload_mode)
+        ssml = build_ssml(narr_type, text, lexicon=lexicon)
         return {
             "type": narr_type,
             "text": text,
@@ -245,7 +220,7 @@ def extract_blocks(
 
     preamble: dict[str, Any] | None = None
     if meta:
-        title = title_block(meta, lexicon=lexicon, payload_mode=payload_mode)
+        title = title_block(meta, lexicon=lexicon)
         if title is not None:
             title["hash"] = block_hash(title["ssml"], voice, model)
             preamble = title
@@ -324,7 +299,6 @@ def live_hashes(
     voice: str = DEFAULT_VOICE,
     model: str = DEFAULT_MODEL,
     lexicon: list[dict[str, Any]] | None = None,
-    payload_mode: str = "breaks",
     meta: dict[str, Any] | None = None,
 ) -> list[str]:
     """The current block-hash list for a document (extraction without writing
@@ -332,8 +306,7 @@ def live_hashes(
     return [
         b["hash"]
         for b in extract_blocks(
-            blocks, voice=voice, model=model, lexicon=lexicon,
-            payload_mode=payload_mode, meta=meta,
+            blocks, voice=voice, model=model, lexicon=lexicon, meta=meta,
         )
     ]
 

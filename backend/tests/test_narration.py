@@ -38,30 +38,35 @@ def test_extraction_order_types_and_highlightable():
     assert all("photo" not in b["text"].lower() for b in blocks)
 
 
-def test_payloads_are_clean_text_plus_light_break():
-    """ElevenLabs dialect: clean text + a light trailing <break>, no <speak>/<prosody>."""
-    blocks = narration.extract_blocks(_doc_blocks())
-    heading = next(b for b in blocks if b["type"] == "heading")
-    para = next(b for b in blocks if b["type"] == "paragraph" and b["index"] == 2)
-    assert heading["ssml"] == 'Chapter One<break time="0.4s"/>'
-    assert para["ssml"] == 'The first paragraph.<break time="0.3s"/>'
+def test_payloads_are_plain_text_no_markup():
+    """LOCKED dialect for eleven_v3: payloads are plain text — NO <break>,
+    <speak>, <prosody>, self-closing tags or angle brackets at all."""
+    blocks = narration.extract_blocks(_doc_blocks(), meta={"title": "Junior"})
+    heading = next(b for b in blocks if b["type"] == "heading" and b["text"] == "Chapter One")
+    para = next(
+        b for b in blocks if b["type"] == "paragraph" and b["text"] == "The first paragraph."
+    )
+    assert heading["ssml"] == "Chapter One"
+    assert para["ssml"] == "The first paragraph."
+    # Acceptance: no markup characters anywhere in any payload.
     for b in blocks:
-        assert "<speak>" not in b["ssml"]
-        assert "<prosody" not in b["ssml"]
+        assert "<" not in b["ssml"]
+        assert ">" not in b["ssml"]
+        assert "/>" not in b["ssml"]
+        assert "break" not in b["ssml"].lower()
 
 
 def test_footnote_leads_with_spoken_cue():
     blocks = narration.extract_blocks(_doc_blocks())
     fn = next(b for b in blocks if b["type"] == "footnote")
-    assert fn["ssml"] == 'Footnote. A side note.<break time="0.3s"/>'
+    assert fn["ssml"] == "Footnote. A side note."
     assert fn["highlightable"] is False
 
 
-def test_plain_mode_drops_breaks():
-    assert narration.build_ssml("heading", "Hi", payload_mode="plain") == "Hi"
-    assert (
-        narration.build_ssml("footnote", "note", payload_mode="plain") == "Footnote. note"
-    )
+def test_build_ssml_is_plain_text():
+    assert narration.build_ssml("heading", "Hi") == "Hi"
+    assert narration.build_ssml("paragraph", "A sentence.") == "A sentence."
+    assert narration.build_ssml("footnote", "note") == "Footnote. note"
 
 
 def test_hash_is_sensitive_to_voice_and_model():
@@ -80,11 +85,12 @@ def test_defaults_are_the_locked_elevenlabs_voice_and_model():
 
 
 def test_text_is_not_xml_escaped():
-    """EL takes natural text — ampersands/brackets pass through unescaped
-    (unlike the old Polly SSML path)."""
-    blocks = [make_block("paragraph", content=[text_run("R & R <at base>")])]
+    """EL takes natural text — ampersands pass through unescaped, and the
+    payload is the text verbatim (no trailing markup)."""
+    blocks = [make_block("paragraph", content=[text_run("R & R then home")])]
     out = narration.extract_blocks(blocks)
-    assert out[0]["ssml"] == 'R & R <at base><break time="0.3s"/>'
+    assert out[0]["ssml"] == "R & R then home"
+    assert "&amp;" not in out[0]["ssml"]
 
 
 def test_lexicon_plain_substitution_longest_first():
@@ -100,7 +106,7 @@ def test_lexicon_applied_in_payload():
     blocks = [make_block("paragraph", content=[text_run("We marched to Nui Dat")])]
     lex = [{"phrase": "Nui Dat", "replacement": "Noo-ee Dat"}]
     out = narration.extract_blocks(blocks, lexicon=lex)
-    assert out[0]["ssml"] == 'We marched to Noo-ee Dat<break time="0.3s"/>'
+    assert out[0]["ssml"] == "We marched to Noo-ee Dat"
 
 
 def test_title_preamble_announced_from_meta():
@@ -117,16 +123,16 @@ def test_title_preamble_announced_from_meta():
     assert head["index"] == 0
     assert head["type"] == "heading"
     assert head["highlightable"] is True
-    # Segments present, en-dash year range spoken as a span, author lead-in.
-    assert "Junior." in head["ssml"]
-    assert "The boy I once knew but now remember." in head["ssml"]
-    assert "1934 to 1945." in head["ssml"]
-    assert "By R.F Skitch." in head["ssml"]
-    assert '<break time="0.5s"/>' in head["ssml"]   # pauses between segments
-    assert head["ssml"].endswith('<break time="0.7s"/>')
+    # Plain text, sentence periods give the pauses; en-dash year range → span.
+    assert head["ssml"] == (
+        "Junior. The boy I once knew but now remember. 1934 to 1945. By R.F Skitch."
+    )
+    assert "<" not in head["ssml"]
     # Preamble is additive: the 5 body blocks still follow.
     assert len(blocks) == 6
-    assert [b["type"] for b in blocks[1:]] == ["paragraph", "heading", "paragraph", "footnote", "paragraph"]
+    assert [b["type"] for b in blocks[1:]] == [
+        "paragraph", "heading", "paragraph", "footnote", "paragraph",
+    ]
 
 
 def test_no_title_preamble_without_meta_or_title():
@@ -154,7 +160,7 @@ def test_inline_footnote_marker_not_spoken():
     out = narration.extract_blocks([para])
     assert out[0]["type"] == "paragraph"
     assert out[0]["text"] == "It was a poor image of the base."
-    assert out[0]["ssml"] == 'It was a poor image of the base.<break time="0.3s"/>'
+    assert out[0]["ssml"] == "It was a poor image of the base."
     assert "1" not in out[0]["text"]
 
 
