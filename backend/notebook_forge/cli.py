@@ -36,6 +36,16 @@ def main(argv: list[str] | None = None) -> int:
     nm.add_argument("--workspace", type=Path, default=None)
     nm.add_argument("--reports", type=Path, default=Path("reports"))
 
+    su = sub.add_parser(
+        "site-url-migrate",
+        help="rewrite stored canonical/homepage URLs to the configured site base URL",
+    )
+    su_mode = su.add_mutually_exclusive_group(required=True)
+    su_mode.add_argument("--dry-run", action="store_true", help="scan only; no DB writes")
+    su_mode.add_argument("--apply", action="store_true", help="snapshot + rewrite affected docs")
+    su.add_argument("--workspace", type=Path, default=None)
+    su.add_argument("--reports", type=Path, default=Path("reports"))
+
     ri = sub.add_parser(
         "reimport",
         help="re-import docs from archived MemoirForge sources, reusing existing sketches",
@@ -95,10 +105,36 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "narrative-migrate":
         return _cmd_narrative_migrate(args)
 
+    if args.command == "site-url-migrate":
+        return _cmd_site_url_migrate(args)
+
     if args.command == "reimport":
         return _cmd_reimport(args)
 
     return 2
+
+
+def _cmd_site_url_migrate(args: argparse.Namespace) -> int:
+    from .collection import pages_base_url
+    from .site_url_migration import apply, scan, write_report
+
+    ws = bootstrap_workspace(args.workspace or workspace_path())
+    engine = make_engine(ws)
+    factory = make_session_factory(engine)
+    with factory() as session:
+        base = pages_base_url(session)
+        rows = scan(session)
+        mode = "apply" if args.apply else "dry-run"
+        write_report(args.reports.resolve(), rows, mode, base)
+        changed = [r for r in rows if r["changed"]]
+        print(f"Site base URL: {base}")
+        print(f"Documents scanned: {len(rows)} · to change: {len(changed)}")
+        print(f"Report written to {args.reports.resolve() / 'site_url_migration.md'}")
+        if args.apply:
+            applied = apply(session)
+            session.commit()
+            print(f"Applied: {len(applied)} document(s) rewritten. Re-publish to push.")
+    return 0
 
 
 def _cmd_narrative_migrate(args: argparse.Namespace) -> int:

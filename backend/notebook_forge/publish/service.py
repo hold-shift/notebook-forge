@@ -152,12 +152,10 @@ def publish_document(
     target: Target,
     adapter: PublishTarget | None = None,
 ) -> dict[str, Any]:
-    from ..collection import root_files
+    from ..collection import pages_base_url, root_files
     from ..homepage import get_homepage, homepage_banner_assets
 
-    base_url = (target.config or {}).get(
-        "base_url", "https://chris-skitch.github.io/family-history"
-    )
+    base_url = pages_base_url(session)
 
     if doc.kind == "homepage":
         if target.kind == "drive":

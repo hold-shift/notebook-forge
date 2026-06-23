@@ -24,6 +24,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [footerState, setFooterState] = useState('')
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const [ttsState, setTtsState] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [baseUrlState, setBaseUrlState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -37,6 +39,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setReportRules(s.reports.rules)
       setNarrativeLabel(s.narrative.label)
       setTtsEnabled(s.tts.enabled)
+      setBaseUrl(s.publishing.base_url)
       setFooterNotice(s.footer.notice)
       setFooterLicenseLabel(s.footer.license_label)
       setFooterLicenseUrl(s.footer.license_url)
@@ -93,6 +96,14 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.saveTtsSetting(enabled).then(
       () => setTtsState('Saved'),
       (e) => setTtsState(`Failed: ${e}`),
+    )
+  }
+
+  const saveBaseUrl = () => {
+    setBaseUrlState('saving')
+    api.savePublishingSettings(baseUrl).then(
+      (r) => { setBaseUrl(r.base_url); setBaseUrlState('Saved — run the URL migration, then re-publish') },
+      (e) => setBaseUrlState(`Failed: ${e}`),
     )
   }
 
@@ -341,6 +352,45 @@ export function Settings({ onBack }: { onBack: () => void }) {
               Save narrative settings
             </Button>
             {narrativeState && <span className="settings-state muted">{narrativeState}</span>}
+          </div>
+        </div>
+      </section>
+
+      {/* Publishing — site base URL */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>Publishing</h2>
+          <p>
+            The base URL of the published site. It drives canonical URLs, the
+            homepage link, the sitemap and JSON-LD. After changing it, run the URL
+            migration to rewrite existing documents' stored links, then re-publish.
+          </p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row">
+            <label htmlFor="base-url">
+              Site base URL{' '}
+              <InfoTip label="About the site base URL">
+                e.g. <code>https://history.skitch.me</code>. Memoir pages live under
+                <code>/rfs/&lt;slug&gt;.html</code> and the homepage at <code>/index.html</code>.
+                Existing pages keep their stored URLs until you run{' '}
+                <code>uv run python -m notebook_forge.cli site-url-migrate --apply</code>{' '}
+                and re-publish.
+              </InfoTip>
+            </label>
+            <div className="settings-control">
+              <input
+                id="base-url"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://history.skitch.me"
+              />
+              <span className="settings-hint">No trailing slash. Must be an http(s) URL.</span>
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <Button variant="primary" onClick={saveBaseUrl}>Save base URL</Button>
+            {baseUrlState && <span className="settings-state muted">{baseUrlState}</span>}
           </div>
         </div>
       </section>

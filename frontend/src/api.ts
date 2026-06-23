@@ -324,6 +324,7 @@ export const api = {
         reports: { model: string; rules: string }
         narrative: { label: string }
         tts: { enabled: boolean }
+        publishing: { base_url: string }
         footer: { notice: string; license_label: string; license_url: string }
         homepage: HomepageSettings
         secrets: Record<string, boolean>
@@ -355,6 +356,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     }).then((r) => json<{ ok: boolean; enabled: boolean }>(r)),
+  savePublishingSettings: (baseUrl: string) =>
+    fetch('/api/settings/publishing', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: baseUrl }),
+    }).then((r) => json<{ ok: boolean; base_url: string }>(r)),
   narration: (slug: string) =>
     fetch(`/api/documents/${slug}/narration`).then((r) => json<NarrationView>(r)),
   saveNarration: (slug: string, body: { audio_base_url?: string; lexicon?: LexiconEntry[] }) =>

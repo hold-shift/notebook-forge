@@ -29,6 +29,29 @@ from .renderer import inline_html, render_index
 
 DEFAULT_AUTHOR = "Robert Francis Skitch"
 
+# The published-site base URL. Single source of truth for canonical URLs, the
+# homepage URL, the sitemap, and JSON-LD. Operator-editable in Settings
+# (Setting key 'publishing'); falls back to the original GitHub Pages project URL.
+DEFAULT_PAGES_BASE = "https://chris-skitch.github.io/family-history"
+# Memoir pages live under this path segment of the site (kept on the domain move).
+PAGES_SUBDIR = "rfs"
+
+
+def pages_base_url(session: Session) -> str:
+    """The configured site base URL (no trailing slash), or the default."""
+    row = session.get(Setting, "publishing")
+    val = (row.value or {}).get("base_url", "") if row is not None else ""
+    return (val.strip() or DEFAULT_PAGES_BASE).rstrip("/")
+
+
+def doc_canonical_url(base: str, slug: str) -> str:
+    return f"{base.rstrip('/')}/{PAGES_SUBDIR}/{slug}.html"
+
+
+def doc_homepage_url(base: str) -> str:
+    return f"{base.rstrip('/')}/index.html"
+
+
 _PROSE_KINDS = {"paragraph", "heading", "quote", "bulletListItem", "numberedListItem"}
 _TAG_RE = re.compile(r"<[^>]+>")
 

@@ -65,10 +65,8 @@ def _drive_doc_url(session: Session, doc, target: Target) -> str | None:  # noqa
 def _target_url(session: Session, doc, target: Target) -> str | None:  # noqa: ANN001
     if target.kind == "github-pages":
         if doc.kind == "homepage":
-            base = (target.config or {}).get(
-                "base_url", "https://chris-skitch.github.io/family-history"
-            )
-            return f"{base.rstrip('/')}/index.html"
+            from .collection import pages_base_url
+            return f"{pages_base_url(session)}/index.html"
         return doc.meta.get("canonical_url") or None
     if target.kind == "local-folder":
         filename = "index.html" if doc.kind == "homepage" else f"{doc.slug}.html"
@@ -992,6 +990,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
+    from .collection import pages_base_url
     from .footer import footer_setting
     from .homepage import homepage_settings_view
     from .narration import tts_enabled
@@ -1008,6 +1007,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
         "tts": {"enabled": tts_enabled(session)},
+        "publishing": {"base_url": pages_base_url(session)},
         "footer": footer_setting(session),
         "homepage": homepage_settings_view(session),
         "secrets": {
@@ -1132,6 +1132,32 @@ def save_tts_setting(
     else:
         setting.value = value
     return {"ok": True, "enabled": value["enabled"]}
+
+
+class PublishingSettingsBody(BaseModel):
+    base_url: str = ""
+
+
+@app.put("/api/settings/publishing")
+def save_publishing_settings(
+    body: PublishingSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Set the published-site base URL (drives canonical URLs, the homepage URL,
+    the sitemap and JSON-LD). Existing documents' stored canonical URLs are NOT
+    rewritten here — run `cli site-url-migrate` for that, then re-publish."""
+    from .collection import pages_base_url
+    from .models import Setting
+
+    url = body.base_url.strip().rstrip("/")
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(422, "base_url must be an http(s) URL")
+    setting = session.get(Setting, "publishing")
+    value = {"base_url": url}
+    if setting is None:
+        session.add(Setting(key="publishing", value=value))
+    else:
+        setting.value = value
+    return {"ok": True, "base_url": pages_base_url(session)}
 
 
 @app.get("/api/documents/{slug}/narration")

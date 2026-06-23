@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from . import services
 from .assets import ingest_file
 from .blocks import FORGE_IMAGE, make_block
+from .collection import doc_canonical_url, doc_homepage_url, pages_base_url
 from .ingest_vendor import detect_year_range, extract_docx, extract_pdf, normalise
 from .ingest_vendor.footnotes import referenced_numbers
 from .narrative import convert_full_italic_paragraphs
@@ -30,7 +31,6 @@ from .polish.textmap import _md_inline_runs  # shared parser (canonical home)
 
 DEFAULT_AUTHOR = "R.F. Skitch"
 DEFAULT_OVERLINE = "The Skitch Family Archive · Family History"
-PAGES_BASE = "https://chris-skitch.github.io/family-history"
 
 
 def draft_to_blocks(
@@ -203,6 +203,7 @@ def ingest_document(
     source_asset = ingest_file(session, workspace, file_path, "sources")
     source_asset.filename = name
 
+    base_url = pages_base_url(session)
     meta = {
         "slug": slug,
         "title": title,
@@ -214,8 +215,8 @@ def ingest_document(
         "date_prefix": date_stem,
         "date_detected": date_stem,
         "date_confirmed": False,  # operator confirms in the editor
-        "canonical_url": f"{PAGES_BASE}/rfs/{slug}.html",
-        "homepage_url": f"{PAGES_BASE}/index.html",
+        "canonical_url": doc_canonical_url(base_url, slug),
+        "homepage_url": doc_homepage_url(base_url),
         "meta_description": draft.detected_standfirst or "",
         "source_asset_id": source_asset.sha256,
         "source_file": name,
@@ -250,6 +251,7 @@ def create_blank_document(session: Session, title: str = "Untitled") -> dict[str
         slug = f"{slug_base}-{i}"
         i += 1
 
+    base_url = pages_base_url(session)
     meta = {
         "slug": slug,
         "title": title,
@@ -259,8 +261,8 @@ def create_blank_document(session: Session, title: str = "Untitled") -> dict[str
         "place": "",
         "year_display": "",
         "date_confirmed": True,  # nothing to detect; no confirmation gate
-        "canonical_url": f"{PAGES_BASE}/rfs/{slug}.html",
-        "homepage_url": f"{PAGES_BASE}/index.html",
+        "canonical_url": doc_canonical_url(base_url, slug),
+        "homepage_url": doc_homepage_url(base_url),
         "meta_description": "",
     }
     blocks = [make_block("paragraph", content=[])]
