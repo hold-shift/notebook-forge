@@ -59,8 +59,6 @@ def run_migrations(engine: Engine, db_file: Path) -> None:
     # schema on fresh DBs, so this only fires on a workspace whose table predates
     # the Polly→ElevenLabs switch — add the `model` column the ORM now reads, and
     # normalise the old "Brian" voice default to the locked ElevenLabs voice_id.
-    # (The orphaned legacy `engine` column is left in place; SQLite can't easily
-    # drop columns and a nullable extra column is harmless.)
     if narration_exists and "model" not in narration_cols:
         _backup_once(db_file, "pre-tts-elevenlabs")
         with engine.begin() as conn:
@@ -82,3 +80,11 @@ def run_migrations(engine: Engine, db_file: Path) -> None:
             conn.execute(
                 text("ALTER TABLE document_narration ADD COLUMN audio_duration_seconds REAL")
             )
+
+    # Drop the orphaned Polly-era `engine` column. It was created NOT NULL with no
+    # server default, so once the ORM stopped writing it, inserting a NEW narration
+    # row failed the NOT NULL constraint — only documents with a pre-existing row
+    # worked. (SQLite ≥3.35 supports DROP COLUMN.)
+    if narration_exists and "engine" in narration_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE document_narration DROP COLUMN engine"))

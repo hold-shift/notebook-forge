@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * A small "ⓘ" affordance that reveals a short explanation of a feature on
@@ -6,9 +7,10 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
  * safe to nest inside clickable rows — the trigger is a role="button" span (not
  * a real <button>, so it never nests illegally) and stops click propagation.
  *
- * `align` controls which edge of the popover anchors to the icon: use "right"
- * for triggers near the right edge of the screen so the popover opens leftward
- * and doesn't clip.
+ * The popover is portalled to <body> with fixed positioning so it is never
+ * clipped by a scrolling/overflow ancestor (e.g. the editor side rail). `align`
+ * controls which edge anchors to the icon: "right" opens leftward (for triggers
+ * near the right edge of the screen).
  */
 export function InfoTip({
   children,
@@ -20,12 +22,29 @@ export function InfoTip({
   align?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null)
   const ref = useRef<HTMLSpanElement>(null)
+  const popRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open || !ref.current) {
+      setPos(null)
+      return
+    }
+    const r = ref.current.getBoundingClientRect()
+    setPos(
+      align === 'right'
+        ? { top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }
+        : { top: r.bottom + 6, left: r.left },
+    )
+  }, [open, align])
 
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (ref.current?.contains(t) || popRef.current?.contains(t)) return
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -45,9 +64,9 @@ export function InfoTip({
   }
 
   const popoverStyle: CSSProperties = {
-    position: 'absolute',
-    top: 'calc(100% + 6px)',
-    ...(align === 'right' ? { right: 0 } : { left: 0 }),
+    position: 'fixed',
+    top: pos?.top,
+    ...(pos?.right !== undefined ? { right: pos.right } : { left: pos?.left }),
     zIndex: 200,
     width: 'max-content',
     maxWidth: 280,
@@ -106,11 +125,14 @@ export function InfoTip({
       >
         i
       </span>
-      {open && (
-        <span role="tooltip" style={popoverStyle}>
-          {children}
-        </span>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <span ref={popRef} role="tooltip" style={popoverStyle}>
+            {children}
+          </span>,
+          document.body,
+        )}
     </span>
   )
 }

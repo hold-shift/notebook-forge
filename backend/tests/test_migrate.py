@@ -63,6 +63,54 @@ def test_old_schema_gets_migrated(tmp_path: Path) -> None:
     new_engine.dispose()
 
 
+def test_legacy_narration_engine_column_dropped(tmp_path: Path) -> None:
+    """A document_narration table from the Polly era has a NOT NULL `engine`
+    column and no `model`/`audio_duration_seconds`. After migration, `engine` is
+    gone, the new columns exist, and a fresh row can be inserted (the ORM no
+    longer writes engine — which previously failed the NOT NULL constraint)."""
+    db_file = tmp_path / "forge.db"
+    old = create_engine(f"sqlite:///{db_file}")
+    with old.begin() as conn:
+        # documents table already migrated (so only the narration block runs).
+        conn.execute(text(
+            "CREATE TABLE documents ("
+            "id INTEGER PRIMARY KEY, slug TEXT UNIQUE, title TEXT DEFAULT '', "
+            "blocks JSON DEFAULT '[]', meta JSON DEFAULT '{}', "
+            "kind TEXT NOT NULL DEFAULT 'memoir', group_id INTEGER, "
+            "group_position INTEGER NOT NULL DEFAULT 0, "
+            "created_at DATETIME, updated_at DATETIME)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE document_narration ("
+            "id INTEGER PRIMARY KEY, document_id INTEGER, audio_base_url TEXT DEFAULT '', "
+            "exported_hashes JSON DEFAULT '[]', last_exported_at DATETIME, "
+            "voice TEXT DEFAULT 'Brian', engine TEXT NOT NULL DEFAULT 'generative', "
+            "lexicon JSON DEFAULT '[]')"
+        ))
+        conn.execute(text(
+            "INSERT INTO document_narration (document_id, voice, engine) "
+            "VALUES (1, 'Brian', 'generative')"
+        ))
+    old.dispose()
+
+    run_migrations(old, db_file)
+
+    engine = create_engine(f"sqlite:///{db_file}")
+    cols = _columns(engine, "document_narration")
+    assert "engine" not in cols
+    assert "model" in cols
+    assert "audio_duration_seconds" in cols
+    with engine.begin() as conn:
+        # Legacy voice normalised, and a NEW row inserts without `engine`.
+        v = conn.execute(text("SELECT voice FROM document_narration WHERE document_id=1")).scalar()
+        assert v == "fjnwTZkKtQOJaYzGLa6n"
+        conn.execute(text(
+            "INSERT INTO document_narration (document_id, audio_base_url, exported_hashes, "
+            "voice, model, lexicon) VALUES (2, '', '[]', 'fjnwTZkKtQOJaYzGLa6n', 'eleven_v3', '[]')"
+        ))
+    engine.dispose()
+
+
 def test_migration_is_idempotent(tmp_path: Path) -> None:
     ws = tmp_path / "ws"
     db_file = ws / "forge.db"
