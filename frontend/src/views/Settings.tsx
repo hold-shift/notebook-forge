@@ -1,6 +1,41 @@
 import { useEffect, useState } from 'react'
+import { BlockNoteView } from '@blocknote/mantine'
+import { useCreateBlockNote } from '@blocknote/react'
+import type { PartialBlock } from '@blocknote/core'
+import '@blocknote/core/fonts/inter.css'
+import '@blocknote/mantine/style.css'
 import { api, type MasterStatus } from '../api'
 import { Button, InfoTip } from '../ui'
+
+/** Block editor for the workspace footer. Owns its own BlockNote instance and
+ * save state; mounted only once the initial blocks have loaded so the editor
+ * is seeded with them. Saves the full block document to the footer setting. */
+function FooterEditor({ initialBlocks }: { initialBlocks: unknown[] }) {
+  const editor = useCreateBlockNote({
+    initialContent: initialBlocks.length ? (initialBlocks as PartialBlock[]) : undefined,
+  })
+  const [state, setState] = useState('')
+
+  const save = () => {
+    setState('saving')
+    api.saveFooterSettings({ blocks: editor.document }).then(
+      () => setState('Saved'),
+      (e) => setState(`Failed: ${e}`),
+    )
+  }
+
+  return (
+    <>
+      <div className="footer-editor">
+        <BlockNoteView editor={editor} />
+      </div>
+      <div className="settings-save-row">
+        <Button variant="primary" onClick={save}>Save footer</Button>
+        {state && <span className="settings-state muted">{state}</span>}
+      </div>
+    </>
+  )
+}
 
 export function Settings({ onBack }: { onBack: () => void }) {
   const [secrets, setSecrets] = useState<Record<string, boolean>>({})
@@ -18,14 +53,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [masterState, setMasterState] = useState('')
   const [narrativeLabel, setNarrativeLabel] = useState('')
   const [narrativeState, setNarrativeState] = useState('')
-  const [footerNotice, setFooterNotice] = useState('')
-  const [footerLicenseLabel, setFooterLicenseLabel] = useState('')
-  const [footerLicenseUrl, setFooterLicenseUrl] = useState('')
-  const [footerState, setFooterState] = useState('')
+  const [footerBlocks, setFooterBlocks] = useState<unknown[] | null>(null)
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const [ttsState, setTtsState] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [baseUrlState, setBaseUrlState] = useState('')
+  const [headHtml, setHeadHtml] = useState('')
+  const [headState, setHeadState] = useState('')
   const [publishAllState, setPublishAllState] = useState('')
 
   useEffect(() => {
@@ -41,9 +75,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setNarrativeLabel(s.narrative.label)
       setTtsEnabled(s.tts.enabled)
       setBaseUrl(s.publishing.base_url)
-      setFooterNotice(s.footer.notice)
-      setFooterLicenseLabel(s.footer.license_label)
-      setFooterLicenseUrl(s.footer.license_url)
+      setHeadHtml(s.publishing.head_html || '')
+      setFooterBlocks(s.footer.blocks)
     })
     api.masterStatus().then(setMaster, () => setMaster(null))
   }, [])
@@ -102,9 +135,17 @@ export function Settings({ onBack }: { onBack: () => void }) {
 
   const saveBaseUrl = () => {
     setBaseUrlState('saving')
-    api.savePublishingSettings(baseUrl).then(
+    api.savePublishingSettings({ base_url: baseUrl }).then(
       (r) => { setBaseUrl(r.base_url); setBaseUrlState('Saved — run the URL migration, then re-publish') },
       (e) => setBaseUrlState(`Failed: ${e}`),
+    )
+  }
+
+  const saveHeadHtml = () => {
+    setHeadState('saving')
+    api.savePublishingSettings({ head_html: headHtml }).then(
+      (r) => { setHeadHtml(r.head_html); setHeadState('Saved — re-publish to apply') },
+      (e) => setHeadState(`Failed: ${e}`),
     )
   }
 
@@ -120,20 +161,6 @@ export function Settings({ onBack }: { onBack: () => void }) {
         ),
       (e) => setPublishAllState(`Failed: ${e}`),
     )
-  }
-
-  const saveFooter = () => {
-    setFooterState('saving')
-    api
-      .saveFooterSettings({
-        notice: footerNotice,
-        license_label: footerLicenseLabel,
-        license_url: footerLicenseUrl,
-      })
-      .then(
-        () => setFooterState('Saved'),
-        (e) => setFooterState(`Failed: ${e}`),
-      )
   }
 
   return (
@@ -408,16 +435,47 @@ export function Settings({ onBack }: { onBack: () => void }) {
             {baseUrlState && <span className="settings-state muted">{baseUrlState}</span>}
           </div>
 
+          <div className="settings-row settings-row-tall" style={{ marginTop: 16 }}>
+            <label htmlFor="head-html">
+              Custom &lt;head&gt; script{' '}
+              <InfoTip label="About the custom head script">
+                Raw HTML injected into the <code>&lt;head&gt;</code> of every published page and the
+                homepage — typically an analytics <code>&lt;script&gt;</code> tag. Saved verbatim
+                and only applied on the next publish, so re-publish (or “Publish all pending”) after
+                changing it. Leave blank for none.
+              </InfoTip>
+            </label>
+            <div className="settings-control">
+              <textarea
+                id="head-html"
+                rows={3}
+                value={headHtml}
+                onChange={(e) => setHeadHtml(e.target.value)}
+                placeholder='<script defer src="https://analytics.example.com/script.js" data-website-id="…"></script>'
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+              />
+              <span className="settings-hint">
+                Inserted as-is into every page&apos;s &lt;head&gt;. Re-publish to apply.
+              </span>
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <Button variant="primary" onClick={saveHeadHtml}>Save head script</Button>
+            {headState && <span className="settings-state muted">{headState}</span>}
+          </div>
+
           <h3 style={{ marginTop: 24 }}>
             Publish all to GitHub Pages{' '}
             <InfoTip label="About bulk publish">
-              Pushes every memoir with pending changes — plus the homepage — to the live
-              GitHub Pages site in one go. Use it after a site-wide change such as moving the
-              base URL. Documents already up to date are skipped.
+              Re-pushes every memoir already live on the site that has pending changes — plus the
+              homepage — to GitHub Pages in one go. Use it after a site-wide change such as moving
+              the base URL. Documents already up to date are skipped, and documents not yet
+              published (drafts) are excluded — publish those individually first.
             </InfoTip>
           </h3>
           <p className="settings-hint" style={{ marginBottom: 12 }}>
-            Publishes all documents with changes to push (and the homepage) to the live site.
+            Re-publishes already-live documents with changes to push (and the homepage). Drafts
+            that have never been published are not included.
           </p>
           <div className="settings-save-row">
             <Button variant="secondary" onClick={publishAllHtml}>Publish all pending</Button>
@@ -470,55 +528,17 @@ export function Settings({ onBack }: { onBack: () => void }) {
         <div className="settings-section-head">
           <h2>Footer &amp; licence</h2>
           <p>
-            The copyright and licence line printed at the foot of every published HTML page, the
-            homepage, and every Google Doc. The licence label links to the URL below when set.
+            The footer printed at the foot of every published HTML page, the homepage, and every
+            Google Doc. Edit it as a block document — paragraphs, headings, lists and links — for
+            full control over the copyright and licence text.
           </p>
         </div>
         <div className="settings-fields">
-          <div className="settings-row">
-            <label htmlFor="footer-notice">Copyright notice</label>
-            <div className="settings-control">
-              <input
-                id="footer-notice"
-                value={footerNotice}
-                onChange={(e) => setFooterNotice(e.target.value)}
-                placeholder="© Christopher M.R. Skitch · The Skitch Family Archive"
-              />
-            </div>
-          </div>
-          <div className="settings-row settings-row-tall">
-            <label htmlFor="footer-license-label">Licence label</label>
-            <div className="settings-control">
-              <textarea
-                id="footer-license-label"
-                rows={3}
-                value={footerLicenseLabel}
-                onChange={(e) => setFooterLicenseLabel(e.target.value)}
-                placeholder="Licensed CC BY-NC-ND 4.0 — read and share with attribution; no commercial use or adaptations."
-              />
-              <span className="settings-hint">
-                This text becomes the clickable link to the licence URL.
-              </span>
-            </div>
-          </div>
-          <div className="settings-row">
-            <label htmlFor="footer-license-url">Licence URL</label>
-            <div className="settings-control">
-              <input
-                id="footer-license-url"
-                value={footerLicenseUrl}
-                onChange={(e) => setFooterLicenseUrl(e.target.value)}
-                placeholder="https://creativecommons.org/licenses/by-nc-nd/4.0/"
-              />
-              <span className="settings-hint">
-                Leave blank to print the licence label as plain text (no link).
-              </span>
-            </div>
-          </div>
-          <div className="settings-save-row">
-            <Button variant="primary" onClick={saveFooter}>Save footer settings</Button>
-            {footerState && <span className="settings-state muted">{footerState}</span>}
-          </div>
+          {footerBlocks === null ? (
+            <p className="settings-hint">Loading…</p>
+          ) : (
+            <FooterEditor initialBlocks={footerBlocks} />
+          )}
         </div>
       </section>
 

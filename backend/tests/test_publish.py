@@ -93,8 +93,10 @@ def test_local_folder_full_cycle(tmp_path: Path, workspace: Path, session: Sessi
 def test_publish_all_pending_local_folder(
     tmp_path: Path, workspace: Path, session: Session
 ) -> None:
-    """Bulk-publish writes every dirty memoir and goes clean; a second run with
-    nothing dirty publishes nothing; --force re-publishes everything."""
+    """Bulk-publish only re-pushes memoirs ALREADY live on the target that have
+    pending changes. A never-published draft is excluded; once it's been
+    published individually, a later edit makes it eligible. A run with nothing
+    dirty publishes nothing; --force re-publishes the already-published docs."""
     from notebook_forge.publish.service import publish_all_pending
 
     doc = import_doc(tmp_path, workspace, session)
@@ -103,7 +105,20 @@ def test_publish_all_pending_local_folder(
     session.add(target)
     session.commit()
 
+    # Never published here → dirty, but excluded from bulk publish.
     assert services.is_dirty(session, doc, target)
+    assert not services.is_published(session, doc, target)
+    assert publish_all_pending(session, workspace, target) == {"published": [], "failed": []}
+    assert not (out / f"{SLUG}.html").exists()
+
+    # Publish it individually, then edit it so it's pending again.
+    publish_document(session, workspace, doc, target)
+    session.commit()
+    assert services.is_published(session, doc, target)
+    edit_doc(session, doc)
+    assert services.is_dirty(session, doc, target)
+
+    # Now bulk publish picks it up because it's live + dirty.
     result = publish_all_pending(session, workspace, target)
     session.commit()
     assert doc.slug in result["published"]
@@ -114,7 +129,7 @@ def test_publish_all_pending_local_folder(
     # Nothing dirty → nothing published.
     assert publish_all_pending(session, workspace, target) == {"published": [], "failed": []}
 
-    # force → republishes even though clean.
+    # force → republishes the already-published doc even though clean.
     forced = publish_all_pending(session, workspace, target, force=True)
     assert doc.slug in forced["published"]
 

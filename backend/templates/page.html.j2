@@ -267,6 +267,18 @@
     color:var(--ink-faint);
     line-height:1.6;
   }
+  footer p{margin:0 0 .4rem;}
+  footer p:last-child{margin-bottom:0;}
+  /* Footer links read as quiet text, not the default blue — inherit the
+     muted footer colour, with a subtle underline and an accent on hover. */
+  footer a{
+    color:inherit;
+    text-decoration:underline;
+    text-decoration-thickness:1px;
+    text-underline-offset:.15em;
+    transition:color .15s ease;
+  }
+  footer a:hover{color:var(--accent);}
   footer .mark{font-family:"Fraunces",serif;color:var(--accent);font-weight:600;}
 
   /* ---- Reading nav: bottom prev/next (sits ABOVE the document footer) ---- */
@@ -562,6 +574,7 @@
   body.has-toc article h2, body.has-toc article h3{scroll-margin-top:1rem;}
 {% endif %}
 </style>
+{% if head_html %}{{ head_html|safe }}{% endif %}
 </head>
 <body{% if show_toc and toc_tree %} class="has-toc"{% endif %}>
 {% if show_toc and toc_tree %}
@@ -692,7 +705,7 @@
 
   {% if footer_text %}
   <footer>
-    <p>{{ footer_text|safe }}</p>
+    {{ footer_text|safe }}
   </footer>
   {% endif %}
 

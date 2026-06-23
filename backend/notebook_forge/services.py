@@ -148,6 +148,18 @@ def is_dirty(session: Session, doc: Document, target: Target) -> bool:
     return effective_content_hash(session, doc) != snap.content_hash
 
 
+def is_published(session: Session, doc: Document, target: Target) -> bool:
+    """True only when the document is currently live on the target — i.e. its
+    sync state exists and is PUBLISHED. NEVER_PUBLISHED (no row / draft) and
+    UNPUBLISHED both read as not-published."""
+    state = session.scalar(
+        select(SyncState).where(
+            SyncState.document_id == doc.id, SyncState.target_id == target.id
+        )
+    )
+    return bool(state and state.status == "PUBLISHED")
+
+
 def mark_published(
     session: Session, doc: Document, target: Target, snap: Snapshot, status: str = "PUBLISHED"
 ) -> SyncState:

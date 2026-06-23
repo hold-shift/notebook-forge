@@ -44,6 +44,14 @@ def pages_base_url(session: Session) -> str:
     return (val.strip() or DEFAULT_PAGES_BASE).rstrip("/")
 
 
+def site_head_html(session: Session) -> str:
+    """Operator-supplied raw HTML injected into the <head> of every published
+    page and the homepage (e.g. an analytics <script> tag). Stored alongside
+    the base URL under the 'publishing' Setting. Empty by default."""
+    row = session.get(Setting, "publishing")
+    return ((row.value or {}).get("head_html", "") if row is not None else "") or ""
+
+
 def doc_canonical_url(base: str, slug: str) -> str:
     return f"{base.rstrip('/')}/{PAGES_SUBDIR}/{slug}.html"
 
@@ -360,6 +368,7 @@ def root_files(
         dedication=content.get("dedication", ""),
         entries=[],
         footer_text=footer,
+        head_html=site_head_html(session),
         canonical_url=canonical,
         og_description=description[:280],
         jsonld_script=collection_jsonld(base_url, title, description, entries_with_rt, author),

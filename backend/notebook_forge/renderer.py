@@ -315,6 +315,31 @@ def build_jsonld(meta: dict[str, Any]) -> str:
     )
 
 
+def render_fragment(blocks: list[dict[str, Any]]) -> str:
+    """Render a list of BlockNote blocks to a standalone HTML fragment — no
+    page chrome, just the block-level markup. Used for the workspace footer,
+    which is an editable block document. Figures/footnotes aren't expected
+    here and are skipped (image_src is a no-op)."""
+    body, _ = build_body(blocks, lambda _block, _n: "")
+    out: list[str] = []
+    for entry in body:
+        kind = entry["kind"]
+        if kind == "p":
+            out.append(f"<p>{entry['text_html']}</p>")
+        elif kind in ("h2", "h3"):
+            level = kind[1]
+            out.append(f"<h{level}>{entry['text_html']}</h{level}>")
+        elif kind == "blockquote":
+            out.append(f"<blockquote>{entry['text_html']}</blockquote>")
+        elif kind in ("list", "table"):
+            out.append(str(entry["html"]))
+        elif kind == "hr":
+            out.append("<hr>")
+        elif kind == "narrative":
+            out.extend(f"<p>{para}</p>" for para in entry["paragraphs"])
+    return "".join(out)
+
+
 def render_document(
     meta: dict[str, Any],
     blocks: list[dict[str, Any]],
@@ -344,6 +369,7 @@ def render_document(
         show_toc=bool(show_toc),
         show_lof=False,
         footer_text=meta.get("footer_html", ""),
+        head_html=meta.get("head_html", ""),
         homepage_url=meta.get("homepage_url", ""),
         canonical_url=meta.get("canonical_url", ""),
         meta_description=meta.get("meta_description") or meta.get("standfirst", ""),
@@ -363,6 +389,7 @@ def render_index(
     dedication: str,
     entries: list[dict[str, Any]],
     footer_text: str = "",
+    head_html: str = "",
     canonical_url: str = "",
     og_description: str = "",
     jsonld_script: str = "",
@@ -383,6 +410,7 @@ def render_index(
         dedication=dedication,
         entries=entries,
         footer_text=footer_text,
+        head_html=head_html,
         canonical_url=canonical_url,
         og_description=og_description,
         jsonld_script=jsonld_script,

@@ -201,9 +201,14 @@ def render_safe_markdown(
         elif btype == "divider":
             lines += ["---", ""]
 
-    if meta.get("footer_html"):
+    # The footer is a block document; build_safe_markdown renders it to
+    # Markdown via footer_markdown and passes it here as meta["footer_md"].
+    # (Legacy direct callers may still pass an inline footer_html fragment.)
+    footer = (meta.get("footer_md") or "").strip()
+    if not footer and meta.get("footer_html"):
         footer = html_fragment_to_md(meta["footer_html"]).strip()
-        lines += ["---", "", f"*{footer}*", ""]
+    if footer:
+        lines += ["---", "", footer, ""]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -226,10 +231,10 @@ def build_safe_markdown(session: Session, workspace: Path, doc: Document) -> str
                     return data_uri(path)
         return ""
 
-    # Workspace-wide footer / licence notice; html_fragment_to_md turns the
-    # licence anchor into a Markdown link for the Google Doc.
-    from .footer import footer_html
+    # Workspace-wide footer / licence notice, rendered straight from its block
+    # document to Markdown for the Google Doc.
+    from .footer import footer_markdown
 
     meta = dict(doc.meta)
-    meta["footer_html"] = footer_html(session)
+    meta["footer_md"] = footer_markdown(session)
     return render_safe_markdown(meta, doc.blocks, sketch_src)

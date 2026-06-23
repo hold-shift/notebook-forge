@@ -90,6 +90,11 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..footer import footer_html
     meta["footer_html"] = footer_html(session)
 
+    # Operator-supplied <head> HTML (e.g. an analytics script), injected into
+    # every published page.
+    from ..collection import site_head_html
+    meta["head_html"] = site_head_html(session)
+
     html = render_document(meta, doc.blocks, image_src)
     return PublishBundle(slug=slug, html=html, assets=assets)
 
@@ -238,17 +243,25 @@ def publish_all_pending(
     force: bool = False,
     adapter: PublishTarget | None = None,
 ) -> dict[str, Any]:
-    """Publish every memoir document (and the homepage) that is dirty for an
-    HTML target, in one pass — the bulk "republish the site" tool. One adapter is
-    built and reused across docs. Per-document failures are collected, not raised,
-    so one bad doc doesn't abort the rest; the homepage rides along on the first
-    memoir publish, so it's only published explicitly if still dirty afterwards."""
+    """Re-publish every memoir already live on an HTML target that has pending
+    changes, in one pass — the bulk "republish the site" tool. Documents not
+    currently published (drafts / never-published / unpublished) are excluded:
+    bulk publish only pushes updates to docs already on the live site, it never
+    publishes something for the first time. One adapter is built and reused
+    across docs. Per-document failures are collected, not raised, so one bad doc
+    doesn't abort the rest; the homepage rides along on the first memoir publish,
+    so it's only published explicitly if still dirty afterwards."""
     from .. import services
     from ..homepage import get_homepage
 
     adapter = adapter or make_adapter(target, workspace)  # raises if creds missing
     memoirs = [d for d in services.list_documents(session) if d.kind == "memoir"]
-    pending = [d for d in memoirs if force or services.is_dirty(session, d, target)]
+    pending = [
+        d
+        for d in memoirs
+        if services.is_published(session, d, target)
+        and (force or services.is_dirty(session, d, target))
+    ]
 
     published: list[str] = []
     failed: list[dict[str, str]] = []

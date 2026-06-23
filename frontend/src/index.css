@@ -672,6 +672,17 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   box-shadow: 0 0 0 2px rgba(90,125,90,0.12);
 }
 .settings-hint { font-size: 11px; color: var(--color-text-tertiary); line-height: 1.4; }
+/* Footer block editor (Settings → Footer & licence) */
+.footer-editor {
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-primary);
+  padding: 6px 4px;
+}
+.footer-editor .bn-editor { padding-inline: 8px; }
+/* Footer links shouldn't read as default browser blue, mirroring the
+   published page styling. */
+.footer-editor a { color: var(--color-text-primary); }
 .settings-save-row {
   display: flex; align-items: center; gap: 10px;
   padding-top: 14px;

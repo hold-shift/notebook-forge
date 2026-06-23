@@ -324,8 +324,8 @@ export const api = {
         reports: { model: string; rules: string }
         narrative: { label: string }
         tts: { enabled: boolean }
-        publishing: { base_url: string }
-        footer: { notice: string; license_label: string; license_url: string }
+        publishing: { base_url: string; head_html: string }
+        footer: { blocks: unknown[] }
         homepage: HomepageSettings
         secrets: Record<string, boolean>
       }>(r),
@@ -356,12 +356,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     }).then((r) => json<{ ok: boolean; enabled: boolean }>(r)),
-  savePublishingSettings: (baseUrl: string) =>
+  savePublishingSettings: (body: { base_url?: string; head_html?: string }) =>
     fetch('/api/settings/publishing', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base_url: baseUrl }),
-    }).then((r) => json<{ ok: boolean; base_url: string }>(r)),
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean; base_url: string; head_html: string }>(r)),
   publishAll: (targetName: string, force = false) =>
     fetch(`/api/publish/all/${targetName}`, {
       method: 'POST',
@@ -394,12 +394,12 @@ export const api = {
     a.remove()
     URL.revokeObjectURL(url)
   },
-  saveFooterSettings: (body: { notice: string; license_label: string; license_url: string }) =>
+  saveFooterSettings: (body: { blocks: unknown[] }) =>
     fetch('/api/settings/footer', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }).then((r) => json<{ ok: boolean }>(r)),
+    }).then((r) => json<{ ok: boolean; footer: { blocks: unknown[] } }>(r)),
   saveSketchSettings: (sketch: { model: string; default_prompt: string; face_gate: string }) =>
     fetch('/api/settings/sketch', {
       method: 'PUT',

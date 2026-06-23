@@ -269,9 +269,14 @@ def _parse_meta(soup: BeautifulSoup) -> dict[str, Any]:
         except (ValueError, AttributeError):
             pass
 
+    # Capture the footer's block markup (the whole <p>, not just its inner
+    # runs) so a re-render reproduces the published <footer><p>…</p>. The page
+    # template now emits footer_html verbatim — the workspace footer is itself
+    # a block fragment (one or more <p>) — so the wrapping tag lives in the
+    # value, not the template.
     footer = soup.find("footer")
     if footer and footer.find("p"):
-        meta["footer_html"] = "".join(str(c) for c in footer.find("p").children)
+        meta["footer_html"] = str(footer.find("p"))
     else:
         meta["footer_html"] = ""
 

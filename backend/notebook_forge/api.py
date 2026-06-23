@@ -1018,7 +1018,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .collection import pages_base_url
+    from .collection import pages_base_url, site_head_html
     from .footer import footer_setting
     from .homepage import homepage_settings_view
     from .narration import tts_enabled
@@ -1035,7 +1035,10 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
         "tts": {"enabled": tts_enabled(session)},
-        "publishing": {"base_url": pages_base_url(session)},
+        "publishing": {
+            "base_url": pages_base_url(session),
+            "head_html": site_head_html(session),
+        },
         "footer": footer_setting(session),
         "homepage": homepage_settings_view(session),
         "secrets": {
@@ -1163,29 +1166,46 @@ def save_tts_setting(
 
 
 class PublishingSettingsBody(BaseModel):
-    base_url: str = ""
+    # Both fields are optional so each Settings save button (base URL vs. the
+    # custom <head> script) can patch just its own field without clobbering
+    # the other. A field left None is preserved as-is.
+    base_url: str | None = None
+    head_html: str | None = None
 
 
 @app.put("/api/settings/publishing")
 def save_publishing_settings(
     body: PublishingSettingsBody, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
-    """Set the published-site base URL (drives canonical URLs, the homepage URL,
-    the sitemap and JSON-LD). Existing documents' stored canonical URLs are NOT
-    rewritten here — run `cli site-url-migrate` for that, then re-publish."""
-    from .collection import pages_base_url
+    """Set the published-site base URL and/or the custom <head> HTML injected
+    into every published page (e.g. an analytics script). The base URL drives
+    canonical URLs, the homepage URL, the sitemap and JSON-LD; existing
+    documents' stored canonical URLs are NOT rewritten here — run
+    `cli site-url-migrate` for that, then re-publish."""
+    from .collection import pages_base_url, site_head_html
     from .models import Setting
 
-    url = body.base_url.strip().rstrip("/")
-    if url and not (url.startswith("http://") or url.startswith("https://")):
-        raise HTTPException(422, "base_url must be an http(s) URL")
     setting = session.get(Setting, "publishing")
-    value = {"base_url": url}
+    value = dict(setting.value or {}) if setting is not None else {}
+
+    if body.base_url is not None:
+        url = body.base_url.strip().rstrip("/")
+        if url and not (url.startswith("http://") or url.startswith("https://")):
+            raise HTTPException(422, "base_url must be an http(s) URL")
+        value["base_url"] = url
+    if body.head_html is not None:
+        value["head_html"] = body.head_html.strip()
+
     if setting is None:
         session.add(Setting(key="publishing", value=value))
     else:
         setting.value = value
-    return {"ok": True, "base_url": pages_base_url(session)}
+    session.flush()
+    return {
+        "ok": True,
+        "base_url": pages_base_url(session),
+        "head_html": site_head_html(session),
+    }
 
 
 @app.get("/api/documents/{slug}/narration")
@@ -1231,31 +1251,25 @@ def export_narration(slug: str, session: Session = Depends(get_session)) -> Resp
 
 
 class FooterSettingsBody(BaseModel):
-    notice: str = ""
-    license_label: str = ""
-    license_url: str = ""
+    # The footer is an editable block document (same block model as a memoir).
+    blocks: list[dict[str, Any]] = []
 
 
 @app.put("/api/settings/footer")
 def save_footer_settings(
     body: FooterSettingsBody, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
+    from .footer import footer_setting
     from .models import Setting
 
-    url = body.license_url.strip()
-    if url and not (url.startswith("http://") or url.startswith("https://")):
-        raise HTTPException(422, "license_url must be an http(s) URL")
-    value = {
-        "notice": body.notice.strip(),
-        "license_label": body.license_label.strip(),
-        "license_url": url,
-    }
+    value = {"blocks": body.blocks}
     setting = session.get(Setting, "footer")
     if setting is None:
         session.add(Setting(key="footer", value=value))
     else:
         setting.value = value
-    return {"ok": True, "footer": value}
+    session.flush()
+    return {"ok": True, "footer": footer_setting(session)}
 
 
 class BannerSlotBody(BaseModel):
