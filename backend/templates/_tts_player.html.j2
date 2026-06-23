@@ -43,14 +43,25 @@
       text-transform:uppercase; color:var(--accent); font-weight:600; flex:none;
     }
     .tts-btn{
-      display:inline-flex; align-items:center; justify-content:center; flex:none;
+      position:relative; display:inline-flex; align-items:center; justify-content:center; flex:none;
       width:40px; height:40px; border-radius:50%; cursor:pointer;
       border:1px solid var(--rule); background:#fff; color:var(--accent-deep);
       font-size:1.1rem; line-height:1; transition:background .15s,border-color .15s;
     }
-    .tts-btn.stop{ width:34px; height:34px; font-size:1rem; }
+    .tts-btn.over{ width:34px; height:34px; }
     .tts-btn:hover{ background:#fffdf9; border-color:var(--accent); }
     .tts-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+    .tts-btn:disabled{ cursor:default; color:#cdbfa8; border-color:#ece4d6; background:var(--paper-edge); }
+    .tts-btn:disabled:hover{ background:var(--paper-edge); border-color:#ece4d6; }
+    .tts-ico{ position:relative; z-index:2; display:inline-flex; }
+    /* One-time rainbow attention ring around the play button (until first use). */
+    .tts-ring{ position:absolute; inset:-3px; border-radius:50%; z-index:1; opacity:0; pointer-events:none;
+      background:conic-gradient(from 0deg,#e24b4a,#ef9f27,#e3c41a,#639922,#1d9e75,#378add,#7f77dd,#d4537e,#e24b4a);
+      -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));
+              mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px)); }
+    .tts-ring.spin{ animation:ttsSpin 1.9s ease-in-out forwards; }
+    @keyframes ttsSpin{ 0%{transform:rotate(0);opacity:0} 12%{opacity:1} 82%{opacity:1} 100%{transform:rotate(720deg);opacity:0} }
+    @media (prefers-reduced-motion:reduce){ .tts-ring.spin{ animation:none; opacity:0; } }
     .tts-mid{ flex:1 1 200px; display:flex; align-items:center; gap:.7rem; min-width:140px; }
     .tts-progress{ flex:1; height:7px; border-radius:6px; background:var(--rule);
       position:relative; cursor:pointer; }
@@ -67,18 +78,6 @@
       color:var(--ink-soft); background:#fff; border:1px solid var(--rule);
       border-radius:999px; padding:.2rem .55rem; cursor:pointer; min-width:48px;
     }
-    .tts-resume{
-      flex:none; display:none; align-items:center; gap:.4rem;
-      font-family:system-ui,sans-serif; font-size:.74rem; color:var(--ink-soft);
-    }
-    .tts-resume.show{ display:inline-flex; }
-    .tts-resume button{
-      font-family:system-ui,sans-serif; font-weight:600; font-size:.72rem;
-      color:var(--accent-deep); background:#fff; border:1px solid var(--rule);
-      border-radius:8px; padding:.22rem .55rem; cursor:pointer;
-    }
-    .tts-resume .x{ border:none; background:none; color:var(--ink-faint); cursor:pointer;
-      font-size:.72rem; text-decoration:underline; padding:0; }
     .tts-status{ font-family:system-ui,sans-serif; font-size:.72rem; color:var(--ink-faint);
       flex:none; }
     /* In-article highlight (applied to spans the player injects into the prose).
@@ -102,10 +101,11 @@
   <audio id="ttsAudio" preload="metadata" src="{{ tts.audio_base_url }}/document.mp3"></audio>
   <div class="tts-inner">
     <button type="button" class="tts-btn" id="ttsPlay" aria-label="Play">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      <span class="tts-ring" id="ttsRing" aria-hidden="true"></span>
+      <span class="tts-ico" id="ttsIco"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>
     </button>
-    <button type="button" class="tts-btn stop" id="ttsStop" aria-label="Stop">
-      <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+    <button type="button" class="tts-btn over" id="ttsOver" aria-label="Start over" disabled>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="3" height="12" rx="1"/><path d="M18 6l-7.5 6 7.5 6z"/></svg>
     </button>
     <span class="tts-head">Listen</span>
     <div class="tts-mid">
@@ -118,13 +118,9 @@
     <div class="tts-speedwrap">
       <span class="tts-splabel">Speed</span>
       <input type="range" class="tts-speed" id="ttsSpeed" min="0.75" max="1.75" step="0.05"
-             value="1.25" aria-label="Playback speed">
-      <button type="button" class="tts-chip" id="ttsChip" aria-label="Playback speed">1.25×</button>
+             value="1" aria-label="Playback speed">
+      <button type="button" class="tts-chip" id="ttsChip" aria-label="Playback speed">1×</button>
     </div>
-    <span class="tts-resume" id="ttsResume">
-      <button type="button" id="ttsResumeBtn">Resume</button>
-      <button type="button" class="x" id="ttsResumeDismiss">start over</button>
-    </span>
     <span class="tts-status" id="ttsStatus">Loading…</span>
   </div>
 
@@ -133,17 +129,16 @@
   var root=document.getElementById('ttsPlayer'); if(!root) return;
   var base=root.dataset.base, slug=root.dataset.slug||'doc';
   var audio=document.getElementById('ttsAudio');
-  var playBtn=document.getElementById('ttsPlay'), stopBtn=document.getElementById('ttsStop');
+  var playBtn=document.getElementById('ttsPlay'), ico=document.getElementById('ttsIco'),
+      ring=document.getElementById('ttsRing'), overBtn=document.getElementById('ttsOver');
   var progress=document.getElementById('ttsProgress'), fill=document.getElementById('ttsFill');
   var timeEl=document.getElementById('ttsTime'), statusEl=document.getElementById('ttsStatus');
   var speed=document.getElementById('ttsSpeed'), chip=document.getElementById('ttsChip');
-  var resumeWrap=document.getElementById('ttsResume'),
-      resumeBtn=document.getElementById('ttsResumeBtn'),
-      resumeDismiss=document.getElementById('ttsResumeDismiss');
   var article=document.getElementById('forge-article');
 
   var marks=[], wordSpans=[], leafFor=[], blockLeaves=[], docHash='';
-  var lastIdx=-1, activeLeaf=null, LS='tts_pos_'+slug;
+  var lastIdx=-1, activeLeaf=null, LS='tts_pos_'+slug, PLAYED_KEY='tts_played_ever';
+  var resumeGlyph=false, resumeTime=null;
 
   function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   function fmt(s){ if(!isFinite(s)||s<0) s=0; s=Math.floor(s); var m=Math.floor(s/60); return m+':'+String(s%60).padStart(2,'0'); }
@@ -160,7 +155,8 @@
     docHash=marks.length+':'+((marks[0]||{}).word||'')+':'+((marks[marks.length-1]||{}).word||'');
     if(article && blocks && blocks.length){ try{ mapToArticle(blocks); }catch(e){ /* highlight off, audio still plays */ } }
     statusEl.textContent=marks.length.toLocaleString()+' words';
-    maybeResume();
+    cueResume();
+    maybeAttention();
   }).catch(function(e){ statusEl.textContent='Could not load narration.'; });
 
   // ---- map narration blocks onto the existing article text ----
@@ -273,17 +269,29 @@
     save();
   }
 
-  // ---- transport ----
+  // ---- transport: one play/pause toggle (shows a resume glyph on load) ----
   var SVG_PLAY='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
   var SVG_PAUSE='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
-  function syncPlay(){ if(audio.paused){ playBtn.innerHTML=SVG_PLAY; playBtn.setAttribute('aria-label','Play'); }
-                       else { playBtn.innerHTML=SVG_PAUSE; playBtn.setAttribute('aria-label','Pause'); } }
+  var SVG_RESUME='<svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6" width="3.2" height="12" rx="1"/><path d="M12.4 6l7.4 6-7.4 6z"/></svg>';
+  function syncPlay(){
+    if(!audio.paused){ ico.innerHTML=SVG_PAUSE; playBtn.setAttribute('aria-label','Pause'); }
+    else if(resumeGlyph){ ico.innerHTML=SVG_RESUME; playBtn.setAttribute('aria-label','Resume'); }
+    else { ico.innerHTML=SVG_PLAY; playBtn.setAttribute('aria-label','Play'); }
+  }
+  function updateOver(){ overBtn.disabled = (audio.currentTime||0) < 0.5; }
   playBtn.addEventListener('click', function(){ if(audio.paused) audio.play().catch(function(){}); else audio.pause(); });
-  stopBtn.addEventListener('click', function(){ audio.pause(); audio.currentTime=0; lastIdx=-1; clearLeaf(activeLeaf); activeLeaf=null; });
-  audio.addEventListener('play', syncPlay);
+  audio.addEventListener('play', function(){ resumeGlyph=false; dismissAttention(); syncPlay(); });
   audio.addEventListener('pause', function(){ syncPlay(); save(); });
-  audio.addEventListener('timeupdate', function(){ update(); progressUpdate(); });
-  audio.addEventListener('seeked', update);
+  audio.addEventListener('timeupdate', function(){ update(); progressUpdate(); updateOver(); });
+  audio.addEventListener('seeked', function(){ update(); updateOver(); });
+
+  // Start over → back to the beginning; forgets this story's saved spot.
+  overBtn.addEventListener('click', function(){
+    if(overBtn.disabled) return;
+    audio.currentTime=0; lastIdx=-1; clearLeaf(activeLeaf); activeLeaf=null; resumeGlyph=false;
+    try{ localStorage.removeItem(LS); }catch(_){}
+    syncPlay(); progressUpdate(); updateOver();
+  });
 
   // Click any word in the prose to jump the audio there (POC seek-with-catch).
   if(article) article.addEventListener('click', function(e){
@@ -299,7 +307,10 @@
     fill.style.width=p+'%'; timeEl.textContent=fmt(t)+' / '+fmt(d);
     progress.setAttribute('aria-valuenow', Math.round(p));
   }
-  audio.addEventListener('loadedmetadata', progressUpdate);
+  audio.addEventListener('loadedmetadata', function(){
+    if(resumeTime!=null) audio.currentTime=resumeTime;   // apply saved spot once seekable
+    progressUpdate(); updateOver();
+  });
   function seekFrom(e){ var r=progress.getBoundingClientRect(), x=(e.clientX-r.left)/r.width;
     if(audio.duration){ audio.currentTime=Math.max(0,Math.min(1,x))*audio.duration; lastIdx=-1; update(); } }
   progress.addEventListener('click', seekFrom);
@@ -308,13 +319,19 @@
     else if(e.key==='ArrowRight'){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10); e.preventDefault(); } });
 
   // ---- speed (slider on desktop, tap-to-cycle chip on mobile) ----
-  var STEPS=[1,1.25,1.5,1.75];
-  function setSpeed(v){ v=Math.round(v*100)/100; audio.playbackRate=v; speed.value=v; chip.textContent=v+'×'; }
+  // Speed preference is remembered per visitor (one key across all documents),
+  // using the same localStorage mechanism as the resume marker. Default 1.0×.
+  var STEPS=[1,1.25,1.5,1.75], SPEED_KEY='tts_speed';
+  function setSpeed(v){
+    v=Math.round(v*100)/100; audio.playbackRate=v; speed.value=v; chip.textContent=v+'×';
+    try{ localStorage.setItem(SPEED_KEY, String(v)); }catch(_){}
+  }
+  function savedSpeed(){ var v; try{ v=parseFloat(localStorage.getItem(SPEED_KEY)); }catch(_){} return isFinite(v) ? v : 1.0; }
   speed.addEventListener('input', function(){ setSpeed(parseFloat(speed.value)); });
   chip.addEventListener('click', function(){ var i=STEPS.indexOf(Math.round(audio.playbackRate*100)/100);
     setSpeed(STEPS[(i+1)%STEPS.length]); });
-  audio.addEventListener('loadedmetadata', function(){ setSpeed(parseFloat(speed.value)); });
-  setSpeed(1.25);
+  audio.addEventListener('loadedmetadata', function(){ audio.playbackRate=parseFloat(speed.value)||1; });
+  setSpeed(savedSpeed());
 
   // ---- keyboard (space play/pause, ←/→ ±10s) ----
   document.addEventListener('keydown', function(e){
@@ -329,15 +346,27 @@
   function save(){ var now=Date.now(); if(now-thr<1500) return; thr=now;
     try{ localStorage.setItem(LS, JSON.stringify({word_index:Math.max(0,lastIdx), doc_hash:docHash, ts:now})); }catch(_){} }
   window.addEventListener('beforeunload', function(){ try{ localStorage.setItem(LS, JSON.stringify({word_index:Math.max(0,lastIdx), doc_hash:docHash, ts:Date.now()})); }catch(_){} });
-  function maybeResume(){
+  // On load, if there's a valid saved spot, cue to it (paused) and show the resume
+  // glyph; the toggle reverts to normal play/pause after the first play.
+  function cueResume(){
     var raw; try{ raw=localStorage.getItem(LS); }catch(_){ return; } if(!raw) return;
     var s; try{ s=JSON.parse(raw); }catch(_){ return; } if(!s||!s.word_index) return;
-    if(s.doc_hash!==docHash) return;            // audio regenerated → ignore stale position
+    if(s.doc_hash!==docHash) return;            // audio regenerated → start at 0
     if(!marks[s.word_index]) return;
-    resumeWrap.classList.add('show');
-    resumeBtn.addEventListener('click', function(){ resumeWrap.classList.remove('show');
-      audio.currentTime=marks[s.word_index].start+0.01; lastIdx=-1; if(audio.paused) audio.play().catch(function(){}); update(); });
-    resumeDismiss.addEventListener('click', function(){ resumeWrap.classList.remove('show'); });
+    resumeTime=marks[s.word_index].start+0.01;
+    if(isFinite(audio.duration)) audio.currentTime=resumeTime;   // metadata already loaded
+    resumeGlyph=true; lastIdx=-1; syncPlay(); progressUpdate(); updateOver();
+  }
+
+  // One-time rainbow ring inviting first-time visitors to press play.
+  function maybeAttention(){
+    if(reduced()) return;
+    try{ if(localStorage.getItem(PLAYED_KEY)) return; }catch(_){ return; }
+    ring.classList.add('spin');
+  }
+  function dismissAttention(){
+    ring.classList.remove('spin');
+    try{ localStorage.setItem(PLAYED_KEY,'1'); }catch(_){}
   }
 
   // ---- Media Session (lock-screen controls) ----
