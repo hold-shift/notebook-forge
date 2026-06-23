@@ -272,7 +272,9 @@ def publish_all_pending(
         except Exception as exc:  # noqa: BLE001 — bulk op: record + continue
             failed.append({"slug": doc.slug, "error": str(exc)})
 
-    homepage = get_homepage(session)
+    # The homepage rides along for HTML targets only — it isn't published to
+    # Drive.
+    homepage = get_homepage(session) if target.kind != "drive" else None
     if homepage is not None and (force or services.is_dirty(session, homepage, target)):
         try:
             publish_document(session, workspace, homepage, target, adapter=adapter)

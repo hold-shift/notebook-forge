@@ -971,14 +971,16 @@ def publish_all(
     body: PublishAllBody | None = None,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    """Bulk-publish every pending memoir (+ the homepage) to one HTML target."""
+    """Bulk-(re)publish to one target every document already live there. Only
+    documents currently published to the target are included — drafts are never
+    published here. `force` re-publishes even clean docs (the "Re-publish"
+    button), so workspace-wide changes such as the footer or the custom <head>
+    script propagate. The homepage rides along for HTML targets only."""
     from .publish.service import publish_all_pending
 
     target = session.scalar(select(Target).where(Target.name == target_name))
     if target is None:
         raise HTTPException(404, f"no target '{target_name}'")
-    if target.kind == "drive":
-        raise HTTPException(422, "bulk publish is for HTML targets, not Drive")
     try:
         result = publish_all_pending(
             session, _state()["workspace"], target,
