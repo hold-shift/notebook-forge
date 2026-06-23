@@ -90,6 +90,33 @@ def test_local_folder_full_cycle(tmp_path: Path, workspace: Path, session: Sessi
     assert not services.is_dirty(session, doc, target)
 
 
+def test_publish_all_pending_local_folder(tmp_path: Path, workspace: Path, session: Session) -> None:
+    """Bulk-publish writes every dirty memoir and goes clean; a second run with
+    nothing dirty publishes nothing; --force re-publishes everything."""
+    from notebook_forge.publish.service import publish_all_pending
+
+    doc = import_doc(tmp_path, workspace, session)
+    out = tmp_path / "site"
+    target = Target(name="local", kind="local-folder", config={"folder": str(out)})
+    session.add(target)
+    session.commit()
+
+    assert services.is_dirty(session, doc, target)
+    result = publish_all_pending(session, workspace, target)
+    session.commit()
+    assert doc.slug in result["published"]
+    assert result["failed"] == []
+    assert (out / f"{SLUG}.html").exists()
+    assert not services.is_dirty(session, doc, target)
+
+    # Nothing dirty → nothing published.
+    assert publish_all_pending(session, workspace, target) == {"published": [], "failed": []}
+
+    # force → republishes even though clean.
+    forced = publish_all_pending(session, workspace, target, force=True)
+    assert doc.slug in forced["published"]
+
+
 def test_git_pages_fixture_full_cycle(tmp_path: Path, workspace: Path, session: Session) -> None:
     doc = import_doc(tmp_path, workspace, session)
     bare = tmp_path / "pages.git"

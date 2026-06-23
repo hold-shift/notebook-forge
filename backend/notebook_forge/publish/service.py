@@ -231,6 +231,45 @@ def publish_document(
     return {"snapshot_id": snap.id, "warnings": root_warnings, **result.detail}
 
 
+def publish_all_pending(
+    session: Session,
+    workspace: Path,
+    target: Target,
+    force: bool = False,
+    adapter: PublishTarget | None = None,
+) -> dict[str, Any]:
+    """Publish every memoir document (and the homepage) that is dirty for an
+    HTML target, in one pass — the bulk "republish the site" tool. One adapter is
+    built and reused across docs. Per-document failures are collected, not raised,
+    so one bad doc doesn't abort the rest; the homepage rides along on the first
+    memoir publish, so it's only published explicitly if still dirty afterwards."""
+    from .. import services
+    from ..homepage import get_homepage
+
+    adapter = adapter or make_adapter(target, workspace)  # raises if creds missing
+    memoirs = [d for d in services.list_documents(session) if d.kind == "memoir"]
+    pending = [d for d in memoirs if force or services.is_dirty(session, d, target)]
+
+    published: list[str] = []
+    failed: list[dict[str, str]] = []
+    for doc in pending:
+        try:
+            publish_document(session, workspace, doc, target, adapter=adapter)
+            published.append(doc.slug)
+        except Exception as exc:  # noqa: BLE001 — bulk op: record + continue
+            failed.append({"slug": doc.slug, "error": str(exc)})
+
+    homepage = get_homepage(session)
+    if homepage is not None and (force or services.is_dirty(session, homepage, target)):
+        try:
+            publish_document(session, workspace, homepage, target, adapter=adapter)
+            published.append(homepage.slug)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"slug": homepage.slug, "error": str(exc)})
+
+    return {"published": published, "failed": failed}
+
+
 def unpublish_document(
     session: Session,
     workspace: Path,

@@ -961,6 +961,34 @@ def publish(
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 
 
+class PublishAllBody(BaseModel):
+    force: bool = False  # republish even clean docs (default: only dirty)
+
+
+@app.post("/api/publish/all/{target_name}")
+def publish_all(
+    target_name: str,
+    body: PublishAllBody | None = None,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Bulk-publish every pending memoir (+ the homepage) to one HTML target."""
+    from .publish.service import publish_all_pending
+
+    target = session.scalar(select(Target).where(Target.name == target_name))
+    if target is None:
+        raise HTTPException(404, f"no target '{target_name}'")
+    if target.kind == "drive":
+        raise HTTPException(422, "bulk publish is for HTML targets, not Drive")
+    try:
+        result = publish_all_pending(
+            session, _state()["workspace"], target,
+            force=body.force if body else False,
+        )
+    except PermissionError as exc:  # missing credentials
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": not result["failed"], **result}
+
+
 @app.delete("/api/documents/{slug}/publish/{target_name}")
 def unpublish(
     slug: str, target_name: str, session: Session = Depends(get_session)

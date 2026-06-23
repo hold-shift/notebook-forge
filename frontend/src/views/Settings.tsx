@@ -26,6 +26,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [ttsState, setTtsState] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [baseUrlState, setBaseUrlState] = useState('')
+  const [publishAllState, setPublishAllState] = useState('')
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -104,6 +105,20 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.savePublishingSettings(baseUrl).then(
       (r) => { setBaseUrl(r.base_url); setBaseUrlState('Saved — run the URL migration, then re-publish') },
       (e) => setBaseUrlState(`Failed: ${e}`),
+    )
+  }
+
+  const publishAllHtml = () => {
+    if (!window.confirm('Publish all pending memoirs and the homepage to GitHub Pages (the live site)?')) return
+    setPublishAllState('Publishing…')
+    api.publishAll('github-pages').then(
+      (r) =>
+        setPublishAllState(
+          r.failed.length
+            ? `Published ${r.published.length} · ${r.failed.length} failed: ${r.failed.map((f) => f.slug).join(', ')}`
+            : `Published ${r.published.length} · all succeeded`,
+        ),
+      (e) => setPublishAllState(`Failed: ${e}`),
     )
   }
 
@@ -391,6 +406,22 @@ export function Settings({ onBack }: { onBack: () => void }) {
           <div className="settings-save-row">
             <Button variant="primary" onClick={saveBaseUrl}>Save base URL</Button>
             {baseUrlState && <span className="settings-state muted">{baseUrlState}</span>}
+          </div>
+
+          <h3 style={{ marginTop: 24 }}>
+            Publish all to GitHub Pages{' '}
+            <InfoTip label="About bulk publish">
+              Pushes every memoir with pending changes — plus the homepage — to the live
+              GitHub Pages site in one go. Use it after a site-wide change such as moving the
+              base URL. Documents already up to date are skipped.
+            </InfoTip>
+          </h3>
+          <p className="settings-hint" style={{ marginBottom: 12 }}>
+            Publishes all documents with changes to push (and the homepage) to the live site.
+          </p>
+          <div className="settings-save-row">
+            <Button variant="secondary" onClick={publishAllHtml}>Publish all pending</Button>
+            {publishAllState && <span className="settings-state muted">{publishAllState}</span>}
           </div>
         </div>
       </section>

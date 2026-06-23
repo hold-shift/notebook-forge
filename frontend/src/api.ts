@@ -362,6 +362,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base_url: baseUrl }),
     }).then((r) => json<{ ok: boolean; base_url: string }>(r)),
+  publishAll: (targetName: string, force = false) =>
+    fetch(`/api/publish/all/${targetName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force }),
+    }).then((r) =>
+      json<{ ok: boolean; published: string[]; failed: { slug: string; error: string }[] }>(r),
+    ),
   narration: (slug: string) =>
     fetch(`/api/documents/${slug}/narration`).then((r) => json<NarrationView>(r)),
   saveNarration: (slug: string, body: { audio_base_url?: string; lexicon?: LexiconEntry[] }) =>
