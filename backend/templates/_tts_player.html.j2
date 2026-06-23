@@ -100,6 +100,7 @@
 
   <audio id="ttsAudio" preload="metadata" src="{{ tts.audio_base_url }}/document.mp3"></audio>
   <div class="tts-inner">
+    <span class="tts-head">Listen</span>
     <button type="button" class="tts-btn" id="ttsPlay" aria-label="Play">
       <span class="tts-ring" id="ttsRing" aria-hidden="true"></span>
       <span class="tts-ico" id="ttsIco"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>
@@ -107,7 +108,6 @@
     <button type="button" class="tts-btn over" id="ttsOver" aria-label="Start over" disabled>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="3" height="12" rx="1"/><path d="M18 6l-7.5 6 7.5 6z"/></svg>
     </button>
-    <span class="tts-head">Listen</span>
     <div class="tts-mid">
       <div class="tts-progress" id="ttsProgress" role="slider" tabindex="0"
            aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
@@ -137,7 +137,7 @@
   var article=document.getElementById('forge-article');
 
   var marks=[], wordSpans=[], leafFor=[], blockLeaves=[], docHash='';
-  var lastIdx=-1, activeLeaf=null, LS='tts_pos_'+slug, PLAYED_KEY='tts_played_ever';
+  var lastIdx=-1, activeLeaf=null, LS='tts_pos_'+slug;
   var resumeGlyph=false, resumeTime=null;
 
   function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -156,7 +156,6 @@
     if(article && blocks && blocks.length){ try{ mapToArticle(blocks); }catch(e){ /* highlight off, audio still plays */ } }
     statusEl.textContent=marks.length.toLocaleString()+' words';
     cueResume();
-    maybeAttention();
   }).catch(function(e){ statusEl.textContent='Could not load narration.'; });
 
   // ---- map narration blocks onto the existing article text ----
@@ -358,16 +357,10 @@
     resumeGlyph=true; lastIdx=-1; syncPlay(); progressUpdate(); updateOver();
   }
 
-  // One-time rainbow ring inviting first-time visitors to press play.
-  function maybeAttention(){
-    if(reduced()) return;
-    try{ if(localStorage.getItem(PLAYED_KEY)) return; }catch(_){ return; }
-    ring.classList.add('spin');
-  }
-  function dismissAttention(){
-    ring.classList.remove('spin');
-    try{ localStorage.setItem(PLAYED_KEY,'1'); }catch(_){}
-  }
+  // Rainbow ring inviting a listen — runs on every page load (including resumed
+  // pages); stops once the visitor presses play. Off under reduced-motion.
+  function maybeAttention(){ if(!reduced()) ring.classList.add('spin'); }
+  function dismissAttention(){ ring.classList.remove('spin'); }
 
   // ---- Media Session (lock-screen controls) ----
   if('mediaSession' in navigator){ try{
@@ -377,6 +370,8 @@
     navigator.mediaSession.setActionHandler('seekbackward', function(){ audio.currentTime=Math.max(0,audio.currentTime-10); });
     navigator.mediaSession.setActionHandler('seekforward', function(){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+10); });
   }catch(_){} }
+
+  maybeAttention();   // invite a listen on every load (independent of marks fetch)
 })();
 </script>
 </div>
