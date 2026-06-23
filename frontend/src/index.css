@@ -687,6 +687,10 @@ sup.fn-ref { color: var(--color-text-info); font-weight: 600; font-size: 0.72em;
   display: flex; align-items: center; gap: 10px;
   padding-top: 14px;
 }
+/* Per-target Re-publish buttons, each on its own line with its status. */
+.settings-republish-row { display: flex; flex-direction: column; gap: 10px; }
+.settings-republish-item { display: flex; align-items: center; gap: 10px; }
+.settings-republish-item button { min-width: 168px; justify-content: center; }
 .settings-state { font-size: 12px; }
 .settings-page code {
   font-family: var(--font-mono);

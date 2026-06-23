@@ -328,6 +328,7 @@ export const api = {
         footer: { blocks: unknown[] }
         homepage: HomepageSettings
         secrets: Record<string, boolean>
+        targets: { name: string; kind: string }[]
       }>(r),
     ),
   saveHomepageSettings: (body: HomepageSettings) =>

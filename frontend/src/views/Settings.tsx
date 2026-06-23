@@ -7,6 +7,16 @@ import '@blocknote/mantine/style.css'
 import { api, type MasterStatus } from '../api'
 import { Button, InfoTip } from '../ui'
 
+type TargetInfo = { name: string; kind: string }
+
+// Short labels + display order for the per-target Re-publish buttons.
+const TARGET_LABEL: Record<string, string> = {
+  'github-pages': 'HTML',
+  'local-folder': 'Local',
+  drive: 'Drive',
+}
+const TARGET_ORDER = ['github-pages', 'local-folder', 'drive']
+
 /** Block editor for the workspace footer. Owns its own BlockNote instance and
  * save state; mounted only once the initial blocks have loaded so the editor
  * is seeded with them. Saves the full block document to the footer setting. */
@@ -60,7 +70,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [baseUrlState, setBaseUrlState] = useState('')
   const [headHtml, setHeadHtml] = useState('')
   const [headState, setHeadState] = useState('')
-  const [publishAllState, setPublishAllState] = useState('')
+  const [targets, setTargets] = useState<TargetInfo[]>([])
+  const [republishState, setRepublishState] = useState<Record<string, string>>({})
 
   useEffect(() => {
     api.settings().then((s) => {
@@ -77,6 +88,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setBaseUrl(s.publishing.base_url)
       setHeadHtml(s.publishing.head_html || '')
       setFooterBlocks(s.footer.blocks)
+      setTargets(s.targets || [])
     })
     api.masterStatus().then(setMaster, () => setMaster(null))
   }, [])
@@ -149,17 +161,27 @@ export function Settings({ onBack }: { onBack: () => void }) {
     )
   }
 
-  const publishAllHtml = () => {
-    if (!window.confirm('Publish all pending memoirs and the homepage to GitHub Pages (the live site)?')) return
-    setPublishAllState('Publishing…')
-    api.publishAll('github-pages').then(
+  const republish = (target: TargetInfo) => {
+    const label = TARGET_LABEL[target.kind] ?? target.kind
+    const ridesHomepage = target.kind !== 'drive'
+    if (
+      !window.confirm(
+        `Re-publish every document currently live on ${label}${ridesHomepage ? ' (and the homepage)' : ''} ` +
+          `to apply the latest content and settings (footer, head script, …)?\n\n` +
+          `Documents that have never been published (drafts) are not affected.`,
+      )
+    )
+      return
+    setRepublishState((s) => ({ ...s, [target.name]: 'Re-publishing…' }))
+    api.publishAll(target.name, true).then(
       (r) =>
-        setPublishAllState(
-          r.failed.length
-            ? `Published ${r.published.length} · ${r.failed.length} failed: ${r.failed.map((f) => f.slug).join(', ')}`
-            : `Published ${r.published.length} · all succeeded`,
-        ),
-      (e) => setPublishAllState(`Failed: ${e}`),
+        setRepublishState((s) => ({
+          ...s,
+          [target.name]: r.failed.length
+            ? `Re-published ${r.published.length} · ${r.failed.length} failed: ${r.failed.map((f) => f.slug).join(', ')}`
+            : `Re-published ${r.published.length} · all succeeded`,
+        })),
+      (e) => setRepublishState((s) => ({ ...s, [target.name]: `Failed: ${e}` })),
     )
   }
 
@@ -465,21 +487,32 @@ export function Settings({ onBack }: { onBack: () => void }) {
           </div>
 
           <h3 style={{ marginTop: 24 }}>
-            Publish all to GitHub Pages{' '}
-            <InfoTip label="About bulk publish">
-              Re-pushes every memoir already live on the site that has pending changes — plus the
-              homepage — to GitHub Pages in one go. Use it after a site-wide change such as moving
-              the base URL. Documents already up to date are skipped, and documents not yet
-              published (drafts) are excluded — publish those individually first.
+            Re-publish{' '}
+            <InfoTip label="About re-publishing">
+              Re-pushes every document already live on a target — applying the latest content and
+              any workspace-wide change such as the footer or the custom &lt;head&gt; script — even
+              when a document has no pending edits of its own. Documents that have never been
+              published (drafts) are NOT affected; publish those individually first. The homepage is
+              included for the HTML and Local targets.
             </InfoTip>
           </h3>
           <p className="settings-hint" style={{ marginBottom: 12 }}>
-            Re-publishes already-live documents with changes to push (and the homepage). Drafts
-            that have never been published are not included.
+            Re-publishes the documents already live on a target so workspace-wide changes (footer,
+            head script, base URL) take effect. Unpublished drafts are never re-published.
           </p>
-          <div className="settings-save-row">
-            <Button variant="secondary" onClick={publishAllHtml}>Publish all pending</Button>
-            {publishAllState && <span className="settings-state muted">{publishAllState}</span>}
+          <div className="settings-republish-row">
+            {[...targets]
+              .sort((a, b) => TARGET_ORDER.indexOf(a.kind) - TARGET_ORDER.indexOf(b.kind))
+              .map((t) => (
+                <div key={t.name} className="settings-republish-item">
+                  <Button variant="secondary" onClick={() => republish(t)}>
+                    Re-publish {TARGET_LABEL[t.kind] ?? t.kind}
+                  </Button>
+                  {republishState[t.name] && (
+                    <span className="settings-state muted">{republishState[t.name]}</span>
+                  )}
+                </div>
+              ))}
           </div>
         </div>
       </section>

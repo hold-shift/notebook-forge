@@ -203,6 +203,33 @@ def test_drive_target_mocked(tmp_path: Path, workspace: Path, session: Session) 
     assert not services.is_dirty(session, doc, target)
 
 
+def test_publish_all_pending_drive_skips_homepage(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """Bulk re-publish works for a Drive target too: only docs already live on
+    Drive are (re)published, the homepage is skipped (it isn't a Drive doc), and
+    force re-publishes a clean-but-published doc."""
+    from notebook_forge.publish.service import publish_all_pending
+
+    doc = import_doc(tmp_path, workspace, session)
+    adapter = DriveTarget(MockDriveClient(), "folder-123")
+    target = Target(name="drive", kind="drive", config={"folder_id": "folder-123"})
+    session.add(target)
+    session.commit()
+
+    # Never published to Drive → excluded.
+    assert publish_all_pending(session, workspace, target, adapter=adapter) == {
+        "published": [], "failed": []
+    }
+
+    # Publish it once, then force a bulk re-publish — picked up, homepage absent.
+    publish_document(session, workspace, doc, target, adapter=adapter)
+    session.commit()
+    forced = publish_all_pending(session, workspace, target, force=True, adapter=adapter)
+    assert forced["published"] == [doc.slug]
+    assert forced["failed"] == []
+
+
 def test_live_pages_target_refuses_without_credentials(
     tmp_path: Path, workspace: Path, session: Session, monkeypatch
 ) -> None:
