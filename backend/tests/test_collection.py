@@ -110,6 +110,35 @@ def test_root_files_regenerate_on_publish(
     assert 'class="nm">Later Years' in html
 
 
+def test_discovery_files_gate_to_published_only(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """A memoir that is not live on the github-pages target is excluded from the
+    sitemap, llms.txt and the collection JSON-LD, but still appears in the
+    re-import catalogue (plan §3, §8)."""
+    from notebook_forge import services
+
+    d1, d2, pages_target = _import_two(tmp_path, workspace, session)
+    # d2 is a draft on the live site: never published there.
+    services.mark_unpublished(session, d2, pages_target)
+    session.commit()
+
+    files, _ = root_files(
+        session, target=pages_target, base_url="https://history.skitch.me"
+    )
+    sitemap, llms, catalogue = files["sitemap.xml"], files["llms.txt"], files["catalogue.json"]
+
+    # d1 (published) is present everywhere; d2 (draft) only in the catalogue.
+    assert d1.slug in sitemap
+    assert "In The Navy" in llms
+    assert "1971-1980_later-years" not in sitemap
+    assert "Later Years" not in llms
+    assert "1971-1980_later-years" not in files["index.html"]  # collection JSON-LD hasPart
+    assert '"stem": "1971-1980_later-years"' in catalogue  # re-import seed keeps drafts
+    # sitemap has homepage + only the one published doc
+    assert sitemap.count("<url>") == 2
+
+
 def test_root_files_shape(tmp_path: Path, workspace: Path, session: Session) -> None:
     _import_two(tmp_path, workspace, session)
     files, warnings = root_files(session, base_url="https://example.org/archive")

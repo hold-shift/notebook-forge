@@ -331,6 +331,44 @@ def test_soft_break_round_trip_narrative() -> None:
     assert "\n" in text
 
 
+def test_seo_context_enriches_head_and_jsonld() -> None:
+    """With a seo context the page emits en-AU, the enriched head tags, and the
+    full JSON-LD @graph; without it the head stays byte-faithful (lang=en, the
+    legacy single Article)."""
+    from notebook_forge.structured_data import DocSeoContext
+
+    blocks = [make_block("paragraph", content=[text_run("Hello.")])]
+    base = "https://history.skitch.me"
+    ctx = DocSeoContext(
+        base_url=base,
+        canonical_url=f"{base}/rfs/junior.html",
+        title="Junior",
+        description="A memoir.",
+        author_name="R.F. Skitch",
+        site_title="Robert Francis Skitch",
+        series_id=f"{base}/index.html#collection",
+        homepage_url=f"{base}/index.html",
+        section="Early life",
+        word_count=5000,
+        time_required="PT25M",
+    )
+    html = render_document(
+        {"title": "Junior", "show_toc": False, "seo": ctx}, blocks, lambda b, n: ""
+    )
+    assert '<html lang="en-AU">' in html
+    assert 'property="og:locale" content="en_AU"' in html
+    assert 'name="robots" content="index,follow,max-image-preview:large' in html
+    assert 'property="article:section" content="Early life"' in html
+    assert '"@graph"' in html
+    assert '"@type":"BreadcrumbList"' in html
+    assert '"timeRequired":"PT25M"' in html
+
+    legacy = render_document({"title": "Junior", "show_toc": False}, blocks, lambda b, n: "")
+    assert '<html lang="en">' in legacy
+    assert "og:locale" not in legacy
+    assert '"@graph"' not in legacy
+
+
 def test_tts_player_injected_only_when_tts_present():
     """The listen-along player renders only when meta['tts'] is set, and the
     static <article> gains its id only then (so non-TTS pages stay byte-faithful

@@ -184,6 +184,41 @@ def build_entries(
     return entries
 
 
+def live_html_target(session: Session) -> Target | None:
+    """The live-HTML publishing target (github-pages) — the one whose PUBLISHED
+    sync-state defines "published" for the crawler-facing discovery artefacts
+    (SEO/AEO plan §3). None when no such target is configured."""
+    return session.scalar(select(Target).where(Target.kind == "github-pages"))
+
+
+def published_slugs(
+    session: Session,
+    live_target: Target | None,
+    publishing_slug: str = "",
+    publishing_target: Target | None = None,
+) -> set[str]:
+    """Slugs currently live on the live-HTML target — the gate for the
+    sitemap, llms.txt and the collection JSON-LD (plan §3, §8). The document
+    being published in THIS pass is included when the pass targets the live
+    site, because its sync-state is not flipped to PUBLISHED until after the
+    root files are built."""
+    from . import services
+
+    slugs: set[str] = set()
+    if live_target is not None:
+        for doc in session.scalars(select(Document).where(Document.kind == "memoir")):
+            if services.is_published(session, doc, live_target):
+                slugs.add(doc.slug)
+    if (
+        publishing_slug
+        and live_target is not None
+        and publishing_target is not None
+        and publishing_target.id == live_target.id
+    ):
+        slugs.add(publishing_slug)
+    return slugs
+
+
 def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
     """Derived prev/next from chronological order — this is what propagates
     a title fix into the neighbours' docnav footers."""
@@ -212,6 +247,19 @@ def _person(name: str, base_url: str) -> dict[str, Any]:
     }
 
 
+def _publisher_org(base_url: str, author_name: str) -> dict[str, Any]:
+    """Shared publisher Organization, @id-matched to the per-document pages'
+    graph (structured_data._publisher) so answer engines de-duplicate it."""
+    surname = author_name.split()[-1] if author_name.split() else ""
+    name = f"The {surname} Family Archive" if surname else "The Family Archive"
+    return {
+        "@type": "Organization",
+        "@id": f"{base_url.rstrip('/')}/index.html#publisher",
+        "name": name,
+        "url": f"{base_url.rstrip('/')}/index.html",
+    }
+
+
 def collection_jsonld(
     base_url: str, title: str, welcome: str, entries: list[dict], author_name: str
 ) -> str:
@@ -224,6 +272,7 @@ def collection_jsonld(
         "url": homepage_url,
         "description": (welcome or "").strip(),
         "creator": _person(author_name, base_url),
+        "publisher": _publisher_org(base_url, author_name),
         "hasPart": [
             {
                 "@type": "Article",
@@ -340,12 +389,20 @@ def root_files(
     now_iso = dt.datetime.now(dt.UTC).isoformat()
     author = author_name(session)
     entries = build_entries(session, target, publishing_slug, now_iso)
+    # catalogue.json is NotebookForge's own re-import seed (carries curated
+    # descriptions for drafts too), so it stays complete. The crawler-facing
+    # artefacts below are gated to published-only (plan §3, §8).
     catalogue = json.dumps(
         {"entries": entries, "rebuilt": now_iso}, ensure_ascii=False, indent=2
     ) + "\n"
     entries_with_rt = [
         dict(e, reading_time=reading_time(int(e.get("word_count") or 0))) for e in entries
     ]
+    live_target = live_html_target(session) or target
+    gate = published_slugs(
+        session, live_target, publishing_slug, publishing_target=target
+    )
+    live_entries = [e for e in entries_with_rt if e.get("stem") in gate]
 
     from .footer import footer_html as _footer_html
     from .homepage import homepage_content, homepage_timeline
@@ -371,7 +428,7 @@ def root_files(
         head_html=site_head_html(session),
         canonical_url=canonical,
         og_description=description[:280],
-        jsonld_script=collection_jsonld(base_url, title, description, entries_with_rt, author),
+        jsonld_script=collection_jsonld(base_url, title, description, live_entries, author),
         content=content,
         timeline=timeline,
     )
@@ -379,7 +436,7 @@ def root_files(
     return {
         "index.html": index_html,
         "catalogue.json": catalogue,
-        "sitemap.xml": render_sitemap(base_url, entries_with_rt, now_iso),
+        "sitemap.xml": render_sitemap(base_url, live_entries, now_iso),
         "robots.txt": render_robots(base_url),
-        "llms.txt": render_llms(title, description, entries_with_rt),
+        "llms.txt": render_llms(title, description, live_entries),
     }, warnings

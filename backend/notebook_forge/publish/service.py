@@ -95,6 +95,13 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..collection import site_head_html
     meta["head_html"] = site_head_html(session)
 
+    # Rich structured data + head tags (SEO/AEO plan §5–§6): assembled from
+    # current DB state (report tracks, audio, group, first-figure fallback).
+    # Its presence is what switches the renderer from the legacy single-Article
+    # JSON-LD to the full @graph.
+    from ..structured_data import build_context
+    meta["seo"] = build_context(session, doc)
+
     html = render_document(meta, doc.blocks, image_src)
     return PublishBundle(slug=slug, html=html, assets=assets)
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-AU">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,9 +8,12 @@
 {% if og_description %}<meta name="description" content="{{ og_description }}">{% endif %}
 {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ title }}">
+<meta property="og:locale" content="en_AU">
 <meta property="og:title" content="{{ title }}">
 {% if og_description %}<meta property="og:description" content="{{ og_description }}">{% endif %}
 {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{{ title }}">
 {% if og_description %}<meta name="twitter:description" content="{{ og_description }}">{% endif %}

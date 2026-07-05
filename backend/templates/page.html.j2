@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ html_lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,6 +18,21 @@
 <meta name="twitter:title" content="{{ header.title }}">
 {% if meta_description %}<meta name="twitter:description" content="{{ meta_description }}">{% endif %}
 {% if og_image %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
+{% if seo %}{# Enriched discoverability (SEO/AEO plan §5–§6) — emitted on publish. #}
+{% if seo.site_name %}<meta property="og:site_name" content="{{ seo.site_name }}">{% endif %}
+<meta property="og:locale" content="{{ seo.locale }}">
+{% if seo.article_published_time %}<meta property="article:published_time" content="{{ seo.article_published_time }}">{% endif %}
+{% if seo.article_modified_time %}<meta property="article:modified_time" content="{{ seo.article_modified_time }}">{% endif %}
+{% if seo.author %}<meta property="article:author" content="{{ seo.author }}">{% endif %}
+{% if seo.article_section %}<meta property="article:section" content="{{ seo.article_section }}">{% endif %}
+{% for tag in seo.article_tags %}<meta property="article:tag" content="{{ tag }}">
+{% endfor %}{% if seo.audio_url %}<meta property="og:audio" content="{{ seo.audio_url }}">
+<meta property="og:audio:secure_url" content="{{ seo.audio_url }}">
+<meta property="og:audio:type" content="audio/mpeg">{% endif %}
+{% if seo.twitter_site %}<meta name="twitter:site" content="{{ seo.twitter_site }}">{% endif %}
+{% if seo.twitter_creator %}<meta name="twitter:creator" content="{{ seo.twitter_creator }}">{% endif %}
+{% if seo.author %}<meta name="author" content="{{ seo.author }}">{% endif %}
+<meta name="robots" content="{{ seo.robots }}">{% endif %}
 {% if jsonld_script %}{{ jsonld_script|safe }}{% endif %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

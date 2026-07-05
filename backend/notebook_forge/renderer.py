@@ -358,6 +358,24 @@ def render_document(
         "standfirst": meta.get("standfirst", ""),
         "place": meta.get("place", ""),
     }
+
+    # Rich structured data + head tags are emitted only when the publish layer
+    # supplies an assembled SEO context (it has the session to gather report
+    # tracks, audio, group, base URL). Absent it — e.g. the corpus round-trip
+    # tests — the page stays byte-faithful to the imported markup: the legacy
+    # single-Article JSON-LD, lang="en", no extra OG/Twitter/article tags.
+    seo_ctx = meta.get("seo")
+    if seo_ctx is not None:
+        from . import structured_data
+
+        seo = structured_data.head_meta(seo_ctx)
+        jsonld_script = structured_data.article_jsonld_script(seo_ctx)
+        og_image = seo_ctx.image_url or meta.get("og_image", "")
+    else:
+        seo = None
+        jsonld_script = build_jsonld(meta)
+        og_image = meta.get("og_image", "")
+
     tpl = _env().get_template("page.html.j2")
     return tpl.render(
         header=header,
@@ -373,8 +391,10 @@ def render_document(
         homepage_url=meta.get("homepage_url", ""),
         canonical_url=meta.get("canonical_url", ""),
         meta_description=meta.get("meta_description") or meta.get("standfirst", ""),
-        og_image=meta.get("og_image", ""),
-        jsonld_script=build_jsonld(meta),
+        og_image=og_image,
+        seo=seo,
+        html_lang=(seo["lang"] if seo else "en"),
+        jsonld_script=jsonld_script,
         nav_prev=meta.get("nav_prev"),
         nav_next=meta.get("nav_next"),
         narrative_label=meta.get("narrative_label", ""),
