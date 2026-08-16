@@ -324,7 +324,12 @@ export const api = {
         reports: { model: string; rules: string }
         narrative: { label: string }
         tts: { enabled: boolean }
-        publishing: { base_url: string; head_html: string }
+        publishing: {
+          base_url: string
+          head_html: string
+          favicon_asset_id: string | null
+          og_image_asset_id: string | null
+        }
         footer: { blocks: unknown[] }
         homepage: HomepageSettings
         secrets: Record<string, boolean>
@@ -363,6 +368,18 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then((r) => json<{ ok: boolean; base_url: string; head_html: string }>(r)),
+  uploadSiteImage: (kind: 'favicon' | 'og_image', file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`/api/settings/publishing/site-image/${kind}`, {
+      method: 'POST',
+      body: form,
+    }).then((r) => json<{ asset_id: string; preview_url: string }>(r))
+  },
+  removeSiteImage: (kind: 'favicon' | 'og_image') =>
+    fetch(`/api/settings/publishing/site-image/${kind}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean; kind: string }>(r),
+    ),
   publishAll: (targetName: string, force = false) =>
     fetch(`/api/publish/all/${targetName}`, {
       method: 'POST',

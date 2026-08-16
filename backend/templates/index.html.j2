@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }}</title>
+<title>{{ page_title or title }}</title>
+{% if favicon_url %}<link rel="icon" href="{{ favicon_url }}">{% endif %}
 {# Discoverability layer — generated, never hand-maintained. #}
 {% if og_description %}<meta name="description" content="{{ og_description }}">{% endif %}
 {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
@@ -13,10 +14,12 @@
 <meta property="og:title" content="{{ title }}">
 {% if og_description %}<meta property="og:description" content="{{ og_description }}">{% endif %}
 {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="{% if og_image %}summary_large_image{% else %}summary{% endif %}">
 <meta name="twitter:title" content="{{ title }}">
 {% if og_description %}<meta name="twitter:description" content="{{ og_description }}">{% endif %}
+{% if og_image %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

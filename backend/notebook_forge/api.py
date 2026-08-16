@@ -1020,7 +1020,7 @@ def list_targets(session: Session = Depends(get_session)) -> list[dict[str, Any]
 
 @app.get("/api/settings")
 def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
-    from .collection import pages_base_url, site_head_html
+    from .collection import pages_base_url, site_head_html, site_image_asset_id
     from .footer import footer_setting
     from .homepage import homepage_settings_view
     from .narration import tts_enabled
@@ -1040,6 +1040,8 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "publishing": {
             "base_url": pages_base_url(session),
             "head_html": site_head_html(session),
+            "favicon_asset_id": site_image_asset_id(session, "favicon") or None,
+            "og_image_asset_id": site_image_asset_id(session, "og_image") or None,
         },
         "footer": footer_setting(session),
         "homepage": homepage_settings_view(session),
@@ -1372,6 +1374,54 @@ def upload_banner_image(
         tmp_path.unlink(missing_ok=True)
     # image_asset_id lets the Settings panel round-trip the slot on its next Save.
     return {"image_url": image_url, "image_asset_id": asset.sha256}
+
+
+_SITE_IMAGE_KINDS = {"favicon", "og_image"}
+
+
+@app.post("/api/settings/publishing/site-image/{kind}")
+def upload_site_image(
+    kind: str,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Store an uploaded site-branding image (kind: 'favicon' | 'og_image') as
+    an Asset and point the 'publishing' Setting at it. The binary is copied to
+    the site root on the next homepage publish; the URL here is the dev-server
+    preview (/api/assets/{sha})."""
+    import shutil
+    import tempfile
+
+    from .assets import ingest_file
+    from .collection import set_site_image
+
+    if kind not in _SITE_IMAGE_KINDS:
+        raise HTTPException(422, "kind must be 'favicon' or 'og_image'")
+    suffix = Path(file.filename or "upload").suffix or ".png"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        asset = ingest_file(session, _state()["workspace"], tmp_path, "site")
+        asset.filename = file.filename or f"upload{suffix}"
+        set_site_image(session, kind, asset.sha256)
+        session.commit()
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return {"asset_id": asset.sha256, "preview_url": f"/api/assets/{asset.sha256}"}
+
+
+@app.delete("/api/settings/publishing/site-image/{kind}")
+def remove_site_image(kind: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Clear a site-branding image (favicon | og_image). Re-publish the homepage
+    to drop the file from the live site."""
+    from .collection import set_site_image
+
+    if kind not in _SITE_IMAGE_KINDS:
+        raise HTTPException(422, "kind must be 'favicon' or 'og_image'")
+    set_site_image(session, kind, None)
+    session.commit()
+    return {"ok": True, "kind": kind}
 
 
 @app.get("/api/search")

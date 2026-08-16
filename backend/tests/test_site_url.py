@@ -55,7 +55,7 @@ def test_migration_scan_and_apply_rewrites_urls(session):
     assert any(a["slug"] == "junior" for a in applied)
     updated = services.get_document(session, "junior")
     assert updated.meta["canonical_url"] == "https://history.skitch.me/rfs/junior.html"
-    assert updated.meta["homepage_url"] == "https://history.skitch.me/index.html"
+    assert updated.meta["homepage_url"] == "https://history.skitch.me/"
 
     # Idempotent: a second scan reports nothing to change.
     assert all(not r["changed"] for r in site_url_migration.scan(session))
@@ -66,7 +66,7 @@ def test_migration_handles_homepage(session):
     session.add(Setting(key="publishing", value={"base_url": "https://history.skitch.me"}))
     session.flush()
     site_url_migration.apply(session)
-    assert hp.meta["canonical_url"] == "https://history.skitch.me/index.html"
+    assert hp.meta["canonical_url"] == "https://history.skitch.me/"
 
 
 def test_new_documents_use_configured_base(session):

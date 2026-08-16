@@ -26,9 +26,10 @@ def _ctx(**over) -> DocSeoContext:
         author_birth="1934",
         publisher_name="The Skitch Family Archive",
         site_title="Robert Francis Skitch",
-        series_id=f"{BASE}/index.html#collection",
+        series_id=f"{BASE}/#collection",
         series_name="Robert Francis Skitch",
-        homepage_url=f"{BASE}/index.html",
+        homepage_url=f"{BASE}/",
+        year_display="1934–1945",
         date_published="2026-06-09T00:00:00+00:00",
         date_modified="2026-07-05T00:00:00+00:00",
         section="Early life & service",
@@ -76,13 +77,13 @@ def test_graph_shares_entities_by_id() -> None:
     org = next(n for n in graph if n["@type"] == "Organization")
     article = next(n for n in graph if n["@type"] == "Article")
 
-    assert person["@id"] == f"{BASE}/index.html#author"
+    assert person["@id"] == f"{BASE}/#author"
     assert person["birthDate"] == "1934"
-    assert org["@id"] == f"{BASE}/index.html#publisher"
+    assert org["@id"] == f"{BASE}/#publisher"
     # Article references the shared entities by @id (de-duplication).
     assert article["author"] == {"@id": person["@id"]}
     assert article["publisher"] == {"@id": org["@id"]}
-    assert article["isPartOf"] == {"@id": f"{BASE}/index.html#collection"}
+    assert article["isPartOf"] == {"@id": f"{BASE}/#collection"}
 
 
 def test_article_fields() -> None:
@@ -107,7 +108,7 @@ def test_breadcrumb_positions() -> None:
         n for n in article_graph(_ctx())["@graph"] if n["@type"] == "BreadcrumbList"
     )["itemListElement"]
     assert [c["position"] for c in crumbs] == [1, 2, 3]
-    assert crumbs[0]["item"] == f"{BASE}/index.html"
+    assert crumbs[0]["item"] == f"{BASE}/"
     assert crumbs[1]["name"] == "Early life & service"
     assert crumbs[-1]["item"] == CANON
 
@@ -162,6 +163,51 @@ def test_head_meta_fields() -> None:
     assert head["twitter_site"] == "@skitch"
     # tags drawn from places + people, de-duplicated & capped
     assert "Nui Dat" in head["article_tags"]
+
+
+def test_page_title_leads_with_the_document_not_the_date() -> None:
+    """The legacy '1934–1945 · Junior' wasted the strongest relevance signal on
+    a date range. Lead with the title, qualify with the era, append the subject."""
+    from notebook_forge.structured_data import page_title
+
+    assert page_title("Junior", "1934–1945", "Robert Francis Skitch") == (
+        "Junior (1934–1945) · Robert Francis Skitch"
+    )
+    # Missing pieces degrade gracefully.
+    assert page_title("Junior", "", "Robert Francis Skitch") == "Junior · Robert Francis Skitch"
+    assert page_title("Junior", "1934–1945", "") == "Junior (1934–1945)"
+    # No duplication when the title already carries the subject's name.
+    assert page_title("Robert Francis Skitch", "", "Robert Francis Skitch") == (
+        "Robert Francis Skitch"
+    )
+
+
+def test_head_meta_carries_page_title() -> None:
+    assert head_meta(_ctx())["page_title"] == "Junior (1934–1945) · Robert Francis Skitch"
+
+
+def test_entity_ids_match_the_homepage_graph() -> None:
+    """The per-document graph and the homepage's collection JSON-LD must use
+    byte-identical @ids, or answer engines see two Persons/Organizations
+    instead of one. This is the regression guard for that contract."""
+    import json as _json
+
+    from notebook_forge.collection import collection_jsonld
+
+    doc_graph = article_graph(_ctx())["@graph"]
+    doc_person = next(n for n in doc_graph if n["@type"] == "Person")["@id"]
+    doc_org = next(n for n in doc_graph if n["@type"] == "Organization")["@id"]
+    doc_series = next(n for n in doc_graph if n["@type"] == "CreativeWorkSeries")["@id"]
+
+    script = collection_jsonld(BASE, "Robert Francis Skitch", "", [], "R.F. Skitch")
+    home = _json.loads(script.split(">", 1)[1].rsplit("<", 2)[0].replace("<\\/", "</"))
+
+    assert home["creator"]["@id"] == doc_person
+    assert home["publisher"]["@id"] == doc_org
+    assert home["@id"] == doc_series
+    # …and all of them anchor on the site ROOT, not /index.html.
+    for ref in (doc_person, doc_org, doc_series):
+        assert ref.startswith(f"{BASE}/#")
 
 
 def test_head_meta_audio_present_only_with_audio() -> None:

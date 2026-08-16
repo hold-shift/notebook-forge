@@ -369,6 +369,40 @@ def test_seo_context_enriches_head_and_jsonld() -> None:
     assert '"@graph"' not in legacy
 
 
+def test_favicon_and_og_image_on_pages() -> None:
+    """favicon_url renders a <link rel=icon> on doc + index pages; the homepage
+    og_image renders og:image/twitter:image and upgrades the twitter card."""
+    blocks = [make_block("paragraph", content=[text_run("Hi.")])]
+    doc_html = render_document(
+        {"title": "T", "show_toc": False, "favicon_url": "https://s.me/favicon.png"},
+        blocks,
+        lambda b, n: "",
+    )
+    assert '<link rel="icon" href="https://s.me/favicon.png">' in doc_html
+    # No favicon key → no icon link (corpus round-trip stays clean).
+    assert '<link rel="icon"' not in render_document(
+        {"title": "T", "show_toc": False}, blocks, lambda b, n: ""
+    )
+
+    index_html = render_index(
+        title="Archive",
+        welcome="",
+        dedication="",
+        entries=[],
+        favicon_url="https://s.me/favicon.png",
+        og_image="https://s.me/og-image.jpg",
+    )
+    assert '<link rel="icon" href="https://s.me/favicon.png">' in index_html
+    assert '<meta property="og:image" content="https://s.me/og-image.jpg">' in index_html
+    assert '<meta name="twitter:image" content="https://s.me/og-image.jpg">' in index_html
+    assert 'name="twitter:card" content="summary_large_image"' in index_html
+
+    # No og_image → plain summary card, no image tags.
+    plain = render_index(title="Archive", welcome="", dedication="", entries=[])
+    assert "og:image" not in plain
+    assert 'name="twitter:card" content="summary"' in plain
+
+
 def test_tts_player_injected_only_when_tts_present():
     """The listen-along player renders only when meta['tts'] is set, and the
     static <article> gains its id only then (so non-TTS pages stay byte-faithful

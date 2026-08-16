@@ -139,6 +139,63 @@ def test_discovery_files_gate_to_published_only(
     assert sitemap.count("<url>") == 2
 
 
+def test_homepage_canonical_is_the_site_root(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """Both '/' and '/index.html' are served 200, so advertising the homepage as
+    '/index.html' made Google crawl and consolidate two URLs for the site's most
+    important page. Canonical, og:url and the sitemap must all say the root."""
+    _import_two(tmp_path, workspace, session)
+    files, _ = root_files(session, base_url="https://history.skitch.me")
+
+    index, sitemap = files["index.html"], files["sitemap.xml"]
+    assert '<link rel="canonical" href="https://history.skitch.me/">' in index
+    assert '<meta property="og:url" content="https://history.skitch.me/">' in index
+    assert "<loc>https://history.skitch.me/</loc>" in sitemap
+    # The old form must be gone entirely from the discovery artefacts.
+    assert "https://history.skitch.me/index.html" not in sitemap
+    assert "https://history.skitch.me/index.html" not in index
+
+
+def test_site_image_helpers(session: Session) -> None:
+    """set_site_image stores the asset id; the URL/publish helpers resolve it."""
+    from notebook_forge.collection import (
+        favicon_url,
+        homepage_og_image_url,
+        set_site_image,
+        site_image_assets,
+        site_image_published_name,
+    )
+    from notebook_forge.models import Asset
+
+    session.add(Asset(sha256="a" * 64, kind="site", ext=".ico"))
+    session.add(Asset(sha256="b" * 64, kind="site", ext=".jpg"))
+    session.flush()
+
+    # Nothing custom set → favicon falls back to the vendored NotebookForge icon;
+    # og image has no default. site_image_assets still publishes the default favicon.
+    assert favicon_url(session, "https://s.me") == "https://s.me/favicon.png"
+    assert homepage_og_image_url(session, "https://s.me") == ""
+    assert [n for n, _p, _s in site_image_assets(session, Path("/ws"))] == ["favicon.png"]
+
+    set_site_image(session, "favicon", "a" * 64)
+    set_site_image(session, "og_image", "b" * 64)
+
+    assert site_image_published_name(session, "favicon") == "favicon.ico"
+    assert favicon_url(session, "https://s.me/") == "https://s.me/favicon.ico"
+    assert homepage_og_image_url(session, "https://s.me") == "https://s.me/og-image.jpg"
+    names = [n for n, _p, _s in site_image_assets(session, Path("/ws"))]
+    assert names == ["favicon.ico", "og-image.jpg"]
+
+    # Clearing the custom favicon reverts to the default (og image still set).
+    set_site_image(session, "favicon", None)
+    assert favicon_url(session, "https://s.me") == "https://s.me/favicon.png"
+    assert [n for n, _p, _s in site_image_assets(session, Path("/ws"))] == [
+        "favicon.png",
+        "og-image.jpg",
+    ]
+
+
 def test_root_files_shape(tmp_path: Path, workspace: Path, session: Session) -> None:
     _import_two(tmp_path, workspace, session)
     files, warnings = root_files(session, base_url="https://example.org/archive")

@@ -17,6 +17,7 @@ import datetime as dt
 import html as _htmllib
 import json
 import re
+from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
@@ -52,12 +53,109 @@ def site_head_html(session: Session) -> str:
     return ((row.value or {}).get("head_html", "") if row is not None else "") or ""
 
 
+# Site-branding images (operator-uploaded, stored by Asset SHA in the
+# 'publishing' Setting): a site-wide favicon and the homepage social-share
+# (OpenGraph) image. Both publish to the site root and are referenced by an
+# ABSOLUTE URL so they resolve from every page depth (incl. /rfs/ pages).
+SITE_IMAGE_ASSET_KEYS = {"favicon": "favicon_asset_id", "og_image": "og_image_asset_id"}
+_SITE_IMAGE_STEM = {"favicon": "favicon", "og_image": "og-image"}
+
+# Fallback favicon: the NotebookForge icon, vendored into the package so a
+# published site always has a tab icon even before the operator uploads one.
+DEFAULT_FAVICON_PATH = Path(__file__).resolve().parent / "static" / "favicon.png"
+
+
+def _publishing_value(session: Session) -> dict[str, Any]:
+    row = session.get(Setting, "publishing")
+    return dict(row.value) if (row is not None and row.value) else {}
+
+
+def site_image_asset_id(session: Session, kind: str) -> str:
+    """The stored Asset SHA for a site-branding image ('favicon' | 'og_image')."""
+    return (_publishing_value(session).get(SITE_IMAGE_ASSET_KEYS[kind]) or "") or ""
+
+
+def _site_image_asset(session: Session, kind: str) -> Any:
+    from .models import Asset
+
+    sha = site_image_asset_id(session, kind)
+    return session.get(Asset, sha) if sha else None
+
+
+def site_image_published_name(session: Session, kind: str) -> str:
+    """Root-relative published filename (e.g. 'favicon.png'), or '' when unset."""
+    asset = _site_image_asset(session, kind)
+    return f"{_SITE_IMAGE_STEM[kind]}{asset.ext}" if asset is not None else ""
+
+
+def favicon_published_name(session: Session) -> str:
+    """The favicon's published filename. Falls back to the vendored NotebookForge
+    icon ('favicon.png') when the operator hasn't uploaded a custom one."""
+    return site_image_published_name(session, "favicon") or "favicon.png"
+
+
+def favicon_url(session: Session, base_url: str) -> str:
+    """Always non-empty — a custom favicon, else the NotebookForge default."""
+    return f"{base_url.rstrip('/')}/{favicon_published_name(session)}"
+
+
+def homepage_og_image_url(session: Session, base_url: str) -> str:
+    name = site_image_published_name(session, "og_image")
+    return f"{base_url.rstrip('/')}/{name}" if name else ""
+
+
+def site_image_assets(session: Session, workspace: Any) -> list[tuple[str, Any, str]]:
+    """(published_name, source_path, sha256) for each site-branding image the
+    publish layer copies to the site root next to index.html. The favicon is
+    always present — the custom upload, or the vendored NotebookForge icon."""
+    from .assets import asset_path, sha256_file
+
+    out: list[tuple[str, Any, str]] = []
+    for kind in SITE_IMAGE_ASSET_KEYS:
+        asset = _site_image_asset(session, kind)
+        if asset is not None:
+            out.append(
+                (
+                    f"{_SITE_IMAGE_STEM[kind]}{asset.ext}",
+                    asset_path(workspace, asset),
+                    asset.sha256,
+                )
+            )
+        elif kind == "favicon" and DEFAULT_FAVICON_PATH.exists():
+            out.append(
+                ("favicon.png", DEFAULT_FAVICON_PATH, sha256_file(DEFAULT_FAVICON_PATH))
+            )
+    return out
+
+
+def set_site_image(session: Session, kind: str, asset_sha: str | None) -> None:
+    """Point a site-branding image at an uploaded asset (or clear it with None),
+    preserving all other publishing config."""
+    if kind not in SITE_IMAGE_ASSET_KEYS:
+        raise ValueError(f"unknown site image kind '{kind}'")
+    row = session.get(Setting, "publishing")
+    value = dict(row.value) if (row is not None and row.value) else {}
+    value[SITE_IMAGE_ASSET_KEYS[kind]] = asset_sha or None
+    if row is None:
+        session.add(Setting(key="publishing", value=value))
+    else:
+        row.value = value
+    session.flush()
+
+
 def doc_canonical_url(base: str, slug: str) -> str:
     return f"{base.rstrip('/')}/{PAGES_SUBDIR}/{slug}.html"
 
 
 def doc_homepage_url(base: str) -> str:
-    return f"{base.rstrip('/')}/index.html"
+    """The homepage's canonical URL: the SITE ROOT, not '/index.html'.
+
+    Both are served 200 by the host, so pointing the canonical (and the
+    sitemap, and every internal 'Archive' link) at '/index.html' made Google
+    crawl and consolidate two URLs for the single most important page. The
+    root is the natural canonical — '/index.html' remains reachable, it just
+    isn't what we advertise."""
+    return f"{base.rstrip('/')}/"
 
 
 _PROSE_KINDS = {"paragraph", "heading", "quote", "bulletListItem", "numberedListItem"}
@@ -242,28 +340,34 @@ def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
 def _person(name: str, base_url: str) -> dict[str, Any]:
     return {
         "@type": "Person",
-        "@id": f"{base_url.rstrip('/')}/index.html#author",
+        "@id": f"{doc_homepage_url(base_url)}#author",
         "name": name or "Author",
     }
+
+
+def default_org_name(author_name: str) -> str:
+    """The archive's publisher name, derived from the author's surname —
+    'The Skitch Family Archive'. Single source of truth: both the homepage
+    JSON-LD and the per-document graph must agree on this string."""
+    surname = author_name.split()[-1] if author_name.split() else ""
+    return f"The {surname} Family Archive" if surname else "The Family Archive"
 
 
 def _publisher_org(base_url: str, author_name: str) -> dict[str, Any]:
     """Shared publisher Organization, @id-matched to the per-document pages'
     graph (structured_data._publisher) so answer engines de-duplicate it."""
-    surname = author_name.split()[-1] if author_name.split() else ""
-    name = f"The {surname} Family Archive" if surname else "The Family Archive"
     return {
         "@type": "Organization",
-        "@id": f"{base_url.rstrip('/')}/index.html#publisher",
-        "name": name,
-        "url": f"{base_url.rstrip('/')}/index.html",
+        "@id": f"{doc_homepage_url(base_url)}#publisher",
+        "name": default_org_name(author_name),
+        "url": doc_homepage_url(base_url),
     }
 
 
 def collection_jsonld(
     base_url: str, title: str, welcome: str, entries: list[dict], author_name: str
 ) -> str:
-    homepage_url = f"{base_url.rstrip('/')}/index.html"
+    homepage_url = doc_homepage_url(base_url)
     obj = {
         "@context": "https://schema.org",
         "@type": "CreativeWorkSeries",
@@ -298,7 +402,7 @@ def render_sitemap(base_url: str, entries: list[dict], homepage_lastmod: str) ->
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
         "  <url>",
-        f"    <loc>{xml_escape(base + '/index.html')}</loc>",
+        f"    <loc>{xml_escape(doc_homepage_url(base))}</loc>",
     ]
     if homepage_lastmod:
         lines.append(f"    <lastmod>{xml_escape(homepage_lastmod)}</lastmod>")
@@ -413,14 +517,20 @@ def root_files(
     content = homepage_content(session)
     timeline = homepage_timeline(session)
     footer = _footer_html(session)
-    canonical = f"{base_url.rstrip('/')}/index.html"
+    canonical = doc_homepage_url(base_url)
     # Subject name is the page title; tagline is the site description (meta/OG,
     # JSON-LD, llms.txt). Dedication is content-managed in the homepage editor.
     title = content.get("subject_name") or "The Family Archive"
     description = (content.get("tagline") or "").strip()
+    # The <title> tag carries the archive name alongside the subject, so the
+    # single most-searched string ("the Skitch family archive") is present. The
+    # bare `title` stays the subject name everywhere else (OG/JSON-LD/llms).
+    org = default_org_name(author)
+    page_title = f"{title} — {org}" if org and org not in title else title
     warnings: list[str] = []
     index_html = render_index(
         title=title,
+        page_title=page_title,
         welcome="",
         dedication=content.get("dedication", ""),
         entries=[],
@@ -431,6 +541,8 @@ def root_files(
         jsonld_script=collection_jsonld(base_url, title, description, live_entries, author),
         content=content,
         timeline=timeline,
+        favicon_url=favicon_url(session, base_url),
+        og_image=homepage_og_image_url(session, base_url),
     )
 
     return {

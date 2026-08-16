@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ year_display }}{% if year_display and header.title %} · {% endif %}{{ header.title }}</title>
+{# Published pages get the richer, search-facing title (seo.page_title); the
+   bare corpus form is kept when rendering without an SEO context. #}
+<title>{% if seo and seo.page_title %}{{ seo.page_title }}{% else %}{{ year_display }}{% if year_display and header.title %} · {% endif %}{{ header.title }}{% endif %}</title>
+{% if favicon_url %}<link rel="icon" href="{{ favicon_url }}">{% endif %}
 {# Discoverability layer (Collection Index spec §10b). All three blocks
    are generated from manifest fields + the configured pages_base_url —
    they're correct-by-construction. #}

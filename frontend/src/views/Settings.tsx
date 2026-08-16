@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
 import { useCreateBlockNote } from '@blocknote/react'
 import type { PartialBlock } from '@blocknote/core'
@@ -70,6 +70,11 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [baseUrlState, setBaseUrlState] = useState('')
   const [headHtml, setHeadHtml] = useState('')
   const [headState, setHeadState] = useState('')
+  const [faviconId, setFaviconId] = useState<string | null>(null)
+  const [ogImageId, setOgImageId] = useState<string | null>(null)
+  const [siteImgState, setSiteImgState] = useState('')
+  const faviconInput = useRef<HTMLInputElement>(null)
+  const ogImageInput = useRef<HTMLInputElement>(null)
   const [targets, setTargets] = useState<TargetInfo[]>([])
   const [republishState, setRepublishState] = useState<Record<string, string>>({})
 
@@ -87,6 +92,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setTtsEnabled(s.tts.enabled)
       setBaseUrl(s.publishing.base_url)
       setHeadHtml(s.publishing.head_html || '')
+      setFaviconId(s.publishing.favicon_asset_id)
+      setOgImageId(s.publishing.og_image_asset_id)
       setFooterBlocks(s.footer.blocks)
       setTargets(s.targets || [])
     })
@@ -158,6 +165,30 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.savePublishingSettings({ head_html: headHtml }).then(
       (r) => { setHeadHtml(r.head_html); setHeadState('Saved — re-publish to apply') },
       (e) => setHeadState(`Failed: ${e}`),
+    )
+  }
+
+  const uploadSiteImage = (kind: 'favicon' | 'og_image', file: File) => {
+    setSiteImgState(`Uploading ${kind === 'favicon' ? 'favicon' : 'social image'}…`)
+    api.uploadSiteImage(kind, file).then(
+      ({ asset_id }) => {
+        if (kind === 'favicon') setFaviconId(asset_id)
+        else setOgImageId(asset_id)
+        setSiteImgState('Uploaded — re-publish the homepage to apply')
+      },
+      (e) => setSiteImgState(`Failed: ${e}`),
+    )
+  }
+
+  const removeSiteImage = (kind: 'favicon' | 'og_image') => {
+    setSiteImgState('Removing…')
+    api.removeSiteImage(kind).then(
+      () => {
+        if (kind === 'favicon') setFaviconId(null)
+        else setOgImageId(null)
+        setSiteImgState('Removed — re-publish the homepage to apply')
+      },
+      (e) => setSiteImgState(`Failed: ${e}`),
     )
   }
 
@@ -485,6 +516,81 @@ export function Settings({ onBack }: { onBack: () => void }) {
             <Button variant="primary" onClick={saveHeadHtml}>Save head script</Button>
             {headState && <span className="settings-state muted">{headState}</span>}
           </div>
+
+          <h3 style={{ marginTop: 24 }}>
+            Site images{' '}
+            <InfoTip label="About site images">
+              The <strong>favicon</strong> is the small icon shown in browser tabs and bookmarks —
+              it appears on every published page. Leave it unset to use the NotebookForge icon.
+              The <strong>social share image</strong> is the
+              OpenGraph/Twitter card image used when the homepage is shared on social media or in
+              chat apps (ideally ~1200×630). Both are uploaded here and pushed to the site root on
+              the next homepage publish, so re-publish the homepage (or “Publish all”) after
+              changing them.
+            </InfoTip>
+          </h3>
+          {([
+            {
+              kind: 'favicon', label: 'Favicon', id: faviconId, ref: faviconInput, square: true,
+              // No custom favicon → the published site falls back to the NotebookForge icon.
+              fallbackSrc: '/icon.png', fallbackLabel: 'NotebookForge icon (default)',
+            },
+            {
+              kind: 'og_image', label: 'Social share image', id: ogImageId, ref: ogImageInput,
+              square: false, fallbackSrc: '', fallbackLabel: 'None set',
+            },
+          ] as const).map(({ kind, label, id, ref, square, fallbackSrc, fallbackLabel }) => {
+            const imgStyle = {
+              height: 48,
+              width: square ? 48 : 'auto',
+              maxWidth: 96,
+              objectFit: 'contain' as const,
+              borderRadius: 4,
+              border: '1px solid var(--color-border-tertiary)',
+              background: 'var(--color-bg-secondary)',
+            }
+            return (
+            <div key={kind} className="settings-row" style={{ marginTop: 12 }}>
+              <label>{label}</label>
+              <div className="settings-control">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {id ? (
+                    <img src={`/api/assets/${id}`} alt={label} style={imgStyle} />
+                  ) : fallbackSrc ? (
+                    <>
+                      <img src={fallbackSrc} alt={fallbackLabel} style={{ ...imgStyle, opacity: 0.85 }} />
+                      <span className="settings-hint">{fallbackLabel}</span>
+                    </>
+                  ) : (
+                    <span className="settings-hint">{fallbackLabel}</span>
+                  )}
+                  <input
+                    ref={ref}
+                    type="file"
+                    accept={kind === 'favicon' ? 'image/png,image/x-icon,image/svg+xml,image/*' : 'image/*'}
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) uploadSiteImage(kind, f)
+                      e.target.value = ''
+                    }}
+                  />
+                  <Button onClick={() => ref.current?.click()}>{id ? 'Replace' : 'Upload'}</Button>
+                  {id && (
+                    <Button variant="secondary" onClick={() => removeSiteImage(kind)}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+            )
+          })}
+          {siteImgState && (
+            <div className="settings-save-row">
+              <span className="settings-state muted">{siteImgState}</span>
+            </div>
+          )}
 
           <h3 style={{ marginTop: 24 }}>
             Re-publish{' '}

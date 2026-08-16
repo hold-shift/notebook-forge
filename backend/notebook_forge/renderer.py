@@ -395,6 +395,7 @@ def render_document(
         seo=seo,
         html_lang=(seo["lang"] if seo else "en"),
         jsonld_script=jsonld_script,
+        favicon_url=meta.get("favicon_url", ""),
         nav_prev=meta.get("nav_prev"),
         nav_next=meta.get("nav_next"),
         narrative_label=meta.get("narrative_label", ""),
@@ -405,6 +406,7 @@ def render_document(
 def render_index(
     *,
     title: str,
+    page_title: str = "",
     welcome: str,
     dedication: str,
     entries: list[dict[str, Any]],
@@ -416,6 +418,8 @@ def render_index(
     body_entries: list[dict[str, Any]] | None = None,
     content: dict[str, Any] | None = None,
     timeline: list[dict[str, Any]] | None = None,
+    favicon_url: str = "",
+    og_image: str = "",
 ) -> str:
     """Collection index page from document metadata.
 
@@ -426,6 +430,7 @@ def render_index(
     tpl = _env().get_template("index.html.j2")
     return tpl.render(
         title=title,
+        page_title=page_title,
         welcome=welcome,
         dedication=dedication,
         entries=entries,
@@ -437,4 +442,6 @@ def render_index(
         body_entries=body_entries,
         content=content or {},
         timeline=timeline or [],
+        favicon_url=favicon_url,
+        og_image=og_image,
     )

@@ -92,8 +92,23 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
 
     # Operator-supplied <head> HTML (e.g. an analytics script), injected into
     # every published page.
-    from ..collection import site_head_html
+    from ..collection import (
+        doc_homepage_url,
+        favicon_url,
+        pages_base_url,
+        site_head_html,
+    )
     meta["head_html"] = site_head_html(session)
+
+    # Internal "⌂ The Archive" links point at the homepage's CANONICAL url (the
+    # site root). Derived fresh rather than read from the doc's frozen meta, so
+    # a base-URL change — or the /index.html → / canonical fix — propagates on
+    # the next publish without a meta migration.
+    meta["homepage_url"] = doc_homepage_url(pages_base_url(session))
+
+    # Site-wide favicon (absolute URL so it resolves from /rfs/ pages). The
+    # binary is pushed to the site root by the homepage publish (see below).
+    meta["favicon_url"] = favicon_url(session, pages_base_url(session))
 
     # Rich structured data + head tags (SEO/AEO plan §5–§6): assembled from
     # current DB state (report tracks, audio, group, first-figure fallback).
@@ -179,11 +194,17 @@ def publish_document(
             raise PermissionError(
                 f"target kind '{target.kind}' cannot publish the homepage"
             )
-        # Banner images are copied as static files next to index.html so they
-        # resolve on the published site (not via the dev /api/assets endpoint).
+        # Banner images + the site-branding images (favicon, homepage OG image)
+        # are copied as static files at/next to index.html so they resolve on the
+        # published site (not via the dev /api/assets endpoint).
+        from ..collection import site_image_assets
+
         root_assets = [
             BundleAsset(name=name, path=path, sha256=sha)
-            for name, path, sha in homepage_banner_assets(session, workspace)
+            for name, path, sha in (
+                *homepage_banner_assets(session, workspace),
+                *site_image_assets(session, workspace),
+            )
         ]
         commit = publish_fn(files, root_assets)
         snap = services.snapshot_document(session, doc, note=f"publish to {target.name}")

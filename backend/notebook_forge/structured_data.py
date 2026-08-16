@@ -68,6 +68,21 @@ class DocSeoContext:
     audio_duration: str = ""  # ISO-8601 duration, e.g. "PT3H5M"
     twitter_site: str = ""  # @handle (optional)
     twitter_creator: str = ""  # @handle (optional)
+    year_display: str = ""  # e.g. "1934–1945", for the <title>
+
+
+def page_title(title: str, year_display: str, site_title: str) -> str:
+    """The <title> tag for a memoir page.
+
+    The legacy form was "1934–1945 · Junior" — a date range and a word that
+    means nothing out of context, which wastes the strongest relevance signal
+    the page has. Lead with the document title, keep the era as a qualifier,
+    and append the subject's name (what people actually search):
+    "Junior (1934–1945) · Robert Francis Skitch"."""
+    head = f"{title} ({year_display})" if (title and year_display) else (title or year_display)
+    if site_title and site_title.casefold() not in head.casefold():
+        return f"{head} · {site_title}" if head else site_title
+    return head
 
 
 # ------------------------------------------------------------- assembly
@@ -189,6 +204,7 @@ def build_context(
         audio_duration=audio_iso,
         twitter_site=(pub_cfg.get("twitter_site") or "").strip(),
         twitter_creator=(pub_cfg.get("twitter_creator") or "").strip(),
+        year_display=meta.get("year_display", ""),
     )
 
 
@@ -259,9 +275,11 @@ def iso_duration_from_seconds(seconds: float | None) -> str:
 
 
 def _person(ctx: DocSeoContext) -> dict[str, Any]:
+    # @id anchors on the homepage's canonical URL (the site root) — must stay
+    # byte-identical to collection._person so the entities de-duplicate.
     person: dict[str, Any] = {
         "@type": "Person",
-        "@id": f"{ctx.base_url.rstrip('/')}/index.html#author",
+        "@id": f"{ctx.base_url.rstrip('/')}/#author",
         "name": ctx.author_name or "Author",
     }
     if ctx.author_birth:
@@ -274,7 +292,7 @@ def _person(ctx: DocSeoContext) -> dict[str, Any]:
 def _publisher(ctx: DocSeoContext) -> dict[str, Any]:
     org: dict[str, Any] = {
         "@type": "Organization",
-        "@id": f"{ctx.base_url.rstrip('/')}/index.html#publisher",
+        "@id": f"{ctx.base_url.rstrip('/')}/#publisher",
         "name": ctx.publisher_name or ctx.site_title or "The Family Archive",
     }
     if ctx.publisher_url or ctx.homepage_url:
@@ -447,6 +465,7 @@ def head_meta(ctx: DocSeoContext) -> dict[str, Any]:
     values are simply omitted by the template's ``{% if %}`` guards."""
     tags = _dedup(ctx.places + ctx.people, _MAX_TAGS)
     return {
+        "page_title": page_title(ctx.title, ctx.year_display, ctx.site_title),
         "lang": LANG,
         "locale": LOCALE,
         "robots": ROBOTS,
