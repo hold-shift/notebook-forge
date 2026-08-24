@@ -337,12 +337,23 @@ def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
 # ------------------------------------------------------------------ JSON-LD
 
 
-def _person(name: str, base_url: str) -> dict[str, Any]:
-    return {
+def _person(
+    name: str, base_url: str, birth: str = "", death: str = ""
+) -> dict[str, Any]:
+    """The archive's subject. Must stay byte-identical to
+    structured_data._person so the two graphs de-duplicate on @id."""
+    from .structured_data import iso_date_or_year
+
+    person: dict[str, Any] = {
         "@type": "Person",
         "@id": f"{doc_homepage_url(base_url)}#author",
         "name": name or "Author",
     }
+    if iso_date_or_year(birth):
+        person["birthDate"] = iso_date_or_year(birth)
+    if iso_date_or_year(death):
+        person["deathDate"] = iso_date_or_year(death)
+    return person
 
 
 def default_org_name(author_name: str) -> str:
@@ -365,7 +376,13 @@ def _publisher_org(base_url: str, author_name: str) -> dict[str, Any]:
 
 
 def collection_jsonld(
-    base_url: str, title: str, welcome: str, entries: list[dict], author_name: str
+    base_url: str,
+    title: str,
+    welcome: str,
+    entries: list[dict],
+    author_name: str,
+    author_birth: str = "",
+    author_death: str = "",
 ) -> str:
     homepage_url = doc_homepage_url(base_url)
     obj = {
@@ -375,7 +392,7 @@ def collection_jsonld(
         "name": title or "The Family Archive",
         "url": homepage_url,
         "description": (welcome or "").strip(),
-        "creator": _person(author_name, base_url),
+        "creator": _person(author_name, base_url, author_birth, author_death),
         "publisher": _publisher_org(base_url, author_name),
         "hasPart": [
             {
@@ -538,7 +555,15 @@ def root_files(
         head_html=site_head_html(session),
         canonical_url=canonical,
         og_description=description[:280],
-        jsonld_script=collection_jsonld(base_url, title, description, live_entries, author),
+        jsonld_script=collection_jsonld(
+            base_url,
+            title,
+            description,
+            live_entries,
+            author,
+            content.get("subject_birth", ""),
+            content.get("subject_death", ""),
+        ),
         content=content,
         timeline=timeline,
         favicon_url=favicon_url(session, base_url),

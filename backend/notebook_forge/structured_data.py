@@ -16,6 +16,7 @@ this module stays trivially unit-testable and free of DB access.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -47,8 +48,13 @@ class DocSeoContext:
     canonical_url: str
     title: str
     description: str = ""
-    author_name: str = ""
+    author_name: str = ""  # the byline as printed on the page ("R.F Skitch")
+    # The subject's canonical name. The Person entity is shared by @id with the
+    # homepage graph, so its `name` must be the same string in both — the
+    # per-document byline may be an abbreviated form and is NOT used here.
+    person_name: str = ""
     author_birth: str = ""  # e.g. "1934" → Person.birthDate
+    author_death: str = ""  # e.g. "2026-07-08" → Person.deathDate
     publisher_name: str = ""
     publisher_url: str = ""
     logo_url: str = ""
@@ -184,7 +190,9 @@ def build_context(
         title=meta.get("title") or doc.title,
         description=(meta.get("meta_description") or meta.get("standfirst") or "").strip(),
         author_name=author,
+        person_name=str(content.get("subject_name") or "").strip() or author,
         author_birth=str(content.get("subject_birth") or "").strip(),
+        author_death=str(content.get("subject_death") or "").strip(),
         publisher_name=org_name,
         publisher_url=homepage_url,
         logo_url=(pub_cfg.get("logo_url") or "").strip(),
@@ -274,16 +282,32 @@ def iso_duration_from_seconds(seconds: float | None) -> str:
 # ---------------------------------------------------------------- entities
 
 
+_ISO_DATE_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
+
+
+def iso_date_or_year(value: str) -> str:
+    """A schema.org-safe date: a full ISO date or a bare year, else the year
+    found inside the value, else "". Guards against a human-readable lifespan
+    ("1934 - 2026") reaching birthDate, which is not a valid date literal."""
+    v = str(value or "").strip()
+    if _ISO_DATE_RE.match(v):
+        return v
+    m = re.search(r"\d{4}", v)
+    return m.group(0) if m else ""
+
+
 def _person(ctx: DocSeoContext) -> dict[str, Any]:
     # @id anchors on the homepage's canonical URL (the site root) — must stay
     # byte-identical to collection._person so the entities de-duplicate.
     person: dict[str, Any] = {
         "@type": "Person",
         "@id": f"{ctx.base_url.rstrip('/')}/#author",
-        "name": ctx.author_name or "Author",
+        "name": ctx.person_name or ctx.author_name or "Author",
     }
-    if ctx.author_birth:
-        person["birthDate"] = ctx.author_birth
+    if iso_date_or_year(ctx.author_birth):
+        person["birthDate"] = iso_date_or_year(ctx.author_birth)
+    if iso_date_or_year(ctx.author_death):
+        person["deathDate"] = iso_date_or_year(ctx.author_death)
     if ctx.homepage_url:
         person["url"] = ctx.homepage_url
     return person

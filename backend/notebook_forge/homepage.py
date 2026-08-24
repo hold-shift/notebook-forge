@@ -9,6 +9,7 @@ detects library-side changes with zero event wiring."""
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
@@ -44,8 +45,14 @@ def get_homepage(session: Session) -> Document | None:
 
 HOMEPAGE_CONTENT_DEFAULTS: dict[str, Any] = {
     "subject_name": "Robert Francis Skitch",
+    # Birth/death are stored separately so the masthead can render a lifespan
+    # and the JSON-LD can emit valid schema.org birthDate/deathDate. Either may
+    # be a bare year ("1934") or a full ISO date ("2026-07-08"); an empty
+    # subject_death means the subject is living and the masthead says "b. ".
     "subject_birth": "1934",
+    "subject_death": "",
     "subject_place": "Collie, Western Australia",
+    "subject_place_death": "",
     "tagline": (
         "From a boyhood in the Collie coalfields to Lieutenant Colonel "
         "commanding the Army Survey Regiment — eleven memoirs spanning eight "
@@ -129,6 +136,32 @@ def seed_homepage_content(session: Session) -> bool:
     return changed
 
 
+_YEAR_RE = re.compile(r"\d{4}")
+
+
+def year_of(value: str) -> str:
+    """The four-digit year inside a date field ("2026-07-08" → "2026")."""
+    m = _YEAR_RE.search(str(value or ""))
+    return m.group(0) if m else ""
+
+
+def life_dates(birth: str, death: str) -> str:
+    """The masthead's date line. A death year turns the line into a lifespan
+    ("1934 – 2026", en dash); without one it stays "b. 1934"."""
+    b, d = year_of(birth), year_of(death)
+    if b and d:
+        return f"{b} \u2013 {d}"
+    if b:
+        return f"b. {b}"
+    return d
+
+
+def life_places(birth_place: str, death_place: str) -> str:
+    """The masthead's place line — both poles of the life when known."""
+    parts = [p.strip() for p in (birth_place, death_place) if str(p or "").strip()]
+    return " \u00b7 ".join(parts)
+
+
 def _resolve_banner_slots(slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Attach a template-ready image_url to each slot (empty → placeholder)."""
     resolved = []
@@ -150,6 +183,12 @@ def homepage_content(session: Session) -> dict[str, Any]:
         key: stored.get(key, copy.deepcopy(default))
         for key, default in HOMEPAGE_CONTENT_DEFAULTS.items()
     }
+    content["life_dates"] = life_dates(
+        content.get("subject_birth", ""), content.get("subject_death", "")
+    )
+    content["life_places"] = life_places(
+        content.get("subject_place", ""), content.get("subject_place_death", "")
+    )
     content["about_archive_paras"] = [
         p.strip() for p in str(content["about_archive"]).split("\n\n") if p.strip()
     ]

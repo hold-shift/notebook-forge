@@ -163,7 +163,9 @@ export interface BannerSlot {
 export interface HomepageSettings {
   subject_name: string
   subject_birth: string
+  subject_death: string
   subject_place: string
+  subject_place_death: string
   tagline: string
   dedication: string
   notebooklm_cta_title: string

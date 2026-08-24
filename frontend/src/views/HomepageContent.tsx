@@ -105,8 +105,8 @@ export function HomepageContentPanel({ onSaved }: { onSaved?: () => void } = {})
               </div>
               <div className="settings-row">
                 <label htmlFor="hp-birth">
-                  Birth year{' '}
-                  <InfoTip label="About the birth year">Rendered as “b. 1934” under the name. No end date is shown.</InfoTip>
+                  Born{' '}
+                  <InfoTip label="About the birth date">A year (“1934”) or a full date (“1934-03-12”). With no date of death this renders as “b. 1934”; with one it becomes a lifespan, “1934 – 2026”.</InfoTip>
                 </label>
                 <div className="settings-control">
                   <input id="hp-birth" value={hp.subject_birth}
@@ -114,11 +114,29 @@ export function HomepageContentPanel({ onSaved }: { onSaved?: () => void } = {})
                 </div>
               </div>
               <div className="settings-row">
-                <label htmlFor="hp-place">Place</label>
+                <label htmlFor="hp-place">Place of birth</label>
                 <div className="settings-control">
                   <input id="hp-place" value={hp.subject_place}
                     onChange={(e) => setHpField('subject_place', e.target.value)}
                     placeholder="Collie, Western Australia" />
+                </div>
+              </div>
+              <div className="settings-row">
+                <label htmlFor="hp-death">
+                  Died{' '}
+                  <InfoTip label="About the date of death">Leave empty while the subject is living. A full date (“2026-07-08”) is preferred — the masthead shows only the year, but the full date is published as the schema.org deathDate.</InfoTip>
+                </label>
+                <div className="settings-control">
+                  <input id="hp-death" value={hp.subject_death}
+                    onChange={(e) => setHpField('subject_death', e.target.value)} placeholder="2026-07-08" />
+                </div>
+              </div>
+              <div className="settings-row">
+                <label htmlFor="hp-place-death">Place of death</label>
+                <div className="settings-control">
+                  <input id="hp-place-death" value={hp.subject_place_death}
+                    onChange={(e) => setHpField('subject_place_death', e.target.value)}
+                    placeholder="Brisbane, Queensland" />
                 </div>
               </div>
               <div className="settings-row settings-row-tall">

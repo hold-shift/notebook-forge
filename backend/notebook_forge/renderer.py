@@ -427,6 +427,20 @@ def render_index(
     the group-derived memoir list; `welcome`/`entries`/`body_entries` are kept
     for call-site compatibility but are no longer rendered (superseded by the
     redesign — see docs/Homepage_Redesign_Spec.md §3)."""
+    from .homepage import life_dates, life_places
+
+    # Derive the masthead's date/place lines here rather than in the template,
+    # so a caller that hand-builds `content` (tests, migrations) still gets
+    # them instead of silently rendering a subject with no dates.
+    ctx = dict(content or {})
+    ctx.setdefault(
+        "life_dates",
+        life_dates(ctx.get("subject_birth", ""), ctx.get("subject_death", "")),
+    )
+    ctx.setdefault(
+        "life_places",
+        life_places(ctx.get("subject_place", ""), ctx.get("subject_place_death", "")),
+    )
     tpl = _env().get_template("index.html.j2")
     return tpl.render(
         title=title,
@@ -440,7 +454,7 @@ def render_index(
         og_description=og_description,
         jsonld_script=jsonld_script,
         body_entries=body_entries,
-        content=content or {},
+        content=ctx,
         timeline=timeline or [],
         favicon_url=favicon_url,
         og_image=og_image,

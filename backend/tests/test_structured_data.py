@@ -213,3 +213,32 @@ def test_entity_ids_match_the_homepage_graph() -> None:
 def test_head_meta_audio_present_only_with_audio() -> None:
     assert head_meta(_ctx())["audio_url"] == ""
     assert head_meta(_ctx(audio_url="x/document.mp3"))["audio_url"] == "x/document.mp3"
+
+
+def test_person_dates_are_schema_safe() -> None:
+    """birthDate/deathDate must be ISO literals — a human-readable lifespan
+    ("1934 - 2026") is not a valid schema.org date and must never be emitted."""
+    from notebook_forge.structured_data import iso_date_or_year
+
+    assert iso_date_or_year("1934") == "1934"
+    assert iso_date_or_year("2026-07-08") == "2026-07-08"
+    assert iso_date_or_year("1934 - 2026") == "1934"  # lifespan → birth year
+    assert iso_date_or_year("") == ""
+    assert iso_date_or_year("sometime") == ""
+
+
+def test_collection_person_carries_birth_and_death() -> None:
+    """The homepage Person must carry the same dates as the per-document one,
+    so the two graphs de-duplicate on @id instead of conflicting."""
+    import json as _json
+
+    from notebook_forge.collection import collection_jsonld
+
+    script = collection_jsonld(
+        BASE, "Robert Francis Skitch", "", [], "Robert Francis Skitch",
+        "1934", "2026-07-08",
+    )
+    home = _json.loads(script.split(">", 1)[1].rsplit("<", 2)[0].replace("<\\/", "</"))
+    creator = home["creator"]
+    assert creator["birthDate"] == "1934"
+    assert creator["deathDate"] == "2026-07-08"

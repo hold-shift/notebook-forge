@@ -681,3 +681,42 @@ def test_content_setting_change_marks_homepage_dirty(session: Session) -> None:
     session.flush()
     h2 = effective_content_hash(session, hp)
     assert h1 != h2
+
+
+def test_life_dates_and_places() -> None:
+    """The masthead line becomes a lifespan once a death date is recorded."""
+    from notebook_forge.homepage import life_dates, life_places
+
+    assert life_dates("1934", "") == "b. 1934"
+    assert life_dates("1934", "2026-07-08") == "1934 – 2026"
+    assert life_dates("1934-03-12", "2026") == "1934 – 2026"
+    assert life_dates("", "") == ""
+
+    assert life_places("Collie, Western Australia", "") == "Collie, Western Australia"
+    assert (
+        life_places("Collie, Western Australia", "Brisbane, Queensland")
+        == "Collie, Western Australia · Brisbane, Queensland"
+    )
+
+
+def test_index_masthead_renders_lifespan() -> None:
+    """render_index derives the masthead lines even when a caller hand-builds
+    `content` without them."""
+    from notebook_forge.renderer import render_index
+
+    html = render_index(
+        title="Robert Francis Skitch",
+        welcome="",
+        dedication="",
+        entries=[],
+        content={
+            "subject_name": "Robert Francis Skitch",
+            "subject_birth": "1934",
+            "subject_death": "2026-07-08",
+            "subject_place": "Collie, Western Australia",
+            "subject_place_death": "Brisbane, Queensland",
+        },
+    )
+    assert "1934 – 2026" in html
+    assert "Collie, Western Australia · Brisbane, Queensland" in html
+    assert "b. 1934" not in html

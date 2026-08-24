@@ -42,7 +42,8 @@
   .eyebrow { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-tertiary); margin-bottom: .65rem; }
   .masthead { border-bottom: 2px solid var(--khaki); padding-bottom: 1.75rem; margin-bottom: 2rem; }
   .masthead h1 { font-size: 42px; font-weight: 400; line-height: 1.1; color: var(--ink); margin-bottom: .4rem; }
-  .masthead .dates { font-family: system-ui, sans-serif; font-size: 14px; letter-spacing: .06em; color: var(--khaki); text-transform: uppercase; margin-bottom: 1rem; }
+  .masthead .dates { font-family: system-ui, sans-serif; font-size: 14px; letter-spacing: .06em; color: var(--khaki); text-transform: uppercase; margin-bottom: .2rem; }
+  .masthead .places { font-family: system-ui, sans-serif; font-size: 14px; letter-spacing: .06em; color: var(--khaki); text-transform: uppercase; margin-bottom: 1rem; }
   .masthead .tagline { font-size: 17px; color: var(--ink-secondary); line-height: 1.75; max-width: 520px; }
   .dedication { font-style: italic; font-size: 15px; color: var(--ink-tertiary); margin-top: 1.25rem; }
 
@@ -140,7 +141,8 @@
   <div class="masthead">
     <p class="eyebrow">The Skitch Family Archive</p>
     <h1>{{ content.subject_name }}</h1>
-    <p class="dates">b. {{ content.subject_birth }} &nbsp;·&nbsp; {{ content.subject_place }}</p>
+    {% if content.life_dates %}<p class="dates">{{ content.life_dates }}</p>{% endif %}
+    {% if content.life_places %}<p class="places">{{ content.life_places }}</p>{% endif %}
     {% if content.tagline %}<p class="tagline">{{ content.tagline }}</p>{% endif %}
     {% if dedication %}<p class="dedication">{{ dedication }}</p>{% endif %}
   </div>

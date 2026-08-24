@@ -1288,7 +1288,9 @@ class BannerSlotBody(BaseModel):
 class HomepageSettingsBody(BaseModel):
     subject_name: str = ""
     subject_birth: str = ""
+    subject_death: str = ""
     subject_place: str = ""
+    subject_place_death: str = ""
     tagline: str = ""
     dedication: str = ""
     notebooklm_cta_title: str = ""
@@ -1317,7 +1319,9 @@ def save_homepage_settings(
     value.update({
         "subject_name": body.subject_name.strip(),
         "subject_birth": body.subject_birth.strip(),
+        "subject_death": body.subject_death.strip(),
         "subject_place": body.subject_place.strip(),
+        "subject_place_death": body.subject_place_death.strip(),
         "tagline": body.tagline.strip(),
         "dedication": body.dedication.strip(),
         "notebooklm_cta_title": body.notebooklm_cta_title.strip(),
