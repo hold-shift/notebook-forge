@@ -239,7 +239,7 @@ make check    # ruff + pytest + tsc + vitest (run before committing)
 ```
 
 By default the workspace (database, image assets, sketch cache, exports) lives
-at `~/NotebookForge-workspace/`. Override with the `NOTEBOOK_FORGE_WORKSPACE`
+at `~/Claude/NotebookForge-workspace/`. Override with the `NOTEBOOK_FORGE_WORKSPACE`
 environment variable.
 
 ## First steps

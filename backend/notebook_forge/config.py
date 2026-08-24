@@ -1,6 +1,6 @@
 """Workspace location and app configuration.
 
-The workspace lives OUTSIDE the repo (default ~/NotebookForge-workspace/) and
+The workspace lives OUTSIDE the repo (default ~/Claude/NotebookForge-workspace/) and
 holds the SQLite DB, the content-addressed asset store, and export output.
 """
 
@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 ENV_WORKSPACE = "NOTEBOOK_FORGE_WORKSPACE"
-DEFAULT_WORKSPACE = Path.home() / "NotebookForge-workspace"
+DEFAULT_WORKSPACE = Path.home() / "Claude" / "NotebookForge-workspace"
 
 ASSET_KINDS = ("originals", "sketches", "sources")
 
