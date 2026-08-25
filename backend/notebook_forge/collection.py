@@ -317,6 +317,14 @@ def published_slugs(
     return slugs
 
 
+def published_gate(session: Session) -> set[str] | None:
+    """Slugs a reader can actually reach on the site — the live-HTML target's
+    PUBLISHED set. None when no live target is configured, meaning there is
+    nothing to gate by (every document is treated as reachable)."""
+    target = live_html_target(session)
+    return published_slugs(session, target) if target is not None else None
+
+
 def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
     """Derived prev/next from the library's reading order — groups in their own
     order, members in the operator's manual order, ungrouped last. Deriving it
@@ -329,6 +337,14 @@ def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
     if idx is None:
         return None, None
 
+    # Drafts sit in the reading order but aren't on the site — linking one
+    # sends the reader to a 404, so nav steps over it to the nearest document
+    # that is actually live. The last published document has no Next at all.
+    gate = published_gate(session)
+
+    def live(d: Document) -> bool:
+        return gate is None or d.slug in gate
+
     def ref(d: Document) -> dict[str, Any]:
         # Prev/next nav uses the short title when set (the long titles overflow).
         meta = d.meta or {}
@@ -337,8 +353,8 @@ def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
             "title": meta.get("short_title") or meta.get("title") or d.title,
         }
 
-    prev_d = ref(docs[idx - 1]) if idx > 0 else None
-    next_d = ref(docs[idx + 1]) if idx < len(docs) - 1 else None
+    prev_d = next((ref(d) for d in reversed(docs[:idx]) if live(d)), None)
+    next_d = next((ref(d) for d in docs[idx + 1:] if live(d)), None)
     return prev_d, next_d
 
 
@@ -523,7 +539,11 @@ def root_files(
     # group-derived timeline (the homepage document's blocks are no longer a
     # render input — see docs/Homepage_Redesign_Spec.md).
     content = homepage_content(session)
-    timeline = homepage_timeline(session)
+    # The tile gate is the same published-only set the sitemap uses — and it
+    # counts the document being published in THIS pass. With no live target
+    # there is nothing to gate by (published_slugs would read as "none live"),
+    # so the timeline stays ungated.
+    timeline = homepage_timeline(session, gate if live_target is not None else None)
     footer = _footer_html(session)
     canonical = doc_homepage_url(base_url)
     # Subject name is the page title; tagline is the site description (meta/OG,

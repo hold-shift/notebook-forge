@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from .blocks import FORGE_DEDICATION, FORGE_DOC_GROUP, FORGE_NARRATIVE
-from .collection import count_words, reading_time
+from .collection import count_words, published_gate, reading_time
 from .groups import resolve_members
 from .models import Asset, Document, Group, Setting
 
@@ -241,23 +241,32 @@ def homepage_fingerprint(session: Session) -> dict[str, Any]:
     }
 
 
-def homepage_timeline(session: Session) -> list[dict[str, Any]]:
+def homepage_timeline(
+    session: Session, gate: set[str] | None = None
+) -> list[dict[str, Any]]:
     """The memoir timeline, derived live from the library Group model in its
     existing order. Each group → {name, rows:[{period,title,reading_time,url}]}.
     Empty groups are omitted; ungrouped documents never appear (§1d/§3).
 
     Rows follow the operator's manual order within each group — the library's
-    drag order IS the published order."""
+    drag order IS the published order — and only documents actually live on
+    the site get a row, since a draft's tile would link to a 404. ``gate`` is
+    the set of live slugs; callers mid-publish pass their own (which counts
+    the document being published), everyone else gets the current one."""
     from .collection import format_audio_length, format_word_count
     from .groups import list_groups
     from .narration import tts_enabled
     from .narration_service import audio_duration, has_audio
 
     tts_on = tts_enabled(session)
+    if gate is None:
+        gate = published_gate(session)
     timeline: list[dict[str, Any]] = []
     for group in list_groups(session):
         rows = []
         for m in resolve_members(session, group.id, "manual"):
+            if gate is not None and m.slug not in gate:
+                continue  # a draft has no page for the tile to link to
             audio = tts_on and has_audio(session, m)
             duration = audio_duration(session, m) if audio else None
             # Tile meta: recording length when narrated, else word count (≈1000s).
