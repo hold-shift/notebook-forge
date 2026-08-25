@@ -318,20 +318,28 @@ def published_slugs(
 
 
 def nav_for(session: Session, doc: Document) -> tuple[dict | None, dict | None]:
-    """Derived prev/next from chronological order — this is what propagates
-    a title fix into the neighbours' docnav footers."""
-    entries = build_entries(session)
-    idx = next((i for i, e in enumerate(entries) if e["stem"] == doc.slug), None)
+    """Derived prev/next from the library's reading order — groups in their own
+    order, members in the operator's manual order, ungrouped last. Deriving it
+    at publish time is what propagates a title fix, or a drag in the library,
+    into the neighbours' docnav footers."""
+    from .groups import reading_order
+
+    docs = reading_order(session)
+    idx = next((i for i, d in enumerate(docs) if d.slug == doc.slug), None)
     if idx is None:
         return None, None
 
-    def ref(e: dict[str, Any]) -> dict[str, Any]:
+    def ref(d: Document) -> dict[str, Any]:
         # Prev/next nav uses the short title when set (the long titles overflow).
-        return {"url": e["url"], "title": e.get("short_title") or e["title"]}
+        meta = d.meta or {}
+        return {
+            "url": meta.get("canonical_url", ""),
+            "title": meta.get("short_title") or meta.get("title") or d.title,
+        }
 
-    prev_e = ref(entries[idx - 1]) if idx > 0 else None
-    next_e = ref(entries[idx + 1]) if idx < len(entries) - 1 else None
-    return prev_e, next_e
+    prev_d = ref(docs[idx - 1]) if idx > 0 else None
+    next_d = ref(docs[idx + 1]) if idx < len(docs) - 1 else None
+    return prev_d, next_d
 
 
 # ------------------------------------------------------------------ JSON-LD
