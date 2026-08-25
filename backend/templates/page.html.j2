@@ -242,6 +242,43 @@
     color:var(--ink);
   }
 
+  /* ---- Tables ---- */
+  /* Ruled tables carried over from scanned source documents (distribution
+     tables, map schedules). The wrapper scrolls a wide table inside its own
+     box so the page body never scrolls sideways. */
+  .table-wrap{
+    margin:2.2rem 0;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .table-wrap table{
+    border-collapse:collapse;
+    /* Size to content, but never narrower than the column: a wide table
+       scrolls inside .table-wrap instead of being squeezed to fit. */
+    width:auto;
+    min-width:100%;
+    font-size:.92rem;
+    line-height:1.4;
+  }
+  .table-wrap th,
+  .table-wrap td{
+    border:1px solid var(--rule);
+    padding:.45rem .6rem;
+    text-align:left;
+    vertical-align:top;
+  }
+  .table-wrap th{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:.88rem;
+    letter-spacing:.01em;
+    background:rgba(42,37,32,.04);
+    color:var(--ink);
+  }
+  .table-wrap td{
+    color:var(--ink);
+  }
+
   /* ---- Figures ---- */
   figure{
     margin:2.8rem 0;

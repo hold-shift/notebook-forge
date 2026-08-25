@@ -42,7 +42,9 @@ DEFINITION_RE = re.compile(r"^\[\^(\d+)\]:\s*(.*)$", re.DOTALL)
 #   ([A-Za-z]) a letter (so `Vietnam1` matches, `in 1966` does not)
 #   (\d{1,2})  the 1–2 digit footnote number
 #   (?!\d)     not followed by another digit
-LEGACY_DIGIT_RE = re.compile(r"(?<![\d])([A-Za-z])(\d{1,2})(?!\d)")
+#   (?![,.]\d) nor by a grouped-number separator — `N1,150,000` is a grid
+#              northing, not a reference to footnote 1
+LEGACY_DIGIT_RE = re.compile(r"(?<![\d])([A-Za-z])(\d{1,2})(?!\d)(?![,.]\d)")
 
 
 def referenced_numbers(text: str) -> list[int]:
