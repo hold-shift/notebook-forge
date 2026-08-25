@@ -16,7 +16,7 @@ from notebook_forge.groups import (
     set_positions,
 )
 from notebook_forge.homepage import homepage_timeline
-from notebook_forge.models import Document
+from notebook_forge.models import Document, SyncState, Target
 
 
 def _memoir(session, slug, title, **meta):
@@ -146,3 +146,100 @@ def test_nav_uses_the_short_title_and_canonical_url(session) -> None:
         "url": "https://history.skitch.me/rfs/1966_part-2.html",
         "title": "A Developing Role",
     }
+
+
+# ── drafts are in the order but not on the site ──────────────────────────────
+
+def _live_target(session) -> Target:
+    target = Target(name="pages", kind="github-pages", config={})
+    session.add(target)
+    session.flush()
+    return target
+
+
+def _publish(session, target: Target, *docs: Document) -> None:
+    for doc in docs:
+        session.add(SyncState(document_id=doc.id, target_id=target.id, status="PUBLISHED"))
+    session.flush()
+
+
+def test_nav_has_no_next_after_the_last_published_document(session) -> None:
+    """A draft sits in the reading order but isn't on the site. The last
+    published document must not offer a Next into a 404."""
+    group = create_group(session, "Public service", "#9c5a3c")
+    servant = _memoir(session, "1981-1990_the-public-servant", "The Public Servant")
+    assign_document(session, servant, group)
+    berlin = _memoir(session, "2004_berlin", "Three Days in Berlin")  # ungrouped draft
+    session.flush()
+
+    target = _live_target(session)
+    _publish(session, target, servant)
+
+    prev, nxt = nav_for(session, servant)
+    assert prev is None
+    assert nxt is None
+    assert berlin.group_id is None  # still last in the reading order, just unreachable
+
+
+def test_nav_steps_over_an_unpublished_document(session) -> None:
+    group = create_group(session, "Vietnam", "#5a7d5a")
+    first = _memoir(session, "1965-1966_genesis", "The Genesis", short_title="The Genesis")
+    draft = _memoir(session, "1966_part-2", "A Developing Role", short_title="A Developing Role")
+    third = _memoir(session, "1967_part-3", "Established", short_title="Established")
+    for doc in (first, draft, third):
+        assign_document(session, doc, group)
+    session.flush()
+
+    target = _live_target(session)
+    _publish(session, target, first, third)  # the middle one is still a draft
+
+    _, nxt = nav_for(session, first)
+    assert nxt and nxt["title"] == "Established"
+    prev, _ = nav_for(session, third)
+    assert prev and prev["title"] == "The Genesis"
+
+
+def test_nav_is_ungated_without_a_live_target(session) -> None:
+    """No site configured yet — nothing to gate by, so nav still works."""
+    group = create_group(session, "Vietnam", "#5a7d5a")
+    first = _memoir(session, "1965-1966_genesis", "The Genesis", short_title="The Genesis")
+    second = _memoir(session, "1966_part-2", "Part 2", short_title="A Developing Role")
+    assign_document(session, first, group)
+    assign_document(session, second, group)
+    session.flush()
+
+    _, nxt = nav_for(session, first)
+    assert nxt and nxt["title"] == "A Developing Role"
+
+
+def test_homepage_rows_skip_an_unpublished_document(session) -> None:
+    """A draft's tile would link to a page that isn't on the site."""
+    group = create_group(session, "Vietnam", "#5a7d5a")
+    live = _memoir(session, "1965-1966_genesis", "The Genesis", short_title="The Genesis")
+    draft = _memoir(session, "1966_part-2", "Part 2", short_title="A Developing Role")
+    assign_document(session, live, group)
+    assign_document(session, draft, group)
+    session.flush()
+
+    target = _live_target(session)
+    _publish(session, target, live)
+
+    [row] = homepage_timeline(session)[0]["rows"]
+    assert row["title"] == "The Genesis"
+
+
+def test_homepage_rows_honour_a_caller_supplied_gate(session) -> None:
+    """Mid-publish, root_files passes a gate that counts the document being
+    published — its sync state isn't flipped until the transfer succeeds."""
+    group = create_group(session, "Vietnam", "#5a7d5a")
+    live = _memoir(session, "1965-1966_genesis", "The Genesis", short_title="The Genesis")
+    publishing = _memoir(session, "1966_part-2", "Part 2", short_title="A Developing Role")
+    assign_document(session, live, group)
+    assign_document(session, publishing, group)
+    session.flush()
+
+    target = _live_target(session)
+    _publish(session, target, live)
+
+    rows = homepage_timeline(session, {"1965-1966_genesis", "1966_part-2"})[0]["rows"]
+    assert [r["title"] for r in rows] == ["The Genesis", "A Developing Role"]
