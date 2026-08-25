@@ -63,9 +63,11 @@ def _import_two(tmp_path: Path, workspace: Path, session: Session):
     return d1, d2, target
 
 
-def test_nav_is_derived_from_chronological_order(
+def test_nav_is_derived_from_the_library_reading_order(
     tmp_path: Path, workspace: Path, session: Session
 ) -> None:
+    # Both imported documents are ungrouped, so they sit in the ungrouped
+    # bucket in the order the library shows them.
     d1, d2, _ = _import_two(tmp_path, workspace, session)
     prev1, next1 = nav_for(session, d1)
     assert prev1 is None

@@ -17,11 +17,16 @@ from .models import Document, Group
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
+_YEAR_PREFIX = re.compile(r"^(\d{4})")
+
+
 def _start_year(slug: str) -> int:
-    try:
-        return int(slug.split("-", 1)[0])
-    except ValueError:
-        return 9999
+    """The year a slug is filed under. The prefix may be a range or a single
+    year and may be followed by either separator — 1965-1966_x and 1966_x are
+    both real in the corpus, and reading only up to the first hyphen filed
+    every 1966_x slug under 9999."""
+    match = _YEAR_PREFIX.match(slug)
+    return int(match.group(1)) if match else 9999
 
 
 def list_groups(session: Session) -> list[Group]:
@@ -138,10 +143,14 @@ def set_positions(session: Session, group_id: int | None, slugs: list[str]) -> N
     session.flush()
 
 
-def resolve_members(session: Session, group_id: int, sort: str) -> list[Document]:
+def resolve_members(session: Session, group_id: int | None, sort: str) -> list[Document]:
+    """Members of one bucket, ordered. ``group_id=None`` is the ungrouped
+    bucket — the same one the library shows last."""
+    where = (
+        Document.group_id.is_(None) if group_id is None else Document.group_id == group_id
+    )
     docs = list(session.scalars(
-        select(Document)
-        .where(Document.group_id == group_id, Document.kind == "memoir")
+        select(Document).where(where, Document.kind == "memoir")
     ))
     if sort == "manual":
         docs.sort(key=lambda d: (d.group_position, d.id))
@@ -153,6 +162,20 @@ def resolve_members(session: Session, group_id: int, sort: str) -> list[Document
         docs.sort(key=lambda d: d.updated_at or d.created_at, reverse=True)
     else:
         raise ValueError(f"unknown sort '{sort}'")
+    return docs
+
+
+def reading_order(session: Session) -> list[Document]:
+    """Every memoir in the order the library shows them: groups in their own
+    order, each group's members in the operator's manual order, then the
+    ungrouped bucket last.
+
+    This is the archive's reading sequence — what the prev/next footer walks,
+    so dragging a document in the library moves it in the published nav too."""
+    docs: list[Document] = []
+    for group in list_groups(session):
+        docs.extend(resolve_members(session, group.id, "manual"))
+    docs.extend(resolve_members(session, None, "manual"))
     return docs
 
 

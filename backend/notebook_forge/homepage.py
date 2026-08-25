@@ -283,7 +283,10 @@ def homepage_fingerprint(session: Session) -> dict[str, Any]:
 def homepage_timeline(session: Session) -> list[dict[str, Any]]:
     """The memoir timeline, derived live from the library Group model in its
     existing order. Each group → {name, rows:[{period,title,reading_time,url}]}.
-    Empty groups are omitted; ungrouped documents never appear (§1d/§3)."""
+    Empty groups are omitted; ungrouped documents never appear (§1d/§3).
+
+    Rows follow the operator's manual order within each group — the library's
+    drag order IS the published order."""
     from .collection import format_audio_length, format_word_count
     from .groups import list_groups
     from .narration import tts_enabled
@@ -293,7 +296,7 @@ def homepage_timeline(session: Session) -> list[dict[str, Any]]:
     timeline: list[dict[str, Any]] = []
     for group in list_groups(session):
         rows = []
-        for m in resolve_members(session, group.id, "date_range"):
+        for m in resolve_members(session, group.id, "manual"):
             audio = tts_on and has_audio(session, m)
             duration = audio_duration(session, m) if audio else None
             # Tile meta: recording length when narrated, else word count (≈1000s).
