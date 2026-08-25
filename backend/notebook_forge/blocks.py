@@ -70,12 +70,24 @@ def content_hash(blocks: list[dict[str, Any]], meta: dict[str, Any] | None = Non
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def inline_text(content: list[dict[str, Any]] | str | None) -> str:
-    """Flatten inline content to plain text (links recurse)."""
+def inline_text(content: list[dict[str, Any]] | dict[str, Any] | str | None) -> str:
+    """Flatten inline content to plain text (links recurse).
+
+    A `table` block's content is a tableContent DICT rather than a list of
+    runs, so it's flattened cell by cell — callers that walk every block
+    (plain_text, for the search index) must not choke on one, and the text in
+    a table is as searchable as any other."""
     if not content:
         return ""
     if isinstance(content, str):
         return content
+    if isinstance(content, dict):
+        cells = (
+            inline_text(cell.get("content"))
+            for row in content.get("rows") or []
+            for cell in row.get("cells") or []
+        )
+        return " ".join(text for text in cells if text.strip())
     parts: list[str] = []
     for item in content:
         kind = item.get("type")

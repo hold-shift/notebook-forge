@@ -8,6 +8,7 @@ annex has a divider page, and section labels levelled below their own titles.
 
 from __future__ import annotations
 
+from notebook_forge.blocks import content_hash, plain_text
 from notebook_forge.ingest_vendor.clean import (
     _dedupe_repeated_headings,
     _merge_table_continuations,
@@ -25,6 +26,7 @@ from notebook_forge.ingest_vendor.model import DocumentDraft
 from notebook_forge.ingest_vendor.polish import polish_body
 from notebook_forge.ingestion import table_block
 from notebook_forge.renderer import _table_html
+from notebook_forge.safe_edition import _table_md
 
 
 def draft(body: list[dict]) -> DocumentDraft:
@@ -301,3 +303,37 @@ def test_orphan_split_adds_no_marker_when_a_real_reference_exists() -> None:
     _split_orphan_footnotes(body, notes, {3})
     assert len(notes) == 3          # the note is still recovered…
     assert "[^" not in body[0]["text"]   # …but no second reference to it
+
+
+# ----------------------------------------------------- tables downstream
+
+
+def test_search_index_reads_a_table() -> None:
+    """plain_text walks EVERY block for the search index, and a table's
+    content is a dict rather than a list of runs — iterating it as runs threw
+    AttributeError, which surfaced as a 500 on re-ingest."""
+    block = table_block([["UNIT", "PHOTO PLOTS"], ["HQ 1ATF", "10"]])
+    assert plain_text([block]) == "UNIT PHOTO PLOTS HQ 1ATF 10"
+
+
+def test_content_hash_covers_a_table() -> None:
+    a = table_block([["UNIT", "MAPS"], ["HQ 1ATF", "10"]])
+    b = table_block([["UNIT", "MAPS"], ["HQ 1ATF", "20"]])
+    assert content_hash([a]) != content_hash([b])
+
+
+def test_safe_edition_keeps_the_table() -> None:
+    """The safe edition is the plain-text edition of the document; a table
+    dropped from it loses the data entirely. GFM has no header-less table, so
+    the first row is the header."""
+    md = _table_md(table_block([["UNIT", "MAPS"], ["HQ 1ATF", "10"]]))
+    assert md[:3] == [
+        "| UNIT | MAPS |",
+        "| --- | --- |",
+        "| HQ 1ATF | 10 |",
+    ]
+
+
+def test_safe_edition_table_escapes_pipes_and_newlines() -> None:
+    md = _table_md(table_block([["a|b", "c\nd"], ["e", "f"]]))
+    assert md[0] == r"| a\|b | c d |"
