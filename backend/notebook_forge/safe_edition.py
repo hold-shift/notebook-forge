@@ -61,6 +61,32 @@ def data_uri(path: Path) -> str:
     return f"data:{mime};base64,{data}"
 
 
+def _table_md(block: dict[str, Any]) -> list[str]:
+    """A `table` block as GitHub-flavoured Markdown.
+
+    GFM has no header-less table, so the first row is always the header —
+    tables carried over from a scanned source open with their column labels.
+    Cell text is single-line (a newline would end the row) and pipes are
+    escaped."""
+    rows = (block.get("content") or {}).get("rows") or []
+    if not rows:
+        return []
+    width = max((len(r.get("cells") or []) for r in rows), default=0)
+
+    def cells_of(row: dict[str, Any]) -> list[str]:
+        cells = row.get("cells") or []
+        out = []
+        for i in range(width):
+            text = inline_md(cells[i].get("content")) if i < len(cells) else ""
+            out.append(" ".join(text.split()).replace("|", r"\|"))
+        return out
+
+    lines = ["| " + " | ".join(cells_of(rows[0])) + " |"]
+    lines.append("| " + " | ".join(["---"] * width) + " |")
+    lines += ["| " + " | ".join(cells_of(row)) + " |" for row in rows[1:]]
+    return [*lines, ""]
+
+
 def inline_md(content: list[dict[str, Any]] | None) -> str:
     """Inline runs → Markdown. fnRef markers become plain [N] visual ties."""
     out: list[str] = []
@@ -198,6 +224,8 @@ def render_safe_markdown(
         elif btype in ("bulletListItem", "numberedListItem"):
             marker = "1." if btype == "numberedListItem" else "-"
             lines += [f"{marker} {inline_md(block.get('content')).strip()}"]
+        elif btype == "table":
+            lines += _table_md(block)
         elif btype == "divider":
             lines += ["---", ""]
 
