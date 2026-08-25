@@ -20,7 +20,15 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from slugify import slugify
 
-from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE, FORGE_NARRATIVE, inline_text
+from .blocks import (
+    FORGE_ATTACHMENT,
+    FORGE_FOOTNOTE,
+    FORGE_IMAGE,
+    FORGE_NARRATIVE,
+    ext_label,
+    format_bytes,
+    inline_text,
+)
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -116,11 +124,14 @@ def build_heading_tree(flat_toc: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 ImageSrc = Callable[[dict[str, Any], int], str]
+# Same shape as ImageSrc: (attachment block, 1-based n) -> href for the file.
+AttachmentSrc = Callable[[dict[str, Any], int], str]
 
 
 def build_body(
     blocks: list[dict[str, Any]],
     image_src: ImageSrc,
+    attachment_src: AttachmentSrc | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Block tree → template body entries + flat heading ToC.
 
@@ -131,6 +142,7 @@ def build_body(
     """
     body: list[dict[str, Any]] = []
     fig_n = 0
+    att_n = 0
     first_para_done = False
     # Figure numbering is per unique image, first-occurrence order: the
     # published corpus re-renders a repeated image as a verbatim copy of
@@ -221,6 +233,26 @@ def build_body(
             body.append({"kind": "hr"})
         elif btype == "table":
             body.append({"kind": "table", "html": Markup(_table_html(block))})
+        elif btype == FORGE_ATTACHMENT:
+            att_n += 1
+            filename = str(props.get("filename", ""))
+            mime = str(props.get("mime", ""))
+            size = int(props.get("sizeBytes") or 0)
+            body.append(
+                {
+                    "kind": "attachment",
+                    "n": att_n,
+                    "anchor": f"attachment-{att_n}",
+                    "href": attachment_src(block, att_n) if attachment_src else "",
+                    "name": str(props.get("name", "")) or filename or "Attachment",
+                    "description": str(props.get("description", "")),
+                    "ext_label": ext_label(filename, mime),
+                    "size_label": format_bytes(size),
+                    "size_bytes": size,
+                    "mime": mime,
+                    "path": str(props.get("path", "")),
+                }
+            )
 
     body = _group_list_items(body)
     body = _merge_narrative(body)
@@ -381,8 +413,9 @@ def render_document(
     meta: dict[str, Any],
     blocks: list[dict[str, Any]],
     image_src: ImageSrc,
+    attachment_src: AttachmentSrc | None = None,
 ) -> str:
-    body, toc = build_body(blocks, image_src)
+    body, toc = build_body(blocks, image_src, attachment_src)
     heading_count = len(toc)
     show_toc = meta.get("show_toc")
     if show_toc is None:

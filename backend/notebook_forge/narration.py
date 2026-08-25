@@ -33,6 +33,7 @@ import re
 from typing import Any
 
 from .blocks import (
+    FORGE_ATTACHMENT,
     FORGE_DEDICATION,
     FORGE_DOC_GROUP,
     FORGE_FOOTNOTE,
@@ -52,7 +53,7 @@ _PARAGRAPH_TYPES = {
     "bulletListItem",
     "numberedListItem",
 }
-_STRIP_TYPES = {FORGE_IMAGE, FORGE_DOC_GROUP, "divider", "table"}
+_STRIP_TYPES = {FORGE_IMAGE, FORGE_DOC_GROUP, FORGE_ATTACHMENT, "divider", "table"}
 
 
 def spoken_inline_text(content: list[dict[str, Any]] | str | None) -> str:

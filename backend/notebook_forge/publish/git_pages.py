@@ -112,6 +112,15 @@ class GitPagesTarget(PublishTarget):
             else:
                 skipped += 1
 
+        # Attachments live at an operator-chosen path relative to the SITE
+        # root (outside the pages subdir), so they are copied and staged by
+        # their own path rather than under the document's assets dir.
+        for asset in bundle.root_assets:
+            if copy_if_changed(asset.path, clone / asset.name, asset.sha256):
+                written += 1
+            else:
+                skipped += 1
+
         for name, content in bundle.root_files.items():
             (clone / name).write_text(content)
 
@@ -122,6 +131,8 @@ class GitPagesTarget(PublishTarget):
         )
         if bundle.assets:
             self._git("add", "--", assets_rel, cwd=clone)
+        for asset in bundle.root_assets:
+            self._git("add", "--", asset.name, cwd=clone)
         for name in bundle.root_files:
             self._git("add", "--", name, cwd=clone)
 

@@ -468,6 +468,77 @@
     margin:0 0 .55rem;
   }
 
+  /* ---- Attachment (forgeAttachment) ---- */
+  a.attachment{
+    display:flex;
+    gap:1rem;
+    align-items:flex-start;
+    text-decoration:none;
+    color:inherit;
+    background:#fff;
+    border:1px solid var(--rule);
+    border-left:3px solid var(--accent);
+    padding:.85rem 1rem;
+    margin:1.9rem 0;
+    transition:border-color .12s ease, background .12s ease;
+  }
+  a.attachment:hover,
+  a.attachment:focus-visible{
+    background:var(--paper-edge);
+    border-color:var(--narr-border);
+    border-left-color:var(--accent-deep);
+    outline:none;
+  }
+  a.attachment + a.attachment{margin-top:-1.1rem;}
+  .attachment .att-tile{
+    flex:0 0 auto;
+    width:46px;height:56px;
+    border:1px solid var(--rule);
+    background:var(--paper-edge);
+    border-radius:3px;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    gap:.15rem;
+  }
+  .attachment .att-tile svg{
+    width:22px;height:26px;
+    fill:none;stroke:var(--accent);
+    stroke-width:1.6;stroke-linejoin:round;
+  }
+  .attachment .att-ext{
+    font-family:"Fraunces",serif;
+    font-size:.56rem;
+    letter-spacing:.13em;
+    color:var(--ink-faint);
+  }
+  .attachment .att-body{flex:1 1 auto;min-width:0;}
+  .attachment .att-name{
+    display:block;
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.02rem;
+    line-height:1.35;
+    color:var(--ink);
+    margin-bottom:.15rem;
+  }
+  a.attachment:hover .att-name{color:var(--accent-deep);}
+  .attachment .att-desc{
+    display:block;
+    font-size:.88rem;
+    line-height:1.5;
+    color:var(--ink-soft);
+    margin-bottom:.35rem;
+  }
+  .attachment .att-meta{
+    display:block;
+    font-family:"Fraunces",serif;
+    font-size:.7rem;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    font-variant-numeric:lining-nums;
+  }
+
   @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;}}
 
@@ -735,6 +806,18 @@
           <p>{{ para }}</p>
           {% endfor %}
         </div>
+      {% elif block.kind == 'attachment' %}
+        <a class="attachment" id="{{ block.anchor }}" href="{{ block.href }}" target="_blank" rel="noopener" data-size="{{ block.size_bytes }}" data-mime="{{ block.mime }}" data-path="{{ block.path }}">
+          <span class="att-tile" aria-hidden="true">
+            <svg viewBox="0 0 26 32"><path d="M4 1h11l7 7v23H4z"></path><path d="M15 1v7h7"></path></svg>
+            <span class="att-ext">{{ block.ext_label }}</span>
+          </span>
+          <span class="att-body">
+            <span class="att-name">{{ block.name }}</span>
+            {% if block.description %}<span class="att-desc">{{ block.description }}</span>{% endif %}
+            <span class="att-meta">{{ block.ext_label }}{% if block.size_label %} &middot; {{ block.size_label }}{% endif %} &middot; opens in a new tab</span>
+          </span>
+        </a>
       {% elif block.kind == 'blockquote' %}
         <blockquote><p>{{ block.text_html|safe if block.text_html else block.text }}</p></blockquote>
       {% elif block.kind == 'hr' %}

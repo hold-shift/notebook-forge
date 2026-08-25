@@ -7,6 +7,7 @@ import { createReactBlockSpec, createReactStyleSpec, getDefaultReactSlashMenuIte
 import { api } from '../api'
 import { ForgeImageView, type ForgeImageProps } from './ForgeImageView'
 import { ForgeFootnoteView, type ForgeFootnoteProps } from './ForgeFootnoteView'
+import { ForgeAttachmentView, type ForgeAttachmentProps } from './ForgeAttachmentView'
 import { ForgeDedicationView } from './ForgeDedicationView'
 import { ForgeDocGroupView, type ForgeDocGroupProps } from './ForgeDocGroupView'
 import { ForgeNarrativeView } from './ForgeNarrativeView'
@@ -122,6 +123,55 @@ export const forgeFootnoteSpec = createReactBlockSpec(
   },
 )
 
+export const forgeAttachmentSpec = createReactBlockSpec(
+  {
+    type: 'forgeAttachment',
+    propSchema: {
+      assetId: { default: '' },
+      name: { default: '' },
+      description: { default: '' },
+      // Denormalised from the Asset at upload time so the renderer, the safe
+      // edition and the JSON-LD can label the file without a DB lookup.
+      filename: { default: '' },
+      mime: { default: '' },
+      sizeBytes: { default: 0 },
+      // Publish location relative to the SITE root ('' = the site root).
+      path: { default: '' },
+    },
+    content: 'none',
+  },
+  {
+    render: ({ block, editor }) => (
+      <ForgeAttachmentView
+        props={block.props as ForgeAttachmentProps}
+        assetUrl={api.assetUrl}
+        onNameChange={(name) => editor.updateBlock(block, { props: { ...block.props, name } })}
+        onDescriptionChange={(description) =>
+          editor.updateBlock(block, { props: { ...block.props, description } })
+        }
+        onPathChange={(path) => editor.updateBlock(block, { props: { ...block.props, path } })}
+        onUpload={async (file: File) => {
+          const slug = currentDocSlug()
+          if (!slug) throw new Error('no document open')
+          const resp = await api.uploadAttachment(slug, file)
+          editor.updateBlock(block, {
+            props: {
+              ...block.props,
+              assetId: resp.assetId,
+              filename: resp.filename,
+              mime: resp.mime,
+              sizeBytes: resp.sizeBytes,
+              // First upload seeds the name from the filename; a replacement
+              // leaves the operator's wording alone.
+              name: block.props.name || resp.filename.replace(/\.[^.]+$/, ''),
+            },
+          })
+        }}
+      />
+    ),
+  },
+)
+
 export const fnRefStyleSpec = createReactStyleSpec(
   { type: 'fnRef', propSchema: 'boolean' },
   {
@@ -178,6 +228,7 @@ export const forgeSchema = BlockNoteSchema.create({
     forgeDedication: forgeDedicationSpec(),
     forgeDocGroup: forgeDocGroupSpec(),
     forgeNarrative: forgeNarrativeSpec(),
+    forgeAttachment: forgeAttachmentSpec(),
   },
   styleSpecs: {
     ...defaultStyleSpecs,
@@ -208,6 +259,19 @@ export function footnoteSlashItem(editor: any) {
     subtext: 'Numbered footnote at the cursor — auto-renumbers',
     icon: <i className="ti ti-asterisk" />,
     onItemClick: () => addFootnoteAtCursor(editor),
+  }
+}
+
+/** Slash menu item for inserting a forgeAttachment block (document only). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function attachmentSlashItem(editor: any) {
+  return {
+    title: 'Attachment',
+    aliases: ['attachment', 'pdf', 'file', 'doc', 'annex', 'download'],
+    group: 'Forge',
+    subtext: 'Hosted PDF or document with name and description',
+    icon: <i className="ti ti-paperclip" />,
+    onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeAttachment' }),
   }
 }
 

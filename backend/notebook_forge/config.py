@@ -12,7 +12,7 @@ from pathlib import Path
 ENV_WORKSPACE = "NOTEBOOK_FORGE_WORKSPACE"
 DEFAULT_WORKSPACE = Path.home() / "Claude" / "NotebookForge-workspace"
 
-ASSET_KINDS = ("originals", "sketches", "sources")
+ASSET_KINDS = ("originals", "sketches", "sources", "attachments")
 
 
 def workspace_path() -> Path:

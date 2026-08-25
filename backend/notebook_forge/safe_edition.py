@@ -18,12 +18,21 @@ import base64
 import io
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from sqlalchemy.orm import Session
 
 from .assets import asset_path
-from .blocks import FORGE_FOOTNOTE, FORGE_IMAGE, FORGE_NARRATIVE
+from .blocks import (
+    FORGE_ATTACHMENT,
+    FORGE_FOOTNOTE,
+    FORGE_IMAGE,
+    FORGE_NARRATIVE,
+    attachment_published_path,
+    ext_label,
+    format_bytes,
+)
 from .models import Asset, Document
 
 _INLINE_IMG_MAX_PX = 1024
@@ -168,6 +177,7 @@ def render_safe_markdown(
     lines += ["", "---", ""]
 
     fig_n = 0
+    att_n = 0
     prev_narrative = False
     seen_assets: dict[str, tuple[int, str]] = {}
     for block in blocks:
@@ -204,6 +214,25 @@ def render_safe_markdown(
             lines += [f"![{alt}]({src})", ""]
             link = f" — [View original photo]({doc_url}#figure-{n})" if doc_url else ""
             lines += [f"**Figure {n}.** {caption}{link}", ""]
+        elif btype == FORGE_ATTACHMENT:
+            # A PDF can't be inlined into a Google Doc, so the safe edition
+            # links out to the copy hosted beside the published page — the
+            # same contract as a figure caption's "View original photo".
+            att_n += 1
+            filename = str(props.get("filename", ""))
+            rel = attachment_published_path(
+                str(props.get("name", "")), filename, str(props.get("path", ""))
+            )
+            base = (meta.get("pages_base_url") or "").rstrip("/")
+            href = f"{base}/{rel}" if base else (urljoin(doc_url, f"/{rel}") if doc_url else rel)
+            name = str(props.get("name", "")) or filename or f"Attachment {att_n}"
+            kind = ext_label(filename, str(props.get("mime", "")))
+            size = format_bytes(int(props.get("sizeBytes") or 0))
+            detail = f"{kind}, {size}" if size else kind
+            lines += [f"**Attachment {att_n}.** [{name}]({href}) — {detail}", ""]
+            description = str(props.get("description", "")).strip()
+            if description:
+                lines += [description, ""]
         elif btype == FORGE_FOOTNOTE:
             text = html_fragment_to_md(props.get("text", "")).strip()
             lines += [f"> **[{props.get('marker', '')}]** {text}", ""]
@@ -261,8 +290,12 @@ def build_safe_markdown(session: Session, workspace: Path, doc: Document) -> str
 
     # Workspace-wide footer / licence notice, rendered straight from its block
     # document to Markdown for the Google Doc.
+    from .collection import pages_base_url
     from .footer import footer_markdown
 
     meta = dict(doc.meta)
     meta["footer_md"] = footer_markdown(session)
+    # Attachment links are absolute (the file sits at the site root, and a Doc
+    # in Drive has no relative base at all).
+    meta["pages_base_url"] = pages_base_url(session)
     return render_safe_markdown(meta, doc.blocks, sketch_src)
