@@ -36,7 +36,8 @@ def new_id() -> str:
 def make_block(
     block_type: str,
     props: dict[str, Any] | None = None,
-    content: list[dict[str, Any]] | None = None,
+    # Usually a list of inline runs; `table` blocks carry a tableContent dict.
+    content: list[dict[str, Any]] | dict[str, Any] | None = None,
     children: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {

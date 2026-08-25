@@ -288,7 +288,9 @@ def test_footnote_split_preserves_paragraph_breaks() -> None:
         "line_records": recs,
     }
     footnotes: list[dict] = []
-    out = _split_footnote_lines([block], page_height, footnote_size_max, footnotes, 5)
+    out = _split_footnote_lines(
+        [block], page_height, footnote_size_max, footnotes, 5, set(),
+    )
 
     assert len(out) == 1
     kept = out[0]["line_records"]
@@ -296,9 +298,11 @@ def test_footnote_split_preserves_paragraph_breaks() -> None:
     assert any(not r.get("text") for r in kept), "paragraph break (blank line) was lost"
     # The footnote line itself is gone from the body.
     assert all("The footnote body" not in (r.get("text") or "") for r in kept)
-    # The [^n] marker is appended to the last body line (digit stripped).
+    # A marker is appended to the last body line (digit stripped). It is a
+    # placeholder keyed on the note's index — note ids are reconciled against
+    # the document's own numbering only after every page has been read.
     last = [r for r in kept if r.get("text")][-1]
-    assert last["text"].endswith("[^1]")
+    assert last["text"].endswith("[^#0]")
     assert "before the note.2" not in last["text"]  # flattened superscript stripped
     # The footnote was captured.
     assert len(footnotes) == 1

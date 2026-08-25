@@ -20,6 +20,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 
 from .model import DocumentDraft, ImageRef, TextBlock
+from .polish import is_structural_line
 
 # Page-number heuristic: digits-only block in the bottom 10% of the page.
 _PAGE_NUMBER_BAND_FRAC = 0.88     # y_top > page_height * this → candidate
@@ -29,7 +30,10 @@ _PAGE_NUMBER_RE = re.compile(r"^\s*\d{1,4}\s*$")
 # strictly smaller than the body mode, starting with "<digit><space>".
 _FOOTNOTE_BAND_FRAC = 0.65        # y_top > page_height * this → candidate
 _FOOTNOTE_SIZE_RATIO = 0.92       # block size < body * this
-_FOOTNOTE_LEAD_RE = re.compile(r"^\s*(\d{1,2})\s+(.+)$", re.DOTALL)
+# Footnotes are numbered from 1. Requiring a non-zero leading digit keeps a
+# line of survey data ("0 º 24’ 27”.41") from being read as footnote zero —
+# which then made "[^0]"-adjacent numbers look like live references.
+_FOOTNOTE_LEAD_RE = re.compile(r"^\s*([1-9]\d?)\s+(.+)$", re.DOTALL)
 
 # Bold-heading detection inside a block. PyMuPDF span flag bit 4 (decimal 16)
 # = bold. A line counts as bold when ≥ 80% of its characters carry the flag.
@@ -37,6 +41,15 @@ _FOOTNOTE_LEAD_RE = re.compile(r"^\s*(\d{1,2})\s+(.+)$", re.DOTALL)
 # that happens to be bold (rare but possible) and shouldn't get promoted.
 _BOLD_FLAG = 16
 _ITALIC_FLAG = 2  # PyMuPDF span flag bit (NotebookForge divergence)
+# PyMuPDF span flag bit 0 = superscript. A footnote REFERENCE is typeset as a
+# superscript span of its own (smaller face, raised baseline); the number in
+# an abbreviation like "GSO2" or "UH1" is plain body text in the same span as
+# the word. That distinction is the only reliable way to tell them apart, and
+# it is why reference detection reads formatting rather than guessing from a
+# digit glued to a word (reported by Chris, 25 Aug 2026: every "GSO2" in
+# Vietnam Part 3 rendered as a footnote marker).
+_SUPERSCRIPT_FLAG = 1
+_SUPERSCRIPT_REF_RE = re.compile(r"^\s*(\d{1,2})\s*$")
 
 
 def _md_line(style_runs: list[list]) -> str:
@@ -147,6 +160,117 @@ _CROP_RENDER_DPI = 180
 _TILE_EDGE_GAP = 3.0
 _TILE_OVERLAP_MIN = 0.7
 
+# ---------------------------------------------------------------- ruled tables
+
+# Only PyMuPDF's "lines" strategy is trusted here: it keys off rules actually
+# drawn on the page, so it finds the real ruled tables (distribution tables,
+# map schedules) and stays quiet elsewhere. The "text" strategy infers columns
+# from whitespace, which on typewriter-transcribed documents turns whole pages
+# of indented prose into 50-row grids — checked against the Vietnam annexes,
+# where it fired on every hanging-indent page. Whitespace columns are handled
+# as text (see COLUMN_GAP_RE in polish) rather than as tables.
+_TABLE_MIN_ROWS = 2
+_TABLE_MIN_COLS = 2
+# Fraction of a text block's area that must sit inside a table's bbox before
+# we treat that block as cell content already captured by the table.
+_TABLE_CONTAINMENT = 0.6
+
+
+def _key_notes_by_printed_number(footnotes_all: list[dict]) -> None:
+    """Renumber notes to the number the document PRINTS beside them.
+
+    Notes are collected page by page and numbered sequentially as found, but a
+    reference in the prose carries the printed number. The two agree only
+    while every definition is detected — one note missed at the foot of a page
+    and every later reference resolves to its neighbour instead (checked
+    against Vietnam Part 2, where two missed definitions shifted 26 of them).
+    Keying on the printed number makes each reference exact and turns a missed
+    definition into a single orphan rather than a cascade.
+
+    Notes whose number wasn't printed (or was swallowed into their text) are
+    parked above the highest printed number, where they can't collide. If the
+    printed numbers aren't a clean ascending run — per-page numbering, say —
+    the sequential ids stand."""
+    printed = [fn.get("local_num") for fn in footnotes_all]
+    numbered = [n for n in printed if isinstance(n, int) and n >= 1]
+    if not numbered or numbered != sorted(set(numbered)):
+        return
+    spare = max(numbered) + 1
+    for fn in footnotes_all:
+        n = fn.get("local_num")
+        if isinstance(n, int) and n >= 1:
+            fn["n"] = n
+        else:
+            fn["n"] = spare
+            spare += 1
+
+
+_MARKER_PLACEHOLDER_RE = re.compile(r"\[\^#(\d+)\]")
+
+
+def _resolve_marker_placeholders(body: list[dict], footnotes_all: list[dict]) -> None:
+    """Turn each `[^#index]` placeholder into the note's final `[^n]`."""
+    def repl(match: re.Match) -> str:
+        idx = int(match.group(1))
+        if idx >= len(footnotes_all):
+            return ""
+        return f"[^{footnotes_all[idx]['n']}]"
+
+    for entry in body:
+        if "kind" in entry and entry.get("text"):
+            entry["text"] = _MARKER_PLACEHOLDER_RE.sub(repl, entry["text"])
+
+
+def _unbind_unknown_refs(body: list[dict], known_ns: set[int]) -> None:
+    """Turn `[^N]` back into a bare `N` where no footnote N exists.
+
+    Superscript detection is formatting-based, so it also catches a raised
+    digit that is not a reference at all (an exponent, the ring of a degree
+    sign). Those numbers have no footnote behind them; left as markers they
+    would render as broken references."""
+    def repl(match: re.Match) -> str:
+        n = int(match.group(1))
+        return match.group(0) if n in known_ns else str(n)
+
+    for entry in body:
+        if "kind" in entry and entry.get("text"):
+            entry["text"] = re.sub(r"\[\^(\d{1,2})\]", repl, entry["text"])
+
+
+def _find_ruled_tables(page) -> list[dict]:  # noqa: ANN001
+    """Ruled tables on `page` as {"bbox", "rows"}, rows being lists of cell
+    strings. Cells spanned by a merged header come back as None from PyMuPDF
+    and are normalised to "" so every row is positionally addressable."""
+    try:
+        finder = page.find_tables(strategy="lines")
+    except Exception:  # pragma: no cover - PyMuPDF guards its own parser
+        return []
+    out: list[dict] = []
+    for table in finder.tables:
+        try:
+            raw = table.extract()
+        except Exception:  # pragma: no cover
+            continue
+        rows = [[" ".join((cell or "").split()) for cell in row] for row in raw]
+        if len(rows) < _TABLE_MIN_ROWS:
+            continue
+        if max((len(r) for r in rows), default=0) < _TABLE_MIN_COLS:
+            continue
+        if not any(any(cell for cell in row) for row in rows):
+            continue
+        out.append({"bbox": tuple(table.bbox), "rows": rows})
+    return out
+
+
+def _bbox_inside(inner: tuple, outer: tuple) -> bool:
+    """True when ≥ _TABLE_CONTAINMENT of `inner`'s area falls inside `outer`."""
+    ix0, iy0, ix1, iy1 = inner
+    ox0, oy0, ox1, oy1 = outer
+    overlap_w = max(0.0, min(ix1, ox1) - max(ix0, ox0))
+    overlap_h = max(0.0, min(iy1, oy1) - max(iy0, oy0))
+    area = max((ix1 - ix0) * (iy1 - iy0), 1e-6)
+    return (overlap_w * overlap_h) / area >= _TABLE_CONTAINMENT
+
 
 def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
     path = path.resolve()
@@ -159,6 +283,11 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
     images_by_hash: dict[str, ImageRef] = {}
     detected_captions: dict[int, str] = {}
     footnotes_all: list[dict] = []
+    # Footnote numbers seen as real superscript spans in the prose. Non-empty
+    # means the source kept its reference formatting, so the legacy
+    # digit-glued-to-word guess is not needed (and must not run — it invents
+    # references out of "GSO2", "WO1", "UH1").
+    superscript_refs: set[int] = set()
     order = 0
 
     sizes = _collect_font_sizes(doc)
@@ -214,8 +343,23 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                 # emphasis (upstream discarded them — reported by Chris,
                 # 11 Jun 2026). Adjacent same-style spans merge first.
                 style_runs: list[list] = []  # [text, (italic, bold)]
-                for span in line.get("spans", []):
+                for span_idx, span in enumerate(line.get("spans", [])):
                     span_text = span.get("text", "") or ""
+                    # A superscript digit span is a footnote reference —
+                    # convert it to the canonical marker here, where the
+                    # formatting is still visible. Skipped at span_idx 0:
+                    # a line that OPENS with the number is a footnote
+                    # DEFINITION ("4  MACV – Military Assistance…"), which
+                    # the footnote splitter parses from the bare digit.
+                    ref = _SUPERSCRIPT_REF_RE.match(span_text)
+                    if (
+                        span_idx > 0
+                        and ref
+                        and int(span.get("flags", 0)) & _SUPERSCRIPT_FLAG
+                        and int(ref.group(1)) >= 1
+                    ):
+                        span_text = f"[^{int(ref.group(1))}]"
+                        superscript_refs.add(int(ref.group(1)))
                     line_pieces.append(span_text)
                     sz = float(span.get("size", 0) or 0)
                     if sz > 0:
@@ -284,6 +428,22 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                 "line_records": block_line_records,
             })
 
+        # 2a) Lift ruled tables out first — BEFORE heading/footnote splitting,
+        #     so cell text can't be promoted to a section heading or mistaken
+        #     for a footnote, and so the run-on paragraph that a flattened
+        #     table would otherwise produce never gets built. The blocks and
+        #     lines the table covers are its own cells: drop them.
+        page_tables = _find_ruled_tables(page)
+        if page_tables:
+            raw_text_blocks = [
+                tb for tb in raw_text_blocks
+                if not any(_bbox_inside(tb["bbox"], t["bbox"]) for t in page_tables)
+            ]
+            page_lines = [
+                ln for ln in page_lines
+                if not any(_bbox_inside(ln["bbox"], t["bbox"]) for t in page_tables)
+            ]
+
         # 2a-bis) Promote bold-short lines to heading blocks. Many PDFs (the
         #         Vietnam memoir is one) use Arial,Bold at body size for
         #         section heads inline with the body block, so the font-size
@@ -303,7 +463,7 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
         #     the bottom band?" test skips it and the footnote is buried.
         raw_text_blocks = _split_footnote_lines(
             raw_text_blocks, page_height, footnote_size_max,
-            footnotes_all, page_idx,
+            footnotes_all, page_idx, superscript_refs,
         )
 
         # 2c) Skip TOC pages outright — the first remaining heading-style
@@ -315,11 +475,14 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
             if first_text in _TOC_MARKERS or head_word in _TOC_MARKERS:
                 raw_text_blocks = []
                 page_lines = []
+                page_tables = []
 
         # 3) Resolve image extraction + caption detection together.
         consumed_text_ids: set[int] = set()
         consumed_line_keys: set[tuple[int, int]] = set()
         page_items: list[tuple[float, dict]] = []
+        for table in page_tables:
+            page_items.append((table["bbox"][1], {"table_rows": table["rows"]}))
         for bbox, xrefs in page_images:
             if len(xrefs) == 1:
                 ext, data, h = _extract_image_respecting_crop(doc, page, xrefs[0], bbox)
@@ -389,6 +552,14 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
                     li = rec.get("li")
                     if li is not None and (block_idx, li) in consumed_line_keys:
                         continue
+                    # NotebookForge divergence: PyMuPDF merges a whole run of
+                    # evenly-spaced lines into one block, which on a numbered
+                    # operation order means every item of a sequence lands in
+                    # a single paragraph. A line that opens an item, or that
+                    # is a whitespace-aligned column row, starts a new one —
+                    # the layout is the structure in these documents.
+                    if groups[-1] and is_structural_line(rec["text"]):
+                        groups.append([])
                     groups[-1].append(rec)
             groups = [g for g in groups if g]
 
@@ -449,21 +620,34 @@ def extract_pdf(path: Path, session_media_dir: Path) -> DocumentDraft:
     # Standfirst: PDF metadata 'subject' field, if present.
     detected_standfirst = (metadata.get("subject") or "").strip()
 
+    # Every page has been read, so the document's own footnote numbering is
+    # now visible: key the notes to it, then point the deferred markers at
+    # their notes' final numbers.
+    _key_notes_by_printed_number(footnotes_all)
+    _resolve_marker_placeholders(body, footnotes_all)
+
     # Final pass: catch footnotes the geometry-based detector missed
     # (mid-page footnotes, body-size font, etc.) that got merged into
     # the tail of a paragraph. See _split_orphan_footnotes for details.
-    _split_orphan_footnotes(body, footnotes_all)
+    _split_orphan_footnotes(body, footnotes_all, superscript_refs)
 
-    # Bind in-body references to the canonical `[^N]` marker. PyMuPDF
-    # flattens a superscript footnote digit against its word (`Vietnam1`);
-    # convert those to `[^N]` for every number that actually has a
-    # footnote, so the body carries the same position markers as the docx
-    # path. Numbers without a footnote (years, counts) are left untouched.
-    from .footnotes import bind_legacy_digit_refs
     known_ns = {int(fn["n"]) for fn in footnotes_all if "n" in fn}
-    for entry in body:
-        if "kind" in entry and entry.get("text"):
-            entry["text"] = bind_legacy_digit_refs(entry["text"], known_ns)
+    if superscript_refs:
+        # The source kept its reference formatting, so the markers are already
+        # in place and exact. All that's left is to undo the ones that point
+        # at no footnote — a superscript digit used as an exponent or a degree
+        # sign — putting the bare number back.
+        _unbind_unknown_refs(body, known_ns)
+    else:
+        # No superscript survived extraction (older scans flatten it), so fall
+        # back to the guess: a footnote digit run together with its word,
+        # `Vietnam1`. Only numbers that actually have a footnote bind, and
+        # only in paragraphs — a heading's trailing digit is part of its label
+        # ("ANNEX B1" was becoming "ANNEX B[^1]").
+        from .footnotes import bind_legacy_digit_refs
+        for entry in body:
+            if entry.get("kind") == "p" and entry.get("text"):
+                entry["text"] = bind_legacy_digit_refs(entry["text"], known_ns)
 
     # Rebuild the text-only blocks view after the body mutation above.
     blocks = [TextBlock(kind=b["kind"], text=b["text"])
@@ -492,6 +676,7 @@ def _split_footnote_lines(
     footnote_size_max: float,
     footnotes_all: list[dict],
     page_idx: int,
+    superscript_refs: set[int],
 ) -> list[dict]:
     """Lift footnotes off the bottom of each block at the LINE level.
 
@@ -510,6 +695,11 @@ def _split_footnote_lines(
     if footnote_size_max <= 0:
         return raw_text_blocks
     band_y = page_height * _FOOTNOTE_BAND_FRAC
+    # Highest number printed beside a note so far. Footnote numbering only
+    # ever climbs, so a smaller one means the lead digit belongs to the note's
+    # TEXT, not to its marker — "1 ATF Artillery on the southern perimeter."
+    # is a note about 1 ATF, not footnote 1.
+    last_printed = max((f.get("local_num") or 0) for f in footnotes_all) if footnotes_all else 0
     out: list[dict] = []
 
     for tb in raw_text_blocks:
@@ -549,11 +739,15 @@ def _split_footnote_lines(
             nonlocal cur_num, cur_lines
             if cur_num is not None:
                 body = " ".join(cur_lines).strip()
+                printed: int | None = cur_num
+                if cur_num <= last_printed:
+                    printed = None          # the digit was part of the text
+                    body = f"{cur_num} {body}".strip()
                 if len(body) >= 6:
                     footnotes_all.append({
                         "n": len(footnotes_all) + 1,
                         "page": page_idx + 1,
-                        "local_num": cur_num,
+                        "local_num": printed,
                         "text": body,
                         # Geometry/font heuristic — flag for operator review.
                         "confidence": "low",
@@ -579,11 +773,19 @@ def _split_footnote_lines(
                 cur_lines.append(text)
         _flush()
 
-        if not any(r.get("text") for r in body_recs):
-            # Block was footnote-only — drop it, but the [^n] marker has
-            # nowhere to attach. Leave the note as-is; the global validate/
-            # renumber pass will surface it if it ends up unreferenced.
-            continue
+        footnote_only = not any(r.get("text") for r in body_recs)
+        if footnote_only:
+            # Nothing above the note in THIS block to hang the marker on, so
+            # fall back to the last prose already collected for the page. An
+            # unreferenced note is dropped outright by the renumber pass, and
+            # a note at the foot of a page belongs to the text above it.
+            prev = next(
+                (b for b in reversed(out) if any(r.get("text") for r in b.get("line_records") or [])),
+                None,
+            )
+            if prev is None:
+                continue
+            body_recs = prev["line_records"]
 
         # Append the canonical marker(s) to the LAST non-blank body line so the
         # note co-locates here, stripping the flattened superscript digit the
@@ -592,8 +794,21 @@ def _split_footnote_lines(
         # are the paragraph breaks, and the downstream rebuild needs them to
         # split the body into separate paragraphs. Flattening here merged every
         # paragraph above a footnote into one (reported by Chris, 15 Jun 2026).
+        # Skip the ones whose reference was already found for real: this
+        # append is a POSITION GUESS (marker goes at the end of the paragraph
+        # above the note). When the source kept its superscript formatting the
+        # marker is already sitting at the exact word it belongs to, and
+        # appending here would add a second reference to the same note.
+        lifted_nums = [
+            n for n in lifted_nums
+            if footnotes_all[n - 1].get("local_num") is None
+            or footnotes_all[n - 1].get("local_num") not in superscript_refs
+        ]
         if lifted_nums:
-            marker = "".join(f"[^{n}]" for n in lifted_nums)
+            # Placeholder, not the number itself: note ids are reconciled
+            # against the document's own numbering once every page has been
+            # read, and this marker has to follow its note there.
+            marker = "".join(f"[^#{n - 1}]" for n in lifted_nums)
             first_local = footnotes_all[lifted_nums[0] - 1].get("local_num")
             for r in reversed(body_recs):
                 if not r.get("text"):
@@ -608,6 +823,15 @@ def _split_footnote_lines(
                 r["text"] = r["text"] + marker
                 r["md_text"] = r["md_text"] + marker
                 break
+
+        if footnote_only:
+            # body_recs belongs to an earlier block, already in `out`; the
+            # marker was appended in place. This block held nothing but the
+            # note itself, so there is nothing to emit.
+            prev["text"] = " ".join(
+                r["text"] for r in body_recs if r.get("text")
+            ).strip()
+            continue
 
         nb = dict(tb)
         nb["line_records"] = body_recs
@@ -643,7 +867,7 @@ _ORPHAN_FOOTNOTE_TAIL_RE = re.compile(
 
 
 def _split_orphan_footnotes(
-    body: list[dict], footnotes_all: list[dict],
+    body: list[dict], footnotes_all: list[dict], superscript_refs: set[int],
 ) -> None:
     """Detect paragraph tails that look like a merged-in footnote and
     split them out into a new footnote entry.
@@ -683,6 +907,14 @@ def _split_orphan_footnotes(
         # operator may have intentionally placed the digit there.
         if digit in known_ns:
             continue
+        # …and it has to be a plausible NEXT number for this document: a
+        # footnote either fills a gap in the sequence or extends it by one.
+        # A digit far beyond the sequence is not a reference at all — it is
+        # part of the prose. ("…detail work to be done. 24 Construction
+        # Squadron assisted with support personnel…" is a unit name, and this
+        # pass was carving a footnote out of it.)
+        if digit > max(known_ns, default=0) + 1:
+            continue
 
         prose = match.group("prose")
         # Insert a canonical `[^N]` marker immediately after the last
@@ -694,8 +926,13 @@ def _split_orphan_footnotes(
             i -= 1
         if i < 0:
             continue  # no letter to attach to (very unusual)
-        new_text = prose[:i + 1] + f"[^{digit}]" + prose[i + 1:]
-        entry["text"] = new_text
+        # Insert the marker only if the source didn't already give us a real
+        # one. When the superscript survived, the reference is already at the
+        # right word elsewhere in the document and the note here is simply a
+        # DEFINITION the geometry pass missed — adding a second marker would
+        # invent a second reference to it.
+        if digit not in superscript_refs:
+            entry["text"] = prose[:i + 1] + f"[^{digit}]" + prose[i + 1:]
 
         # Use the digit as the n if free; otherwise fall back to a fresh
         # sequential id. The marker number must equal n for the ref to

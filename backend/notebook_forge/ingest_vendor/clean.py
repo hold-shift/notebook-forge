@@ -17,6 +17,8 @@ leave the body alone — there's nothing safe to identify as preamble.
 
 from __future__ import annotations
 
+import re
+
 from .model import DocumentDraft, TextBlock
 from .polish import polish_body
 
@@ -37,6 +39,15 @@ def normalise(draft: DocumentDraft) -> DocumentDraft:
     # splitter even though caption detection already claimed it). Drop the
     # body copy — the caption belongs under the figure, not as a section head.
     _dedupe_caption_headings(draft)
+    # Annex/chapter documents put a divider page before each section, then
+    # repeat the same label and title on the section's first real page. Drop
+    # the echo, then level the outline so the section LABEL is the parent of
+    # its title rather than the other way round.
+    _dedupe_repeated_headings(draft)
+    _promote_section_labels(draft)
+    # A ruled table broken over a page boundary arrives as two adjacent table
+    # entries; stitch them back into one before rendering.
+    draft.body = _merge_table_continuations(draft.body)
     draft.body = polish_body(draft.body)
     # Global, deterministic footnote pass on the canonical [^N] model:
     # gap-free 1..N by first reference, drop notes never referenced. Runs
@@ -72,6 +83,13 @@ def _strip_front_matter(draft: DocumentDraft) -> None:
     if any(e.get("kind") in ("h2", "h3") for e in draft.body[:cut]):
         # Real sections precede the first H1 — not a title-block boundary.
         return
+    # A cover page typeset in one large face extracts as SEVERAL consecutive
+    # H1s (title, subtitle, date, "ANNEXES A - N"). They're all front matter:
+    # cutting at the first would leave the rest to be demoted to H2 and
+    # pollute the outline with title fragments. Extend the cut across the
+    # whole leading run of H1s — anything that isn't an H1 ends it.
+    while cut + 1 < len(draft.body) and draft.body[cut + 1].get("kind") == "h1":
+        cut += 1
     # Preserve image refs that appear in the front matter — they're real
     # content and we don't want to silently lose figures whose ordering
     # placed them before the main heading. (Rare but worth being safe.)
@@ -115,6 +133,164 @@ def _demote_extra_h1s(draft: DocumentDraft) -> None:
             seen_h1 = True
         new_body.append(entry)
     draft.body = new_body
+
+
+# ---------------------------------------------------------------- outline repair
+
+_HEADING_KINDS = ("h1", "h2", "h3")
+
+# A bare section label: "ANNEX H-1", "APPENDIX D", "PART II", "CHAPTER 4".
+# Deliberately narrow — the whole heading must be the label, so a real title
+# that merely opens with the word ("Annex A to Operation Order 2/66") is left
+# where the extractor put it.
+_SECTION_LABEL_RE = re.compile(
+    r"^(?:ANNEX|APPENDIX|CHAPTER|PART|SECTION)\s+[A-Z0-9][A-Z0-9\-–]*\.?$",
+    re.IGNORECASE,
+)
+
+
+def _label_key(text: str) -> str:
+    """Comparison key for section LABELS, ignoring the punctuation that drifts
+    between a divider page and the section's own first page: the same annex is
+    lettered 'ANNEX B1' on one and 'ANNEX  B-1' on the other."""
+    return re.sub(r"[^a-z0-9]", "", (text or "").casefold())
+
+
+def _heading_key(text: str) -> str:
+    """Comparison key for 'is this the same heading?' — whitespace collapsed
+    (scanned labels vary between 'ANNEX B-1' and 'ANNEX  B-1'), case-folded,
+    trailing punctuation dropped."""
+    return " ".join((text or "").split()).casefold().strip(".,;:–—-")
+
+
+def _dedupe_repeated_headings(draft: DocumentDraft) -> None:
+    """Drop a heading that repeats an earlier one in the same unbroken run.
+
+    Annexed documents carry a divider page — annex label plus title, no body —
+    immediately before the annex's first real page, which prints the same
+    label and title again above the text. Extraction faithfully emits both, so
+    every annex heading appears twice and the site ToC doubles. Inside a run of
+    consecutive headings there is no content to separate the two, so a repeat
+    is the divider echo and never a genuine second section."""
+    body = draft.body
+    drop: set[int] = set()
+
+    # Pass 1 — the LABEL. A section label that repeats with no other label
+    # between the two occurrences is the divider's echo. Intervening content
+    # is ignored here on purpose: the divider page often carries a one-line
+    # note ("Letter to HQ AFV") that would otherwise break the run.
+    last_label = ""
+    for i, entry in enumerate(body):
+        if entry.get("kind") not in _HEADING_KINDS:
+            continue
+        text = (entry.get("text") or "").strip()
+        if not _SECTION_LABEL_RE.match(text):
+            continue
+        key = _label_key(text)
+        if key and key == last_label:
+            drop.add(i)
+        else:
+            last_label = key
+
+    # Pass 2 — the TITLE. Inside an unbroken run of headings there is no
+    # content to separate two identical ones, so the later is the echo.
+    seen_in_run: set[str] = set()
+    for i, entry in enumerate(body):
+        if i in drop:
+            continue        # already-dropped label doesn't break the run
+        if entry.get("kind") not in _HEADING_KINDS:
+            seen_in_run.clear()
+            continue
+        key = _heading_key(entry.get("text", ""))
+        if key and key in seen_in_run:
+            drop.add(i)
+        else:
+            seen_in_run.add(key)
+
+    if drop:
+        draft.body = [e for i, e in enumerate(body) if i not in drop]
+        _sync_blocks(draft)
+
+
+def _promote_section_labels(draft: DocumentDraft) -> None:
+    """Make a bare section label the parent of the title that follows it.
+
+    Heading LEVEL comes from page geometry: centred + all-caps reads as
+    top-level, everything else as a sub-head. On an annexed document that
+    inverts the outline — the annex label sits right-aligned in the corner
+    (→ h3) while the annex title is centred (→ h2), so the site ToC nests
+    each annex under its own title. Force the label to h2 and demote the
+    heading run beneath it to h3."""
+    changed = False
+    body = draft.body
+    for i, entry in enumerate(body):
+        if entry.get("kind") not in _HEADING_KINDS:
+            continue
+        if not _SECTION_LABEL_RE.match((entry.get("text") or "").strip()):
+            continue
+        if entry["kind"] != "h2":
+            entry["kind"] = "h2"
+            changed = True
+        for follower in body[i + 1:]:
+            if follower.get("kind") not in _HEADING_KINDS:
+                break
+            if follower["kind"] != "h3":
+                follower["kind"] = "h3"
+                changed = True
+    if changed:
+        _sync_blocks(draft)
+
+
+def _sync_blocks(draft: DocumentDraft) -> None:
+    draft.blocks = [
+        TextBlock(kind=e["kind"], text=e["text"])
+        for e in draft.body if "kind" in e
+    ]
+
+
+# ---------------------------------------------------------------- table stitching
+
+
+def _is_continuation_row(row: list[str]) -> bool:
+    """A row whose leading cells are blank but which carries text further
+    right — the tail of the row that ran off the bottom of the previous page."""
+    return bool(row) and not row[0].strip() and any(c.strip() for c in row)
+
+
+def _merge_table_continuations(body: list[dict]) -> list[dict]:
+    """Fold a table that continues on the next page back into the first.
+
+    Each page is extracted independently, so a long ruled table (the annex
+    map schedule runs to two pages) arrives as two adjacent table entries
+    with nothing between them. Same column count plus adjacency is the
+    signal; a leading blank-first-cell row is the split row's tail and gets
+    appended onto the previous table's last row rather than standing alone."""
+    out: list[dict] = []
+    for entry in body:
+        prev = out[-1] if out else None
+        if (
+            "table_rows" in entry
+            and prev is not None
+            and "table_rows" in prev
+            and _table_width(prev["table_rows"]) == _table_width(entry["table_rows"])
+        ):
+            rows = [list(r) for r in entry["table_rows"]]
+            if rows and prev["table_rows"] and _is_continuation_row(rows[0]):
+                tail = rows.pop(0)
+                last = prev["table_rows"][-1]
+                prev["table_rows"][-1] = [
+                    " ".join(p for p in (last[i] if i < len(last) else "",
+                                         tail[i] if i < len(tail) else "") if p).strip()
+                    for i in range(max(len(last), len(tail)))
+                ]
+            prev["table_rows"].extend(rows)
+            continue
+        out.append(entry)
+    return out
+
+
+def _table_width(rows: list[list[str]]) -> int:
+    return max((len(r) for r in rows), default=0)
 
 
 # ---------------------------------------------------------------- caption dedupe

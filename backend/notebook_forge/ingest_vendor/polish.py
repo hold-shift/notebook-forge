@@ -54,6 +54,35 @@ def fix_smart_quotes(text: str) -> str:
 _SENTENCE_TERMINATORS = set(".?!…:")
 _CLOSING_PUNCT = set("\"'’”)]}")
 
+# An enumerator opening a paragraph: "1.", "3.EXEC", "a.", "(b)", "(iv)",
+# "(12)". Closing punctuation is required for the letter/roman forms so a
+# stray word can't look like an item marker.
+ENUMERATOR_RE = re.compile(
+    r"""^\s*(?:
+          \(\s*[0-9]{1,2}\s*\)        # (1)
+        | \(\s*[A-Za-z]\s*\)          # (a)
+        | \(\s*[ivxIVX]{1,5}\s*\)     # (iv)
+        | [0-9]{1,2}\.(?!\d)          # 1.   — but not a decimal like 1.5
+        | [A-Za-z]\.\s                # a.
+    )""",
+    re.VERBOSE,
+)
+
+# Two or more runs of text separated by ≥3 spaces: a whitespace-aligned
+# column, not prose. Typewriter-set documents use these for label/value pairs
+# ("Lighthouse ecce      4 arcs"), and folding them into the surrounding
+# sentence destroys the pairing.
+COLUMN_GAP_RE = re.compile(r"\S {3,}\S")
+
+
+def is_structural_line(text: str) -> bool:
+    """True when a line's own layout carries meaning — it opens a numbered
+    item, or it is a whitespace-aligned column row. Such a line always starts
+    its own paragraph and never absorbs the one after it."""
+    if not text:
+        return False
+    return bool(ENUMERATOR_RE.match(text) or COLUMN_GAP_RE.search(text))
+
 
 def _is_broken_break(cur: str, nxt: str) -> bool:
     # NotebookForge divergence: Markdown emphasis markers from the
@@ -65,6 +94,18 @@ def _is_broken_break(cur: str, nxt: str) -> bool:
         return False
     last = cur_end[-1]
     if last in _SENTENCE_TERMINATORS or last in _CLOSING_PUNCT:
+        return False
+    # NotebookForge divergence: transcribed operation orders are written in
+    # terse clauses that rarely end in a full stop, so the "no terminator →
+    # it must be a page-break split" assumption glues whole numbered
+    # sequences into one paragraph. Two guards, deliberately asymmetric:
+    #   - the NEXT paragraph opening an item, or being a column row, means
+    #     the break is deliberate layout;
+    #   - the CURRENT one being a column row means it is a table line that
+    #     must not swallow the prose beneath it.
+    # A wrapped item split by a page break still merges, because an item's
+    # continuation is neither enumerated nor column-aligned.
+    if COLUMN_GAP_RE.search(cur_end) or is_structural_line(nxt_start):
         return False
     # `; — – ,` and bare letters all count as broken. Be lenient.
     return True
@@ -99,7 +140,7 @@ def polish_body(body: list[dict]) -> list[dict]:
     """Apply the second-pass clean steps in order: quotes, then rejoin."""
     polished: list[dict] = []
     for entry in body:
-        if "image_ref" in entry:
+        if "image_ref" in entry or "table_rows" in entry:
             polished.append(entry)
         else:
             polished.append({

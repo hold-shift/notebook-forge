@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html as html_mod
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -282,12 +283,48 @@ def _merge_narrative(body: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+# A bare quantity — "10", "1,250", "12.5". Deliberately excludes forms like
+# "1:5,000", which is a map scale used as a column LABEL, not a data value.
+_NUMERIC_CELL_RE = re.compile(r"^\d{1,3}(?:,\d{3})*(?:\.\d+)?$")
+
+
+def _cells(row: dict[str, Any]) -> list[str]:
+    return [inline_text(c.get("content")).strip() for c in row.get("cells", [])]
+
+
+def _looks_like_header(rows: list[dict[str, Any]]) -> bool:
+    """Treat the first row as column labels unless it reads as data.
+
+    Ruled tables in scanned documents nearly always open with a header row, so
+    the test is for the exception: a bare quantity in the row (that's a value,
+    not a label), or barely any cells filled — the shape of a table continued
+    from the previous page, which opens mid-record."""
+    if len(rows) < 2:
+        return False
+    filled = [c for c in _cells(rows[0]) if c]
+    return len(filled) >= 2 and not any(_NUMERIC_CELL_RE.match(c) for c in filled)
+
+
 def _table_html(block: dict[str, Any]) -> str:
-    rows_html = []
-    for row in (block.get("content") or {}).get("rows", []):
-        cells = "".join(f"<td>{inline_html(c.get('content'))}</td>" for c in row.get("cells", []))
-        rows_html.append(f"<tr>{cells}</tr>")
-    return "<table>" + "".join(rows_html) + "</table>"
+    rows = (block.get("content") or {}).get("rows", [])
+    header = _looks_like_header(rows)
+
+    def row_html(row: dict[str, Any], tag: str) -> str:
+        cells = "".join(
+            f"<{tag}>{inline_html(c.get('content'))}</{tag}>"
+            for c in row.get("cells", [])
+        )
+        return f"<tr>{cells}</tr>"
+
+    parts = []
+    if header:
+        parts.append("<thead>" + row_html(rows[0], "th") + "</thead>")
+        body_rows = rows[1:]
+    else:
+        body_rows = rows
+    parts.append("<tbody>" + "".join(row_html(r, "td") for r in body_rows) + "</tbody>")
+    # Wide tables scroll inside their own box rather than forcing the page to.
+    return '<div class="table-wrap"><table>' + "".join(parts) + "</table></div>"
 
 
 def build_jsonld(meta: dict[str, Any]) -> str:

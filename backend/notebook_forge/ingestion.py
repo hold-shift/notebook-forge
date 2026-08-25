@@ -33,6 +33,30 @@ DEFAULT_AUTHOR = "R.F. Skitch"
 DEFAULT_OVERLINE = "The Skitch Family Archive · Family History"
 
 
+def table_block(rows: list[list[str]]) -> dict[str, Any]:
+    """A BlockNote `table` block from extracted cell strings.
+
+    Block shape matches parser._parse_table so an ingested table and one read
+    back out of a published page are the same tree. Rows are padded to a
+    common width — PDF tables with merged header cells come back short, and
+    the renderer addresses cells positionally."""
+    width = max((len(row) for row in rows), default=0)
+    out_rows = []
+    for row in rows:
+        cells = []
+        for i in range(width):
+            text = row[i].strip() if i < len(row) else ""
+            cells.append(
+                {
+                    "type": "tableCell",
+                    "content": _md_inline_runs(text) if text else [],
+                    "props": {},
+                }
+            )
+        out_rows.append({"cells": cells})
+    return make_block("table", content={"type": "tableContent", "rows": out_rows})
+
+
 def draft_to_blocks(
     draft, session: Session, workspace: Path, media_dir: Path  # noqa: ANN001
 ) -> list[dict[str, Any]]:
@@ -74,6 +98,11 @@ def draft_to_blocks(
                     },
                 )
             )
+            continue
+        if "table_rows" in entry:
+            rows = entry.get("table_rows") or []
+            if rows:
+                blocks.append(table_block(rows))
             continue
         kind = entry.get("kind", "p")
         text = (entry.get("text") or "").strip()
