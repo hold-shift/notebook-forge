@@ -25,6 +25,11 @@ class PublishBundle:
     slug: str
     html: str
     assets: list[BundleAsset] = field(default_factory=list)
+    # Files written at the TARGET ROOT under an explicit relative path
+    # (attachments: the operator controls the folder, so they escape the
+    # per-document assets dir). `name` is a site-root-relative path, which
+    # may contain slashes.
+    root_assets: list[BundleAsset] = field(default_factory=list)
     # Site-root artefacts regenerated with every publish (index.html,
     # catalogue.json, sitemap.xml, robots.txt, llms.txt). Written at the
     # TARGET ROOT, not inside the documents subdir.

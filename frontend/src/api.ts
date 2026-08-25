@@ -215,6 +215,22 @@ export const api = {
       body: form,
     }).then((r) => json<{ assetId: string }>(r))
   },
+  uploadAttachment: (slug: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`/api/documents/${slug}/attachments/upload`, {
+      method: 'POST',
+      body: form,
+    }).then((r) =>
+      json<{
+        assetId: string
+        filename: string
+        mime: string
+        sizeBytes: number
+        warning: string
+      }>(r),
+    )
+  },
   uploadFigureSketch: (slug: string, blockId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)

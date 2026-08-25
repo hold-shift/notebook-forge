@@ -10,17 +10,53 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import services
 from ..assets import asset_path
-from ..blocks import FORGE_IMAGE
+from ..blocks import (
+    FORGE_ATTACHMENT,
+    FORGE_IMAGE,
+    RESERVED_ROOT_FILES,
+    attachment_published_path,
+)
 from ..models import Asset, Document, Snapshot, Target
 from ..renderer import render_document
 from .base import BundleAsset, PublishBundle, PublishTarget
 from .drive import DriveTarget, MockDriveClient
 from .git_pages import GitPagesTarget
 from .local_folder import LocalFolderTarget
+
+
+def _attachment_path(props: dict[str, Any]) -> str:
+    """The site-root-relative path one attachment block publishes to."""
+    return attachment_published_path(
+        str(props.get("name", "")),
+        str(props.get("filename", "")),
+        str(props.get("path", "")),
+    )
+
+
+def attachment_paths_in_use(
+    session: Session, exclude_doc_id: int | None = None
+) -> dict[str, str]:
+    """{published path: document title} for every OTHER document's attachments.
+
+    Two documents pointing at the same path would silently overwrite each
+    other's file on the site, and the loser would only be noticed as a wrong
+    download — so a publish refuses instead."""
+    used: dict[str, str] = {}
+    for other in session.scalars(select(Document)).all():
+        if other.id == exclude_doc_id or other.kind == "homepage":
+            continue
+        for block in other.blocks or []:
+            if block.get("type") != FORGE_ATTACHMENT:
+                continue
+            used.setdefault(
+                _attachment_path(block.get("props", {})), other.title or other.slug
+            )
+    return used
 
 
 def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBundle:
@@ -67,6 +103,53 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
         ext = ext_for_asset.get(asset_id, ".jpeg")
         return f"{slug}_assets/figure-{n}-original{ext}"
 
+    # Attachments (PDFs and other documents) are published at a path the
+    # operator controls, relative to the SITE root — not inside the document's
+    # assets dir — so they get their own bundle list and absolute links.
+    from ..collection import pages_base_url
+
+    base_url = pages_base_url(session)
+    root_assets: list[BundleAsset] = []
+    paths: dict[str, str] = {}
+    taken = attachment_paths_in_use(session, exclude_doc_id=doc.id)
+
+    for block in doc.blocks:
+        if block.get("type") != FORGE_ATTACHMENT:
+            continue
+        props = block.get("props", {})
+        published = _attachment_path(props)
+        label = str(props.get("name", "")) or str(props.get("filename", "")) or published
+        if published in RESERVED_ROOT_FILES:
+            raise PermissionError(
+                f"attachment '{label}' would publish as '{published}', which is one of "
+                "the site's own files — give it a different name or path."
+            )
+        if published in paths:
+            raise PermissionError(
+                f"attachments '{paths[published]}' and '{label}' would both publish to "
+                f"'{published}' — give one of them a different name or path."
+            )
+        if published in taken:
+            raise PermissionError(
+                f"attachment '{label}' would publish to '{published}', which is already "
+                f"used by the document '{taken[published]}' — give it a different name "
+                "or path."
+            )
+        paths[published] = label
+        asset = session.get(Asset, props.get("assetId") or "")
+        if asset is None:
+            continue
+        root_assets.append(
+            BundleAsset(
+                name=published, path=asset_path(workspace, asset), sha256=asset.sha256
+            )
+        )
+
+    def attachment_src(block: dict[str, Any], _n: int) -> str:
+        """Absolute URL: the file sits at the site root, while the page sits in
+        the pages subdir, and the same link has to work from the safe edition."""
+        return f"{base_url}/{_attachment_path(block.get('props', {}))}"
+
     # prev/next docnav is DERIVED from the catalogue's chronological order
     # at publish time, so a neighbour's title fix propagates on republish.
     from ..collection import nav_for
@@ -95,7 +178,6 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..collection import (
         doc_homepage_url,
         favicon_url,
-        pages_base_url,
         site_head_html,
     )
     meta["head_html"] = site_head_html(session)
@@ -117,8 +199,8 @@ def build_bundle(session: Session, workspace: Path, doc: Document) -> PublishBun
     from ..structured_data import build_context
     meta["seo"] = build_context(session, doc)
 
-    html = render_document(meta, doc.blocks, image_src)
-    return PublishBundle(slug=slug, html=html, assets=assets)
+    html = render_document(meta, doc.blocks, image_src, attachment_src)
+    return PublishBundle(slug=slug, html=html, assets=assets, root_assets=root_assets)
 
 
 def make_adapter(target: Target, workspace: Path) -> PublishTarget:

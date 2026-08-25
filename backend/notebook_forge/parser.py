@@ -127,6 +127,38 @@ def _parse_figure(fig: Tag) -> tuple[dict[str, Any], str]:
     return block, src
 
 
+def _parse_attachment(anchor: Tag) -> tuple[dict[str, Any], str]:
+    """``a.attachment`` -> forgeAttachment block + its href.
+
+    The published markup carries the exact byte size, MIME and operator-set
+    path as data attributes (the href is absolute and the visible meta line is
+    a derived, lossy label), so a re-render of the parsed block reproduces the
+    original HTML."""
+    href = anchor.get("href", "")
+    name_el = anchor.find("span", class_="att-name")
+    desc_el = anchor.find("span", class_="att-desc")
+    try:
+        size = int(anchor.get("data-size") or 0)
+    except ValueError:
+        size = 0
+    # The original upload filename isn't published; the href's basename carries
+    # the same extension, which is all the rendering depends on.
+    filename = href.rsplit("/", 1)[-1] if href else ""
+    block = make_block(
+        "forgeAttachment",
+        {
+            "assetId": "",
+            "name": _clean(name_el.get_text()) if name_el else "",
+            "description": _clean(desc_el.get_text()) if desc_el else "",
+            "filename": filename,
+            "mime": anchor.get("data-mime") or "",
+            "sizeBytes": size,
+            "path": anchor.get("data-path") or "",
+        },
+    )
+    return block, href
+
+
 def _parse_footnote(aside: Tag) -> dict[str, Any]:
     aside = BeautifulSoup(str(aside), "lxml").find("aside")
     marker = ""
@@ -183,6 +215,9 @@ def parse_article(article: Tag) -> tuple[list[dict[str, Any]], dict[str, str]]:
             blocks.append(block)
             if src:
                 images[block["id"]] = src
+        elif name == "a" and "attachment" in classes:
+            block, _href = _parse_attachment(el)
+            blocks.append(block)
         elif name == "aside" and "footnote" in classes:
             blocks.append(_parse_footnote(el))
         elif name == "blockquote":

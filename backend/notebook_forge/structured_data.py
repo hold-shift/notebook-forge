@@ -36,6 +36,18 @@ LANG = "en-AU"  # BCP-47 / html lang + inLanguage form
 _MAX_ABOUT = 12
 _MAX_MENTIONS = 30
 _MAX_TAGS = 8
+_MAX_ATTACHMENTS = 25
+
+
+@dataclass
+class AttachmentRef:
+    """One published attachment (PDF or other document) hanging off the page."""
+
+    name: str
+    url: str
+    description: str = ""
+    mime: str = ""
+    size_label: str = ""  # human form, e.g. "2.4 MB" (schema.org contentSize)
 
 
 @dataclass
@@ -75,6 +87,7 @@ class DocSeoContext:
     twitter_site: str = ""  # @handle (optional)
     twitter_creator: str = ""  # @handle (optional)
     year_display: str = ""  # e.g. "1934–1945", for the <title>
+    attachments: list[AttachmentRef] = field(default_factory=list)
 
 
 def page_title(title: str, year_display: str, site_title: str) -> str:
@@ -114,6 +127,40 @@ def _first_figure_image_url(session: Session, doc: Document, base_url: str) -> s
         slug = doc.meta.get("slug", doc.slug)
         return f"{base_url.rstrip('/')}/{PAGES_SUBDIR}/{slug}_assets/figure-1-original{ext}"
     return ""
+
+
+def attachment_refs(doc: Document, base_url: str) -> list[AttachmentRef]:
+    """The document's attachments as absolute-URL refs (plan §5 add-on).
+
+    URLs mirror the publish bundle exactly — the operator-set path relative to
+    the site root — so they resolve on the live site."""
+    from .blocks import FORGE_ATTACHMENT, attachment_published_path, format_bytes
+
+    base = base_url.rstrip("/")
+    refs: list[AttachmentRef] = []
+    n = 0
+    for block in doc.blocks:
+        if block.get("type") != FORGE_ATTACHMENT:
+            continue
+        n += 1
+        if len(refs) >= _MAX_ATTACHMENTS:
+            continue
+        props = block.get("props", {})
+        filename = str(props.get("filename", ""))
+        name = str(props.get("name", "")) or filename or f"Attachment {n}"
+        published = attachment_published_path(
+            str(props.get("name", "")), filename, str(props.get("path", ""))
+        )
+        refs.append(
+            AttachmentRef(
+                name=name,
+                url=f"{base}/{published}",
+                description=str(props.get("description", "")).strip(),
+                mime=str(props.get("mime", "")),
+                size_label=format_bytes(int(props.get("sizeBytes") or 0)),
+            )
+        )
+    return refs
 
 
 def build_context(
@@ -213,6 +260,7 @@ def build_context(
         twitter_site=(pub_cfg.get("twitter_site") or "").strip(),
         twitter_creator=(pub_cfg.get("twitter_creator") or "").strip(),
         year_display=meta.get("year_display", ""),
+        attachments=attachment_refs(doc, base),
     )
 
 
@@ -372,6 +420,29 @@ def _audio_object(ctx: DocSeoContext) -> dict[str, Any]:
     return obj
 
 
+def _attachment_nodes(ctx: DocSeoContext) -> list[dict[str, Any]]:
+    """One node per attachment: a DigitalDocument that is also the MediaObject
+    a crawler can fetch, so the annexes are discoverable in their own right."""
+    nodes: list[dict[str, Any]] = []
+    for i, att in enumerate(ctx.attachments, start=1):
+        node: dict[str, Any] = {
+            "@type": ["DigitalDocument", "MediaObject"],
+            "@id": f"{ctx.canonical_url}#attachment-{i}",
+            "name": att.name,
+            "url": att.url,
+            "contentUrl": att.url,
+            "isPartOf": {"@id": f"{ctx.canonical_url}#article"},
+        }
+        if att.description:
+            node["description"] = att.description
+        if att.mime:
+            node["encodingFormat"] = att.mime
+        if att.size_label:
+            node["contentSize"] = att.size_label
+        nodes.append(node)
+    return nodes
+
+
 def _breadcrumb(ctx: DocSeoContext) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     pos = 1
@@ -463,10 +534,15 @@ def article_graph(ctx: DocSeoContext) -> dict[str, Any]:
             "target": f"{ctx.canonical_url}#ttsPlayer",
         }
 
+    attachments = _attachment_nodes(ctx)
+    if attachments:
+        article["hasPart"] = [{"@id": node["@id"]} for node in attachments]
+
     graph: list[dict[str, Any]] = [author, publisher]
     if series is not None:
         graph.append(series)
     graph.append(article)
+    graph.extend(attachments)
     graph.append(_breadcrumb(ctx))
     return {"@context": "https://schema.org", "@graph": graph}
 

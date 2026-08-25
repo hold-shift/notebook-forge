@@ -18,7 +18,7 @@ import '@blocknote/mantine/style.css'
 import { useMemo } from 'react'
 import { api, type DocDetail, type LexiconEntry, type NarrationView, type PolishLastRun, type PolishReport, type ReportState, type TargetState } from '../api'
 import { StatusBadge, type BadgeVariant } from '../ui'
-import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
+import { forgeSchema, docGroupSlashItem, dedicationSlashItem, narrativeSlashItem, footnoteSlashItem, attachmentSlashItem, filterSuggestionItems, getDefaultReactSlashMenuItems } from '../forge/schema'
 import { stripItalic, addItalic } from '../forge/narrative'
 import { imageSketchUpdates } from '../forge/sketchSync'
 // forgeSchema used for PartialBlock type cast in updateBlock calls
@@ -1882,7 +1882,7 @@ function EditorInner({ doc, onBack }: { doc: DocDetail; onBack: () => void }) {
                       icon: <i className="ti ti-photo" />,
                       onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'forgeImage' }),
                     }
-                    const all = [...defaults, photoItem, narrativeSlashItem(editor), footnoteSlashItem(editor)]
+                    const all = [...defaults, photoItem, narrativeSlashItem(editor), footnoteSlashItem(editor), attachmentSlashItem(editor)]
                     const q = query.toLowerCase()
                     return q
                       ? all.filter(

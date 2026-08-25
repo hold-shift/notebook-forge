@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..blocks import (
+    FORGE_ATTACHMENT,
     FORGE_FOOTNOTE,
     FORGE_IMAGE,
     FORGE_NARRATIVE,
@@ -85,6 +86,12 @@ def _block_lines(block: dict[str, Any]) -> list[str]:
         txt = inline_text(block.get("content")).strip()
         if txt:
             lines.append(f"> {txt}")
+    elif btype == FORGE_ATTACHMENT:
+        name = str(props.get("name", "")).strip()
+        description = str(props.get("description", "")).strip()
+        label = " — ".join(part for part in (name, description) if part)
+        if label:
+            lines.append(f"[Attachment: {label}]")
     elif btype in ("paragraph", "quote"):
         txt = inline_text(block.get("content")).strip()
         if txt:

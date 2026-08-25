@@ -518,6 +518,72 @@ def generate_sketch(
     return {"ok": True, "detail": detail, "targets": _target_states(session, doc)}
 
 
+# Attachment uploads (forgeAttachment): the file is published verbatim beside
+# the page on GitHub Pages, so the guardrails are GitHub's — 100 MB is a hard
+# per-file limit, and anything over ~25 MB bloats the Pages repo for good.
+ATTACHMENT_EXTS = {
+    ".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".csv",
+    ".jpg", ".jpeg", ".png", ".zip",
+}
+MAX_ATTACHMENT_BYTES = 90 * 1024 * 1024
+WARN_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+
+@app.post("/api/documents/{slug}/attachments/upload")
+def upload_attachment(
+    slug: str,
+    file: UploadFile,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Upload a document (PDF etc.) to attach to the page. Returns the asset
+    SHA plus the display metadata the block stores alongside it."""
+    import shutil
+    import tempfile
+
+    from .assets import ingest_file
+
+    _get_doc(session, slug)  # ensures doc exists
+    filename = file.filename or "attachment"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ATTACHMENT_EXTS:
+        allowed = ", ".join(sorted(ATTACHMENT_EXTS))
+        raise HTTPException(
+            415, f"'{suffix or filename}' isn't an allowed type. Allowed: {allowed}"
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = Path(tmp.name)
+    try:
+        size = tmp_path.stat().st_size
+        if size > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                413,
+                f"{filename} is {size / 1024 / 1024:.0f} MB — GitHub rejects files over "
+                "100 MB, so attachments are capped at 90 MB.",
+            )
+        asset = ingest_file(session, _state()["workspace"], tmp_path, "attachments")
+        asset.filename = filename
+        session.commit()
+        mime = asset.mime
+        asset_id = asset.sha256
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    warning = ""
+    if size > WARN_ATTACHMENT_BYTES:
+        warning = (
+            f"{size / 1024 / 1024:.0f} MB is large for a Pages repo — it is committed "
+            "permanently to git history."
+        )
+    return {
+        "assetId": asset_id,
+        "filename": filename,
+        "mime": mime,
+        "sizeBytes": size,
+        "warning": warning,
+    }
+
+
 @app.post("/api/documents/{slug}/figures/upload-image")
 def upload_figure_image(
     slug: str,
