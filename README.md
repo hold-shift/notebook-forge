@@ -50,6 +50,11 @@ three synchronised targets at once:
 Everything is stored locally in SQLite. Nothing is sent anywhere except the
 image model you choose to call and the targets you explicitly publish to.
 
+**See it live —** [history.skitch.me](https://history.skitch.me) is a published
+archive of 15 memoirs (633,000+ words) built entirely with Notebook Forge, with
+narrated editions produced by its audio companion,
+[forge-narrator](https://github.com/hold-shift/forge-narrator).
+
 ### Example uses
 
 - **Family memoirs and personal histories** — share Grandad's war memoir in
@@ -167,6 +172,30 @@ state, "N changes behind", and a link to open the published output.
   sketches inlined as a Google Doc; captions link back to the originals).
 - **Local folder** — a static mirror of the site for rehearsal or offline use.
 
+### Listen — audio narration
+
+An optional narrated edition of any document, with the text highlighted word by
+word as it is spoken.
+
+Notebook Forge does not generate audio. It walks the block tree, decides how each
+block should be spoken, and exports a **manifest zip** — per‑block plain text plus
+a content hash of each block. Its audio companion
+[**forge-narrator**](https://github.com/hold-shift/forge-narrator) runs that
+manifest through ElevenLabs, stitches the result, derives word‑level timings and
+publishes three files to your own storage. You paste the resulting base URL back
+into the narration panel.
+
+- **Staleness is structural** — each block is hashed, so editing one paragraph
+  marks only that document as *stale* against the audio it was generated from.
+  The panel shows in‑sync / stale / no‑audio at a glance, and the Library card
+  carries a speaker glyph.
+- **The published player** syncs words to the audio, supports click‑to‑seek
+  anywhere in the text, variable speed and resume — so a reader can follow along
+  or listen hands‑free.
+- **Accessibility is earned, not claimed** — because the text and audio are
+  genuinely synchronised, the published page declares `synchronizedAudioText` in
+  its structured data.
+
 ### Analytical reports & master reference tracks
 
 A second, text‑only analytical artifact that sits beside the safe edition — for
@@ -266,6 +295,16 @@ never written to the database, config, logs, or git.
 All three are optional — the editor works fully without any of them; you just
 won't be able to generate sketches or publish to that target.
 
+Two paths are configurable by environment variable:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `NOTEBOOK_FORGE_WORKSPACE` | Database, image assets, sketch cache, exports | `~/Claude/NotebookForge-workspace/` |
+| `MEMOIRFORGE_ROOT` | Optional MemoirForge checkout (this tool's predecessor), used only by the re‑import migration CLI and the sample‑based ingest tests | `~/ClaudeCode/MemoirForge/` |
+
+`MEMOIRFORGE_ROOT` is only relevant if you are migrating from MemoirForge — when
+the directory is absent, those tests skip and the CLI is simply unused.
+
 ## Project layout
 
 ```
@@ -278,6 +317,15 @@ secret/     OAuth client secrets (gitignored, never committed)
 
 The workspace directory (content, assets, exports) is kept **outside** the
 repository.
+
+## Related projects
+
+- [**forge-narrator**](https://github.com/hold-shift/forge-narrator) — the audio
+  companion. Turns a Notebook Forge manifest into narrated audio with word‑level
+  timing. The two tools never call each other; the interface is a manifest zip
+  and three published files.
+- [**history.skitch.me**](https://history.skitch.me) — the archive this tool was
+  built for, and the reference implementation of everything above.
 
 ## Licence
 

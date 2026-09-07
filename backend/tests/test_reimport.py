@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from notebook_forge import services
 from notebook_forge.assets import asset_path, ingest_file, sha256_file
 from notebook_forge.blocks import FORGE_IMAGE, make_block
+from notebook_forge.config import memoirforge_root
 from notebook_forge.reimport import (
     EXCLUDED_STEMS,
     FigureInfo,
@@ -36,8 +37,8 @@ from notebook_forge.sketch_gen import GeminiSketchGenerator, cache_key
 # Helpers
 # ---------------------------------------------------------------------------
 
-MF_WORK = Path("/Users/cs/ClaudeCode/MemoirForge/work")
-MF_MANIFEST_DIR = Path("/Users/cs/ClaudeCode/MemoirForge/out")
+MF_WORK = memoirforge_root() / "work"
+MF_MANIFEST_DIR = memoirforge_root() / "out"
 
 needs_mf = pytest.mark.skipif(
     not MF_MANIFEST_DIR.exists(),

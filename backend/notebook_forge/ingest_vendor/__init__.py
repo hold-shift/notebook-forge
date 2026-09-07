@@ -1,5 +1,5 @@
 """Vendored MemoirForge extraction pipeline (read-only source:
-/Users/cs/ClaudeCode/MemoirForge/memoirforge/, copied 11 June 2026).
+MemoirForge's `memoirforge/`, copied 11 June 2026).
 
 These modules carry the proven PDF/DOCX extraction logic — caption
 geometry, footnote lifting/binding, heading normalisation, date

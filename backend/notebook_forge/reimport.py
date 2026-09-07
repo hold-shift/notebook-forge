@@ -22,10 +22,11 @@ from sqlalchemy.orm import Session
 from . import services
 from .assets import asset_path, ingest_file, sha256_file
 from .blocks import FORGE_IMAGE
+from .config import memoirforge_root
 from .models import Asset, Document
 from .sketch_gen import cache_key
 
-MF_ROOT = Path("/Users/cs/ClaudeCode/MemoirForge")
+MF_ROOT = memoirforge_root()
 EXCLUDED_STEMS = frozenset({"1942-1954_national-service"})
 
 

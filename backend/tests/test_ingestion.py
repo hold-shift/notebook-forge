@@ -1,6 +1,6 @@
-"""New-document ingest against the REAL sample sources (read-only,
-/Users/cs/ClaudeCode/MemoirForge/samples). Skipped if the samples are
-absent (e.g. CI on another machine)."""
+"""New-document ingest against the REAL sample sources (read-only, from the
+optional MemoirForge checkout — see config.memoirforge_root / MEMOIRFORGE_ROOT).
+Skipped if the samples are absent (e.g. CI on another machine)."""
 
 from pathlib import Path
 
@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 
 from notebook_forge import services
 from notebook_forge.blocks import FORGE_IMAGE, FORGE_NARRATIVE
+from notebook_forge.config import memoirforge_root
 from notebook_forge.ingest_vendor.extract_docx import _strip_inline_emph
 from notebook_forge.ingestion import _md_inline_runs, draft_to_blocks, ingest_document
 from notebook_forge.models import Asset
 from notebook_forge.narrative import convert_full_italic_paragraphs
 
-SAMPLES = Path("/Users/cs/ClaudeCode/MemoirForge/samples")
+SAMPLES = memoirforge_root() / "samples"
 
 needs_samples = pytest.mark.skipif(not SAMPLES.exists(), reason="MemoirForge samples not present")
 
