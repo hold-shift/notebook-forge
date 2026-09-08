@@ -14,7 +14,7 @@
 generated slideshows, guides and answers, without publishing a single
 recognisable face.**
 
-![NotebookLM with the archive loaded: a faceless sketch in the source panel, its caption linking back to the original photo on the live site, and generated Deep Dive audio for each memoir in the Studio panel](screenshots/notebook-screenshot.png)
+![The contract in one frame: NotebookLM shows a faceless sketch of Junior and his Dad, and the caption's "View original photo" link opens the original photograph on the published site](screenshots/hero-sketch-to-photo.png)
 
 > ### ℹ️ Why this tool is needed
 >
