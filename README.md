@@ -14,7 +14,7 @@
 generated slideshows, guides and answers, without publishing a single
 recognisable face.**
 
-![How it works: NotebookLM shows a faceless sketch whose caption links back to the original photo](screenshots/notebook-lm.jpg)
+![NotebookLM with the archive loaded: a faceless sketch in the source panel, its caption linking back to the original photo on the live site, and generated Deep Dive audio for each memoir in the Studio panel](screenshots/notebook-screenshot.png)
 
 > ### ℹ️ Why this tool is needed
 >
