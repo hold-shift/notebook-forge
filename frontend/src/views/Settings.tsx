@@ -63,6 +63,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
   const [masterState, setMasterState] = useState('')
   const [narrativeLabel, setNarrativeLabel] = useState('')
   const [narrativeState, setNarrativeState] = useState('')
+  const [safeNote, setSafeNote] = useState('')
+  const [safeNoteState, setSafeNoteState] = useState('')
   const [footerBlocks, setFooterBlocks] = useState<unknown[] | null>(null)
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const [ttsState, setTtsState] = useState('')
@@ -89,6 +91,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
       setReportModel(s.reports.model)
       setReportRules(s.reports.rules)
       setNarrativeLabel(s.narrative.label)
+      setSafeNote(s.safe_edition.illustrations_note)
       setTtsEnabled(s.tts.enabled)
       setBaseUrl(s.publishing.base_url)
       setHeadHtml(s.publishing.head_html || '')
@@ -140,6 +143,14 @@ export function Settings({ onBack }: { onBack: () => void }) {
     api.saveNarrativeSettings({ label: narrativeLabel }).then(
       () => setNarrativeState('Saved'),
       (e) => setNarrativeState(`Failed: ${e}`),
+    )
+  }
+
+  const saveSafeNote = () => {
+    setSafeNoteState('saving')
+    api.saveSafeEditionSettings({ illustrations_note: safeNote }).then(
+      (r) => { setSafeNote(r.safe_edition.illustrations_note); setSafeNoteState('Saved — push to Drive to apply') },
+      (e) => setSafeNoteState(`Failed: ${e}`),
     )
   }
 
@@ -447,6 +458,47 @@ export function Settings({ onBack }: { onBack: () => void }) {
               Save narrative settings
             </Button>
             {narrativeState && <span className="settings-state muted">{narrativeState}</span>}
+          </div>
+        </div>
+      </section>
+
+      {/* NotebookLM-safe edition */}
+      <section className="settings-section">
+        <div className="settings-section-head">
+          <h2>NotebookLM-safe edition</h2>
+          <p>
+            A note inserted after the title block of every safe edition pushed to Drive, explaining
+            why its figures are sketches rather than photographs. Only added to documents that
+            actually contain figures.
+          </p>
+        </div>
+        <div className="settings-fields">
+          <div className="settings-row settings-row-tall">
+            <label htmlFor="safe-note">
+              Illustrations note{' '}
+              <InfoTip label="About the illustrations note">
+                Markdown. Appears between the title block and the body of the Google Doc, so a
+                reader — and NotebookLM itself — can see that the sketches are substitutes rather
+                than the original photographs. Documents with no figures never receive it. Leave
+                blank for none. Applied on the next push to Drive.
+              </InfoTip>
+            </label>
+            <div className="settings-control">
+              <textarea
+                id="safe-note"
+                rows={10}
+                value={safeNote}
+                onChange={(e) => setSafeNote(e.target.value)}
+                placeholder="Leave blank for no note"
+              />
+              <span className="settings-hint">
+                Markdown supported. Re-push a document to Drive to apply.
+              </span>
+            </div>
+          </div>
+          <div className="settings-save-row">
+            <Button variant="primary" onClick={saveSafeNote}>Save note</Button>
+            {safeNoteState && <span className="settings-state muted">{safeNoteState}</span>}
           </div>
         </div>
       </section>

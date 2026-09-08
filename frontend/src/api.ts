@@ -341,6 +341,7 @@ export const api = {
         polish: { model: string; extra_rules: string }
         reports: { model: string; rules: string }
         narrative: { label: string }
+        safe_edition: { illustrations_note: string }
         tts: { enabled: boolean }
         publishing: {
           base_url: string
@@ -374,6 +375,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then((r) => json<{ ok: boolean }>(r)),
+  saveSafeEditionSettings: (body: { illustrations_note: string }) =>
+    fetch('/api/settings/safe-edition', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean; safe_edition: { illustrations_note: string } }>(r)),
   saveTtsSetting: (enabled: boolean) =>
     fetch('/api/settings/tts', {
       method: 'PUT',

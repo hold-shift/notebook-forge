@@ -1094,6 +1094,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
     from .polish.service import polish_settings
     from .publish.drive_client import have_credentials
     from .reports.service import report_settings
+    from .safe_edition import illustrations_note
     from .secrets_store import get_secret
     from .sketch_service import sketch_settings
 
@@ -1102,6 +1103,7 @@ def get_settings(session: Session = Depends(get_session)) -> dict[str, Any]:
         "polish": polish_settings(session),
         "reports": report_settings(session),
         "narrative": {"label": narrative_label_setting(session)},
+        "safe_edition": {"illustrations_note": illustrations_note(session)},
         "tts": {"enabled": tts_enabled(session)},
         "publishing": {
             "base_url": pages_base_url(session),
@@ -1207,6 +1209,31 @@ def save_narrative_settings(
     else:
         setting.value = value
     return {"ok": True, "narrative": value}
+
+
+class SafeEditionSettingsBody(BaseModel):
+    # The note inserted after the title block of every safe edition that has
+    # figures. Markdown. Empty string = no note (distinct from "never set",
+    # which inherits the default).
+    illustrations_note: str = ""
+
+
+@app.put("/api/settings/safe-edition")
+def save_safe_edition_settings(
+    body: SafeEditionSettingsBody, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Set the illustrations note used by the NotebookLM-safe edition. Applied
+    on the next push to Drive."""
+    from .models import Setting
+
+    value = {"illustrations_note": body.illustrations_note.strip()}
+    setting = session.get(Setting, "safe_edition")
+    if setting is None:
+        session.add(Setting(key="safe_edition", value=value))
+    else:
+        setting.value = value
+    session.flush()
+    return {"ok": True, "safe_edition": value}
 
 
 @app.get("/api/settings/tts")

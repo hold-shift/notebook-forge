@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 from test_importer import SLUG, make_repo
 
-from notebook_forge.blocks import make_block, text_run
+from notebook_forge.blocks import FORGE_IMAGE, make_block, text_run
 from notebook_forge.importer import get_or_create_pages_target, import_document
 from notebook_forge.models import Target
 from notebook_forge.publish import publish_document
@@ -226,3 +226,87 @@ def test_narrative_no_label_even_when_meta_has_one() -> None:
     md = render_safe_markdown(meta, blocks, lambda b, n: "")
     assert "From the author" not in md
     assert "> A quiet reflection here." in md
+
+
+# ---------------------------------------------------------------------------
+# Illustrations note (Settings-editable preamble)
+# ---------------------------------------------------------------------------
+
+
+def _fig_doc() -> list[dict]:
+    return [
+        make_block("paragraph", content=[text_run("Opening line.")]),
+        make_block(FORGE_IMAGE, {"assetId": "a", "caption": "Dad, 1949"}),
+    ]
+
+
+def test_illustrations_note_sits_between_title_block_and_body() -> None:
+    """The note goes after the metadata rule and before the first body block,
+    separated by its own rule."""
+    md = render_safe_markdown(
+        {"title": "Junior", "illustrations_note": "## A note\n\nSketches, not photographs."},
+        _fig_doc(),
+        lambda b, n: "data:image/png;base64,X",
+    )
+    assert "## A note" in md
+    # ordering: title block → rule → note → rule → body
+    assert md.index("**Title:**") < md.index("## A note") < md.index("Opening line.")
+    head = md.split("## A note")[0]
+    assert head.rstrip().endswith("---"), "note must follow the title block's rule"
+
+
+def test_illustrations_note_only_when_the_document_has_figures() -> None:
+    """A text-only memoir needs no explanation of sketches it doesn't contain."""
+    note = "## A note\n\nSketches."
+    text_only = [make_block("paragraph", content=[text_run("Just prose.")])]
+    assert "## A note" not in render_safe_markdown(
+        {"title": "T", "illustrations_note": note}, text_only, lambda b, n: ""
+    )
+    # …and a doc whose only figure is omitted from the safe edition counts as none
+    omitted = [make_block(FORGE_IMAGE, {"assetId": "a", "safeMode": "omit"})]
+    assert "## A note" not in render_safe_markdown(
+        {"title": "T", "illustrations_note": note}, omitted, lambda b, n: ""
+    )
+    # a figure that IS rendered gets it
+    assert "## A note" in render_safe_markdown(
+        {"title": "T", "illustrations_note": note}, _fig_doc(), lambda b, n: ""
+    )
+
+
+def test_illustrations_note_can_be_turned_off() -> None:
+    md = render_safe_markdown(
+        {"title": "T", "illustrations_note": ""}, _fig_doc(), lambda b, n: ""
+    )
+    assert "note on the illustrations" not in md.lower()
+
+
+def test_illustrations_note_setting_tristate(session: Session) -> None:
+    """Missing row/key inherits the default; an explicit "" means off."""
+    from notebook_forge.models import Setting
+    from notebook_forge.safe_edition import DEFAULT_ILLUSTRATIONS_NOTE, illustrations_note
+
+    assert illustrations_note(session) == DEFAULT_ILLUSTRATIONS_NOTE  # no row yet
+
+    session.add(Setting(key="safe_edition", value={"illustrations_note": "Custom note."}))
+    session.flush()
+    assert illustrations_note(session) == "Custom note."
+
+    session.get(Setting, "safe_edition").value = {"illustrations_note": ""}
+    session.flush()
+    assert illustrations_note(session) == ""
+
+
+def test_build_safe_markdown_includes_the_note(
+    tmp_path: Path, workspace: Path, session: Session
+) -> None:
+    """End-to-end through the real builder: the note reaches the Drive edition."""
+    from notebook_forge.safe_edition import build_safe_markdown
+
+    repo = make_repo(tmp_path)
+    target = get_or_create_pages_target(session, repo)
+    doc, _ = import_document(session, workspace, repo, SLUG, target)
+    session.commit()
+
+    md = build_safe_markdown(session, workspace, doc)
+    assert "A note on the illustrations" in md
+    assert md.index("**Title:**") < md.index("A note on the illustrations")

@@ -38,6 +38,39 @@ from .models import Asset, Document
 _INLINE_IMG_MAX_PX = 1024
 _INLINE_IMG_JPEG_QUALITY = 80
 
+# Operator-editable preamble inserted after the title block of every safe
+# edition that actually contains figures. It exists because the substitution is
+# invisible in the Doc itself: a reader (or NotebookLM) sees sketches with no
+# explanation of why the photographs are missing. Editable in Settings.
+DEFAULT_ILLUSTRATIONS_NOTE = """## A note on the illustrations
+
+The figures in this document are sketches, not photographs. Where a
+photograph in the original memoir shows a person, this edition carries a
+drawn substitute in its place, with the caption unchanged.
+
+This is not an editorial or stylistic choice, and it is not about privacy.
+NotebookLM removes images containing identifiable people during ingestion,
+so photographs of Bob and his family would simply be absent from this
+edition. The sketches survive ingestion where the photographs do not.
+
+Every original photograph is published at history.skitch.me, linked from
+the caption of each figure below."""
+
+
+def illustrations_note(session: Session) -> str:
+    """The workspace note, as Markdown.
+
+    Key-presence tri-state (as with the narrative label): a missing row or
+    missing key inherits the default; a key explicitly set to "" means the
+    operator turned the note off."""
+    from .models import Setting
+
+    row = session.get(Setting, "safe_edition")
+    value = (row.value or {}) if row is not None else {}
+    if "illustrations_note" not in value:
+        return DEFAULT_ILLUSTRATIONS_NOTE
+    return str(value.get("illustrations_note") or "")
+
 
 def data_uri(path: Path) -> str:
     """Downscaled base64 data URI (raw-bytes fallback if Pillow can't read)."""
@@ -176,6 +209,17 @@ def render_safe_markdown(
     lines: list[str] = [f"**{label}:** {value}  " for label, value in fields if value]
     lines += ["", "---", ""]
 
+    # The illustrations note sits between the title block and the body, and only
+    # when this document actually carries figures in the safe edition — a
+    # text-only memoir needs no explanation of sketches it doesn't contain.
+    note = (meta.get("illustrations_note") or "").strip()
+    has_figures = any(
+        b.get("type") == FORGE_IMAGE and (b.get("props") or {}).get("safeMode") != "omit"
+        for b in blocks
+    )
+    if note and has_figures:
+        lines += [note, "", "---", ""]
+
     fig_n = 0
     att_n = 0
     prev_narrative = False
@@ -298,4 +342,5 @@ def build_safe_markdown(session: Session, workspace: Path, doc: Document) -> str
     # Attachment links are absolute (the file sits at the site root, and a Doc
     # in Drive has no relative base at all).
     meta["pages_base_url"] = pages_base_url(session)
+    meta["illustrations_note"] = illustrations_note(session)
     return render_safe_markdown(meta, doc.blocks, sketch_src)
